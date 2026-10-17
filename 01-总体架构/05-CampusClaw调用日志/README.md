@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.2.1 |
+| 文档版本 | 2.4.0 |
 | 状态 | 日志机制已按 `bbc1c94f663b0638f83d417975a0bc06dccf2f62` 落地；CampusMate Provider 改名为 待实现 |
 | 设计日期 | 2026-08-26 |
 | 实现仓库 | `superheromeZzh/pi-mono-java` |
@@ -90,6 +90,9 @@ CampusClaw 采用一个简单且可执行的异常边界：
 3. **来源类自己记录**：实际捕获或识别失败的类使用自己的 Logger，`RuntimeExceptionHandler`
    不重复记录 只携带错误码的 `RuntimeApiException`；执行层只补无错误码的兜底失败。
 
+只携带错误码的异常类型统一为一个 `CampusClawException` 加按模块的错误码族，取代各自定义的异常类，
+规则与迁移见[异常与错误码设计](../09-CampusClaw异常与错误码/README.md)（待实现）；本文的三条规则不变。
+
 这里刻意接受少量 fluent logging 语句重复。共享的是 `event/operation/errorCode` 字段约定，
 而不是“记录并抛异常”的公共行为。日志归属、级别、上下文类型和异常转换都留在业务源类中，
 比跨模块 Helper 更直接，也让日志中的 logger name 可以精确定位代码位置。
@@ -169,6 +172,7 @@ Mate 失败按发生位置分类：
 | 阶段 | 典型错误码 |
 |---|---|
 | 请求映射 | `INVALID_LLM_CHAT_REQUEST`、`MATE_REQUEST_MAPPING_FAILED` |
+| 本地并发限制（待实现） | `MODEL_CONCURRENCY_LIMITED`：等待模型调用许可（Redis 全局许可或降级时的本实例许可）超时，未发出请求，见 [Model §5.7](../../02-服务与接口/03-Model/README.md#http-transport-failure) |
 | HTTP/可用性 | `MODEL_NOT_FOUND`、`MODEL_RATE_LIMITED`、`MODEL_UNAVAILABLE`、`MANAGER_UNAVAILABLE` |
 | 超时/流传输 | `MODEL_INVOCATION_TIMEOUT`、`UPSTREAM_STREAM_ERROR` |
 | 响应/SSE 协议 | `INVALID_MATE_RESPONSE`、`INVALID_CHAT_SSE`、`INVALID_REASONING_SIGNATURE` |
@@ -243,3 +247,5 @@ event == "campusclaw.failure" AND sessionId == "<session-id>"
 | 2.1.0 | 2026-08-26 | 实际失败源类直接记录，异常只携带稳定错误码。 |
 | 2.2.1 | 2026-09-14 | 聚焦失败边界与定位规则，压缩变更经过并重排调用顺序图。 |
 | 2.2.0 | 2026-09-14 | 目标 Provider Logger 随 CampusMateProvider 改名，稳定日志字段与错误码保持不变。 |
+| 2.3.0 | 2026-10-16 | 新增本地错误码 `MODEL_CONCURRENCY_LIMITED`，表示等待模型调用许可超时且未发出请求。 |
+| 2.4.0 | 2026-10-17 | 只携带错误码的异常类型统一为 CampusClawException，链接异常与错误码设计。 |

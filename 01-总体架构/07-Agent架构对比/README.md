@@ -4,12 +4,13 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.103.0 |
-| 更新日期 | 2026-10-16 |
+| 文档版本 | 1.105.0 |
+| 更新日期 | 2026-10-17 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
-| 设计依据 | 当前各模块主设计；M02 采用 Model 主设计 2.11.0，具体入口见各条目 |
+| 设计依据 | 当前各模块主设计；M02 采用 Model 主设计 2.12.0，具体入口见各条目 |
+| 模型传输专项基线 | A18：2026-10-16 隔离 fetch pi `main@4dd2b149d155d7369de16ea4dc77c84e9f5ffb24`、Codex `main@4eb4a65407d98cebc4c83bf13be440b9fbc78a7c`、Java `main@1acbbf3f046932872af06868c600bb5d9498d8b6`；路径与符号见[Model 源码证据 §1.4](../../02-服务与接口/03-Model/source-evidence.md#http-transport-evidence)，其他条目的基线不升级 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论 |
 | 历史计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
@@ -63,7 +64,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | 模块 | 需要解释的架构问题 | 主基线及辅助对照 | 条目与待补证范围 |
 |---|---|---|---|
 | M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；计划审核采用 DeepSeek，预览对照 Codex | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖模式接入、参数承载计划预览与审核、Subagent 模式传递，其他父子生命周期待补证 |
-| M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；Codex 事件归一化对比及完整取消链仍待专项核验 |
+| M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；[A18](#a18)覆盖模型 HTTP 客户端、连接复用与 Redis 全局并发上限；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../04-CampusClaw命令系统/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
@@ -73,6 +74,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | M09 · 附件与文件 | 文件服务与 Agent 工作区是什么关系；何时解析与授权 | pi；托管产品公开文件契约按需核对 | 待补证；明确企业产品约束 |
 | M10 · 调度与并发 | 定时触发如何受理为独立执行，如何区分调度结果与根执行结果，暂停、失联和重复触发如何处理 | Claude Managed Agents 为调度主基线；其他四基线保留分层历史对照 | [定时任务主设计](../08-CampusClaw定时任务/README.md)仅支持 cron，名称上限 256；接口配置的任务每次运行新建 Session，复用同一 Agent 定义，对话中由 Cron 工具创建的任务在原会话追加一轮；[A14](#a14)维护取舍，Java 已核验范围与待实现增量见[M10 证据](../08-CampusClaw定时任务/source-evidence.md) |
 | M11 · 可观测性与测试 | 日志、审计历史与模型上下文如何分开；如何证明差异可接受 | 按验证对象选基线，不设统一主基线 | 待补证；区分测试存在、测试运行和生产观测 |
+| M12 · 异常与错误码 | 失败类别用异常类型还是错误码区分；原始异常由谁保留；对外文字与日志文字如何分开 | DSH 与 Codex；OpenCode、pi 对照 | [A19](#a19)覆盖单一异常类、集中错误码枚举与构建期拦截；待实现 |
 
 M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Skill 执行、严格名称、
 展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现，Mate 公共接入独立确认。
@@ -678,6 +680,45 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 
 **设计表达。** 没有基线直接提供这两个接口。CampusClaw 借 Claude Managed Agents 的事件类型与时间过滤、Codex 的显式轮次分组，用已有根执行表达“一轮”，跨会话聚合与权限分工是 Trace 场景的产品约束。
 
+<a id="a18"></a>
+
+## 6.15 A18 · 模型调用的 HTTP 客户端与并发上限
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M02，关联 M01 执行准入；[Model 主设计 §5](../../02-服务与接口/03-Model/README.md#http-transport)唯一维护客户端、许可、连接复用和失败处理；配置键归[共享客户端配置](../../02-服务与接口/02-CampusMate共享客户端配置/README.md) |
+| 架构问题 | 多个 Agent 执行同时调用模型时，Claw 用什么 HTTP 客户端、怎样复用连接，以及怎样保证所有实例合计同时进行的模型调用不超过 100 个？ |
+| pi | OpenAI Completions 适配器每次 `stream` 新建 SDK 客户端，传输交给 Node `fetch`；没有模型请求并发上限、连接池配置或预热 |
+| Codex | HTTP 流式请求每次经 `build_api_transport` 构造 reqwest 客户端；每轮开始预热一条 Responses WebSocket（`generate=false`），本轮后续请求复用该连接与 `previous_response_id`；没有模型请求并发上限；`agent_max_threads` 默认 6，间接限制同时运行的 Agent 线程 |
+| CampusClaw 已观察 | Java `1acbbf3f` 用 Reactor Netty 默认连接池（8 核以下 16 条连接、排队 32 个、最多 45 秒），没有显式的模型调用上限；执行准入默认每实例 100 |
+| CampusClaw 目标 | `WebClient` 底层改为 JDK HttpClient，删除 Reactor Netty；每实例一个共享 HttpClient，依靠其连接池复用，不预热，固定 HTTP/1.1；Provider 向 Redis 申请全局许可（合计 100 个，30 秒租约、每 10 秒续租），本实例按到达顺序最多等 30 秒，超时以 `MODEL_CONCURRENCY_LIMITED` 失败且不发请求；Redis 不可用时降级为每实例 50 个；Redis 客户端用 Redisson，许可脚本自己维护；Redis 服务、连接配置与客户端和跨实例路由专题（A17，PR #33 评审中）、流式恢复专题共用 |
+| 差异分类 | 产品约束：多租户服务需要按 Mate 容量限制并发，单用户基线没有这个约束；架构变更：许可放在 Provider，覆盖执行、Subagent、压缩与定时执行的全部模型调用，并由 Redis 在实例间共享 |
+| 理由与代价 | 平台自带客户端减少依赖且与 Runtime 客户端一致；全局许可让一个实例空闲时另一个实例能用满容量，一个实例故障时容量不减半。代价是新增 Redis 运行依赖与运维，每次调用多两次 Redis 往返；实例崩溃后最长 30 秒回收许可；Redis 故障时降级为每实例 50，期间不能借用容量；Redis 恢复或丢数据后最多 10 秒内合计可能超过上限 |
+| 备选与重新评估条件 | 不照搬 Codex 的 WebSocket 预热：它复用的是服务端增量状态，Mate Chat 是无状态的 POST + SSE。不选每实例本地许可：合计上限要靠“实例数 × 每实例许可”的部署配置保证，一个实例故障时能力减半。客户端按用户确认用 Redisson（削减目标只是不引入 reactor-netty），但不用它自带的租约信号量：它按本机时钟计算租约，Redis 丢数据后要重新设置许可数，也不能重新登记已过期的许可。Redis 长期不稳定、降级频繁时重新评估；Mate 网关支持 HTTP/2 时再评估多路复用 |
+| 设计状态 / 实现状态 | 待评审 · 待实现；连接器替换已在临时 worktree 做过原型（366 个测试通过），Redis 许可未做原型，未压测 |
+| 验收与证据 | 主设计 §5.8；源码证据 §1.4 |
+
+**讲解要点。** pi 和 Codex 是单用户工具，模型请求并发不是它们要解决的问题。CampusClaw 面向企业园区多租户部署，模型调用要按 Mate 容量限流，所以在 Provider 加 Redis 全局许可，并让许可同时成为连接数上限；Redis 故障时退回每实例许可，保证限流组件出问题时模型调用不全部失败；HTTP 客户端跟基线一样用平台自带的，换来更少的依赖。
+
+<a id="a19"></a>
+
+## 6.16 A19 · 一个异常加错误码，源头记录原始异常
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M12；[异常与错误码设计](../09-CampusClaw异常与错误码/README.md)唯一维护根异常、错误码族、投影规则、迁移清单与验收，复用其全局目标类图；源头记录规则由 [M11 简化异常日志设计](../05-CampusClaw调用日志/README.md)维护 |
+| 问题 | 解析模型返回的工具参数失败时，怎样既对用户给出稳定错误码，又让运维按错误码找到原始异常和堆栈？ |
+| 最新基线 | 2026-10-15 fetch：DSH master 57190202（开发者预览）、Codex main e89b7c44、OpenCode dev 4397ee44、pi main 9a3ca68b；Java main 2026-10-17 fetch 1446c585。完整 SHA、路径与符号见[主设计 §8.2](../09-CampusClaw异常与错误码/README.md#source-evidence) |
+| DSH | `HarnessError` 基类携带稳定 `code` 与 cause，19 个按包派生的子类；技能规则要求按 code 路由、保留 cause、机器标识与展示文字分开 |
+| Codex | 单一 `CodexErr` 包装 `CodexErrorDetails` 枚举，`CodexErrKind` 判别；部分变体保留来源错误，边界映射为协议错误与 HTTP 状态 |
+| OpenCode / pi | OpenCode 每类失败一个 `Schema.TaggedError` 类（219 处）；pi 47 处各自 `extends Error`，无统一约定 |
+| CampusClaw 已观察 | 20 个自定义异常类（另有一个只给日志用的脱敏替身），其中 12 个经 `StableErrorCode` 暴露码，类型与码两套判别并存；约 30 个字符串码、4 个错误码枚举（含定时任务重写新增的 `ScheduleErrorCode`）；约 45 处按类型 catch 或 instanceof；PR #347 已补源头记录与 `CatchCauseLost` |
+| CampusClaw 目标 | 只有一个 `CampusClawException`：只带错误码，无 cause、无堆栈、无子类；全部错误码集中在 common 的 `CampusClawErrorCode`，按分类区分处理方；公开说明由 `visible(...)` 单独设置，诊断文字只进日志；参数恢复数据作为载荷携带；PMD 禁止新增任何异常类 |
+| 差异类别 | 架构变更：以错误码而非类型判别、错误码集中到一个枚举、删除 `StableErrorCode`；产品约束：对外内容逐字不变；安全加固：不采用 cause 链，对外只投影错误码与作者撰写的说明 |
+| 理由与代价 | 与 DSH 一样以码路由，与 Codex 一样集中定义错误码，但不派生任何子类，因为 Java 按类型 catch，子类一多又回到类型判别；与 DSH、Codex 不同，不保留 cause，沿用已确认的源头记录规则。代价是失去编译期的类别检查，一个枚举约 130 个常量且任何模块新增码都改 common，载荷按类型读取只能在运行时校验，源头漏记会彻底丢失原异常 |
+| 状态与验收 | 待实现；按主设计 §6.3 的 S1～S5 验收，对外错误码与文字逐字不变 |
+
+**设计表达。** 失败的“是什么”只看错误码，“为什么”只在源头日志里。Claw 取 DSH 的“按码路由、展示文字分开”，取 Codex 的“单一类型加集中枚举”，但不派生子类，也不取两者的 cause 链。
 ## 7. 源码证据与更新边界
 
 P01/P02 使用 pi 固定 commit `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；
@@ -732,7 +773,9 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.103.0 | 2026-10-17 | M05/M07 选项型命令的候选与显示名改由 Mate 命令选项接口提供，前端按 argumentType 统一处理；Runtime 清单去掉 hints，返回 argumentType，可选值改由 Runtime 会话查询提供。 |
+| 1.105.0 | 2026-10-17 | M05/M07 选项型命令的候选与显示名改由 Mate 命令选项接口提供，前端按 argumentType 统一处理；Runtime 清单去掉 hints，返回 argumentType，可选值改由 Runtime 会话查询提供。 |
+| 1.104.0 | 2026-10-17 | 新增 A19，对比单一异常类加集中错误码枚举、源头记录原始异常的基线做法。 |
+| 1.103.0 | 2026-10-16 | 新增 A18：模型调用改用 JDK HttpClient，用 Redis 全局许可把合计并发限制在 100，与 pi/Codex 的客户端做法对照。 |
 | 1.102.0 | 2026-10-16 | M05 CampusClaw 的 hints 改为固定参数值列表（thinking on/off、mode plan/build），与 OpenCode 的占位提示 hints 区分；清单增加可选 sessionId 决定范围。 |
 | 1.101.0 | 2026-10-16 | A14 同步 M10：对话中由 Cron 工具创建的任务关联原会话运行，接口配置的任务仍每次新建 Session。 |
 | 1.100.0 | 2026-10-16 | M05 命令清单改为按 Agent 查询，登记 OpenCode/Codex/pi 的清单作用域基线；其余比较不升级。 |

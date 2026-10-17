@@ -1,6 +1,6 @@
 # CampusClaw 设计仓库
 
-导航版本 3.72.0 · 2026-10-16
+导航版本 3.73.0 · 2026-10-17
 
 本仓维护 CampusClaw、mate-service 的目标设计、精确契约与源码研究。先读模块主设计了解当前方案，再按需查看契约、证据和专项流程；实现状态以具体源码核验范围为准。
 
@@ -33,6 +33,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 | M09 · 附件与文件服务 | [CampusMate 附件服务](./02-服务与接口/01-CampusMate附件服务/README.md) | 文件上传、扫描、访问与删除；Runtime 文件引用边界由 M01/M06 引用 |
 | M10 · 调度与并发治理 | [定时任务](./01-总体架构/08-CampusClaw定时任务/README.md) | [待对齐事项](./01-总体架构/08-CampusClaw定时任务/README.md#review-todo)集中记录需另开设计的问题与 Claw 首版开发前提；[接口协议 §4](./01-总体架构/08-CampusClaw定时任务/README.md#interface)维护创建、列表、详情、更新和删除；名称上限 256，时间规则仅支持 cron；[Spring 六字段与固定/动态任务](./01-总体架构/08-CampusClaw定时任务/README.md#spring-scheduling)解释解析和调度边界，Cron 默认上海，绝对时刻响应统一 UTC 且无小数秒；[执行目标与文件证据](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#target-file-evidence)区分基线会话策略、文件引用与上传；接口配置的任务每次运行新建 Session，复用 Agent 定义，[对话中由 Cron 工具创建的任务](./01-总体架构/08-CampusClaw定时任务/README.md#chat-created-schedule)关联当前会话、在该会话中运行，创建、修改、删除需用户确认；[创建响应审阅](./01-总体架构/08-CampusClaw定时任务/README.md#creation-response-review)对齐计划时间、小写状态和 metadata，内部版本不外露；[资源类型与暂停原因](./01-总体架构/08-CampusClaw定时任务/README.md#schedule-type-paused-reason)统一 type:schedule 与只读 pausedReason；[业务凭据](./01-总体架构/08-CampusClaw定时任务/README.md#credential-reference-proposal)由 Mate 按 Agent 绑定在运行时决定，Claw 不保存凭据引用；[Mate上下文与凭据接口草案](./02-服务与接口/02-CampusMate共享客户端配置/scheduled-execution.md)明确Mate提供可信接口定义和执行授权，保存引用、执行时按目标解析凭据；[详情与列表读取](./01-总体架构/08-CampusClaw定时任务/README.md#get-schedule-review)返回同形完整资源，分页参考既有 ListEvents 的整数 page/nextPage；[更新接口](./01-总体架构/08-CampusClaw定时任务/README.md#update-schedule-review)明确六字段部分修改、完整响应、状态保持及数据库事务合并更新；[删除接口](./01-总体架构/08-CampusClaw定时任务/README.md#delete-schedule-review)删除Schedule及所有对应Run、保留已生成Session，成功200完整配置回执不变；删除生效后配置和关联Run详情404、列表排除；删除不取消已受理Session，单独删除Session保留原Run受理记录；[立即运行、暂停与取消暂停](./01-总体架构/08-CampusClaw定时任务/README.md#run-schedule-review)区分200 Run受理结果与完整配置响应；[Run查询与删除历史边界](./01-总体架构/08-CampusClaw定时任务/README.md#schedule-run-read-lifecycle)明确Session独立授权及临时清理协调，具体读取请求与过滤规则由该契约统一维护；[其他基线删除关系](./01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-delete-baselines)区分Run、会话和在途执行的处理；[Claw 数据库设计（定时任务表）](03-数据与存储/Claw数据库设计.md#schedule)维护表结构、约束、索引、事务与 PR #332 差异；[定时任务主设计](./01-总体架构/08-CampusClaw定时任务/README.md#no-catch-up)维护不补漏跑、遇忙跳过、失败不重跑、未知结果对账及初始部署配额；首版不支持附件或需要交互的任务，不增加持久等待；Runtime准入归M06，[并发图源](./01-总体架构/03-虚拟线程并发管理/diagram.puml)补充容量结构 |
 | M11 · 可观测性与测试 | [TDD 测试 Agent](./02-服务与接口/05-CampusClaw-TDD测试Agent/README.md) | [调用日志](./01-总体架构/05-CampusClaw调用日志/README.md)、[Runtime HTTP 测试](./02-服务与接口/04-Runtime-HTTP测试Agent/README.md)；区分验收要求、已有测试与实测结果 |
+| M12 · 异常与错误码 | [异常与错误码](./01-总体架构/09-CampusClaw异常与错误码/README.md) | 一个只带错误码的 `CampusClawException`、集中的 `CampusClawErrorCode` 枚举、公开说明与诊断文字分离及构建期拦截，待实现；源头记录原始异常的日志规则由[简化异常日志设计](./01-总体架构/05-CampusClaw调用日志/README.md)维护 |
 
 ## 2. 按阅读目的下钻
 
@@ -65,6 +66,7 @@ M03 的[工具注册与发现](01-总体架构/02-CampusClaw工具系统/README.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.73.0 | 2026-10-17 | 新增 M12 异常与错误码模块。 |
 | 3.72.0 | 2026-10-16 | M10 增加对话中通过 Cron 工具创建、关联当前会话运行的定时任务。 |
 | 3.71.0 | 2026-10-16 | 原 `04-命令与技能` 整体并入 `01-总体架构/04-CampusClaw命令系统`（通用设计与 Builtin、Help、Skill 命令、Skill 统计子专题），M05 入口同步新路径。 |
 | 3.70.0 | 2026-10-10 | Claw 全库数据库设计集中维护，并双向关联 Session、Runtime、调度与统计模块。 |

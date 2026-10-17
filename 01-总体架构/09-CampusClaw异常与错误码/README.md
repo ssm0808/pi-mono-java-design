@@ -1,0 +1,284 @@
+# CampusClaw 异常与错误码设计
+
+[模块索引](../../README.md#module-index) · [Agent 架构对比 A19](../07-Agent架构对比/README.md#a19) · [PlantUML 源码](diagram.puml)
+
+| 属性 | 值 |
+|---|---|
+| 文档版本 | 0.3.1 |
+| 更新日期 | 2026-10-17 |
+| 模块 | M12 · 异常与错误码（横切 M01～M11 的 Java 实现） |
+| 设计状态 | 待实现。统一异常类、统一错误码枚举、迁移与构建期拦截均待实现；转换时保留原始异常的日志规则与 `CatchCauseLost` 已由 Java PR #347 实现并合入 |
+| 源码基线 | Claw Java main `1446c58564539eb320fa3c6b495be34e5f985394`（2026-10-17 fetch，含 PR #347 与定时任务重写） |
+| 主基线 | DeepSeek Harness master `571902028a75c64c1d767f4ae5fd099485f0ddf0`（开发者预览）与 Codex main `e89b7c442c0433ad5167e72a5a25bb6d0712766a`，均于 2026-10-15 fetch；OpenCode dev `4397ee44d038a5f17bf6ac161431673d93e563b5`、pi main `9a3ca68bda4db67efc506ec114bffe64635e8569` 作对照 |
+
+## 评审记录
+
+### 评审结论
+
+【缺口】尚未评审。
+
+### 评审 Todo
+
+| # | 事项 | 负责人 | 来源 |
+|---|---|---|---|
+| T2 | 确认不采用 DSH、Codex 的 cause 链，沿用[简化异常日志设计](../05-CampusClaw调用日志/README.md)的“源头记录、只抛错误码”（D4） | Lotus | [D4](#key-decisions) |
+| T3 | 确认实现 PR 中两处可观察变化（工具结果 details 多出错误码、Schema 无效多一条日志）可以接受 | Lotus | [§5.3](#compatibility) |
+
+### 需求信息
+
+需求来源：2026-10-15 讨论串“parseArguments 抛异常时丢失异常堆栈”。用户确认的写法为 `LOGGER.error("xxx", e); throw new CampusClawException(XxxErrorCode.Y)`，只捕获 JDK 自带异常、第三方库异常或 `CampusClawException`，各自定义异常类合并为一个共用类、以错误码区分；2026-10-15 评审要求只保留 `CampusClawException` 一个类，错误码集中在一个专门的错误码类中，不按模块各定义。【缺口】没有需求编号、优先级和目标版本。
+
+<a id="problem"></a>
+
+## 1. 概述
+
+### 1.1 术语解释
+
+| 术语 | 含义 |
+|---|---|
+| 错误码 | 机器可判别的失败类别，枚举常量名即对外字符串，例如 `TOOL_ARGUMENTS_INVALID` |
+| 错误码分类 | `CampusClawErrorCode` 每个常量所属的 `Category`，例如 API；用来判断一类失败由谁处理 |
+| 载荷（payload） | 少数失败需要携带的结构化数据，例如参数恢复所需的工具 Schema 和校验错误 |
+| 公开说明（publicDetail） | 作者撰写、可以展示给调用方或模型的文字，例如“Path does not exist” |
+| 诊断文字（diagnostic） | 作者撰写、只进日志的上下文，例如 Agent ID 与操作名；不进入任何对外投影 |
+| 源头记录 | 在第一次捕获 JDK 或库异常的 catch 中，带原异常记录一次日志 |
+| 投影 | 把异常转换为接口响应、工具结果、事件或运行记录的过程 |
+
+### 1.2 需求整理
+
+| 编号 | 需求 | 类型 | 来源 |
+|---|---|---|---|
+| R1 | 任何异常转换都不能丢失原始异常的类型、消息与堆栈 | 稳定性 | 讨论串原始问题；PR #347 已部分落实 |
+| R2 | 业务代码只抛 JDK 标准异常或 `CampusClawException`；只有这一个异常类，没有子类，错误码集中在一个错误码类中 | 约束 | 用户确认 |
+| R3 | catch 只捕获 JDK、第三方库异常或 `CampusClawException`，按错误码而非异常类型或消息判断 | 约束 | 用户确认；DSH 规则 |
+| R4 | 对外（接口、事件、工具结果、运行记录）只给错误码或作者撰写的公开说明，不透传内部异常消息 | 安全 | 用户确认；现有 J07 规则 |
+| R5 | 迁移不改变现有接口响应（含定时任务接口的国际化提示）、事件、工具结果和定时运行记录的失败类型 | 约束 | 推导，需确认 |
+| R6 | 构建期拦截新增自定义异常类和丢失原始异常的 catch | 稳定性 | “彻底解决”要求 |
+
+## 2. 整体方案
+
+<a id="business-use-cases"></a>
+
+### 2.1 业务用例
+
+Agent 服务在调用模型、工具和外部系统时会失败。用户需要一个稳定、能说清楚的失败结果，运维人员需要凭这个结果找到当时的原始异常和调用位置；如果失败在转换时只留下一句消息或一个码，问题就无法复现。本模块统一 Claw 内部的异常类型和错误码，让每次失败都对外给出稳定的错误码，同时在日志里保留完整的原始异常。
+
+| 编号 | 参与者 | 业务目标 | 业务结果 |
+|---|---|---|---|
+| BU1 | 园区用户 | 知道本次请求为什么没有完成 | 看到稳定的错误码（工具类失败还能看到可读说明），不看到内部堆栈或第三方报文 |
+| BU2 | 运维人员 | 按用户报告的错误码定位失败原因 | 在日志中查到该次失败的原始异常类型、消息和完整堆栈 |
+| BU3 | 开发人员 | 新增一种失败 | 只需新增一个错误码常量，按统一写法抛出和记录 |
+
+<a id="key-decisions"></a>
+
+### 2.2 关键设计决策
+
+本模块属于 Runtime 内核的实现约定，按问题选择基线：异常类型结构以 DSH 和 Codex 为主，OpenCode 与 pi 对照；Claude Managed Agents 没有公开服务端源码，只在公共错误形状上可比，而公共形状本设计不变。证据见 [§8.2](#source-evidence)。
+
+| # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
+|---|---|---|---|---|---|
+| D1 | 失败类别用异常类型区分，还是用一个异常加错误码区分？ | DSH 用一个 `HarnessError` 基类携带 `code` 与 `cause`，按包派生 19 个子类，规则要求“按 code 路由，不解析 message”；Codex 用单一 `CodexErr` 包装 `CodexErrorDetails` 枚举并以 `CodexErrKind` 判别；OpenCode 用 219 个 `Schema.TaggedError` 类，tag 即类别；pi 有 47 个各自的 `extends Error` | Claw 现有 20 个自定义类，其中 12 个已靠 `StableErrorCode` 接口暴露码，类型与码两套判别并存；新代码不断新增类 | 只有一个 `CampusClawException`，没有子类。参数恢复这类需要结构化数据的失败，把数据作为载荷放进异常（`withPayload`），按错误码取出 | 失去按类型 catch：约 45 处判断改为检查错误码或分类；载荷是 `Object`，取用时要按类型读取，类型错了只能在运行时发现 |
+| D2 | 错误码集中在一个枚举，还是按模块分枚举？ | Codex 一个 `CodexErrorDetails` 枚举集中定义；DSH 码是各包自定义的字符串常量 | 模块依赖方向为 common ← ai ← agent-core ← coding-agent-cli；运行时接口和定时任务接口的错误码都带 HTTP 状态并以错误码为国际化提示的 key，common 不依赖 Spring；现有 `MANAGER_UNAVAILABLE` 在模型调用和接口两处同名 | common 中一个 `CampusClawErrorCode` 枚举收纳全部错误码，按 `Category`（模型调用、工具、运行时、接口、定时任务接口、启动）分组；HTTP 状态存为整数，由两个接口异常处理转换，`messageKey()` 仍等于常量名；同名冲突在合并时消除：模型调用侧常量改名为 `MODEL_MANAGER_UNAVAILABLE`，其 `code()` 仍返回 `MANAGER_UNAVAILABLE`，因为该值写入会话记录且压缩重试按它判断；所有对外输出读 `code()` | 一个枚举约 130 个常量，任何模块新增错误码都改 common；common 承载了接口状态码等上层属性；模块边界不再由类型保证，靠分类字段区分 |
+| D3 | 对外文字和日志文字怎样分开？ | DSH 规则“separate machine identity from display text”；Codex 用 `to_codex_protocol_error` 把内部错误映射为协议错误，HTTP 状态单独映射 | 部分工具失败需要模型能读懂的说明（如“Path does not exist”），其他失败只能对外给码 | 异常带三个通道：错误码（总是对外）、公开说明（只由 `visible(...)` 设置，作者撰写）、诊断文字（只进日志）。所有投影只读错误码和公开说明 | 抛出方要选对通道；诊断文字是否含敏感信息无法机械检查，靠评审 |
+| D4 | 原始异常由谁保留？ | DSH 规则“preserve causes”，`HarnessError` 支持 cause 链；Codex `Io(#[from] io::Error)` 等变体保留来源错误；Claw 已确认的[简化异常日志设计](../05-CampusClaw调用日志/README.md)要求源头记录、转换后的异常无 cause、无堆栈 | 公共错误不能带内部 cause；捕获点最清楚当时在做什么操作；日志按 logger name 定位源类 | 采用用户确认的写法并沿用既有规则：持有原异常的 catch 带原异常记录一次日志，再抛只含错误码的 `CampusClawException`。根异常不提供带 cause 的构造器，也不采集堆栈。现有约 10 处把 cause 传给下一层的位置改为在源头记录 | 不采用 cause 链：源头漏记就彻底丢失原异常，只能靠 `CatchCauseLost` 拦截常见写法（它只证明原异常被传给了某个方法，不证明真的记录）；上层无法再从异常里取原因做诊断，需要诊断的逻辑要搬到源头 |
+| D5 | 怎样防止以后再出现自定义异常类和丢失堆栈？ | 未核验各基线的构建期规则；DSH 以 Agent 技能文档约束 | 问题由代码生成工具反复引入，仅靠文档会再次发生；最近一周合入的定时任务重写又新增了 `ScheduleApiException`、`ScheduleErrorCode` 和 `SafetyFailure`；日志脱敏需要一个只给日志用、保留原堆栈的替身异常 | 在现有 PMD 规则集中新增 `CustomExceptionClass`：除 `CampusClawException` 外禁止声明任何继承 Throwable 的类，也禁止继承它；唯一例外是 `ExceptionRedactionUtils.RedactedException`，它只交给日志、从不抛出，按类名单独豁免；保留 `CatchCauseLost`；AGENTS.md 同步规则与例外 | XPath 按名称判断，`extends` 第三方异常的少见写法可能漏检；例外靠评审防止被拿去抛出 |
+
+## 3. 详细设计
+
+### 3.1 系统用例
+
+| 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
+|---|---|---|---|---|---|
+| UC1 | BU2 | 业务代码中的 catch | 捕获到 JDK 或库异常 | 日志中有一条带原异常、操作名和错误码的记录 | 每次失败只在源头记录一次；转换后的异常无 cause、无堆栈 |
+| UC2 | BU1 | 工具流水线、运行时接口异常处理、定时任务接口异常处理、定时运行调度 | 收到 `CampusClawException` | 对外只给错误码或公开说明 | 运行时接口只映射 API 分类，定时任务接口只映射定时任务接口分类；其他分类按现有兜底处理 |
+| UC3 | BU3 | 开发人员 | 需要表达新的失败 | 在 `CampusClawErrorCode` 对应分类下新增常量 | 不新增异常类；构建期 PMD 拦截 |
+
+<a id="data-model"></a>
+
+### 3.2 数据模型
+
+本模块不涉及数据库表。定时运行记录的 `error_type` 列仍保存由错误码映射出的失败类型（如 `CAPACITY_EXCEEDED`），取值不变。
+
+![异常与错误码：全局目标类图](exception_architecture.svg)
+
+[原尺寸 SVG](exception_architecture.svg) · [PlantUML 源码](diagram.puml#L31)
+
+分层理由：异常类和错误码枚举都放在依赖链最底层的 common，任何模块都能抛出，看错误码就知道是哪类失败，不需要每个模块再定义自己的类型。四个投影入口只依赖异常的错误码、分类和公开说明，新增错误码不需要改投影代码；`StableErrorCode` 接口因此删除。参数恢复数据 `ToolArgumentsRecovery` 是 agent-core 的记录类型，以载荷放进异常，common 不依赖它。
+
+现有 20 个自定义类的去向如下；4 个错误码枚举（`MateInvocationErrorCode`、`AgentRuntimeErrorCode`、`RuntimeErrorCode`、`ScheduleErrorCode`）和 `ClawConstants` 中约 30 个工具字符串码合并进 `CampusClawErrorCode`（原 cron 模块的 `CronErrorCode` 已随模块删除），表中错误码均为 `CampusClawErrorCode` 常量。“对外内容”列是迁移前后都必须保持的工具结果或接口内容。
+
+| 现有类 | 模块 | 目标写法 | 对外内容 |
+|---|---|---|---|
+| `ToolArgumentsInvalidException` | agent-core | `CampusClawException.withPayload(TOOL_ARGUMENTS_INVALID, ToolArgumentsRecovery)` | 错误码及参数恢复内容，不变 |
+| `ToolSchemaInvalidException` | agent-core | 源头记录 Schema 解析异常，再 `new CampusClawException(<原 Schema 错误码>)` | 错误码 |
+| `MateModelInvocationException` | ai | `new CampusClawException(<原模型调用码>)` | 错误码 |
+| `AgentRuntimeException` | coding-agent-cli | `new CampusClawException(<原运行时码>, diagnostic)`，缺省码 `RUNTIME_PREPARE_FAILED` | 错误码 |
+| `RuntimeApiException` | coding-agent-cli | `new CampusClawException(<原接口码>)` | 接口错误码与 HTTP 状态，不变 |
+| `ScheduleApiException` | coding-agent-cli | `new CampusClawException(SCHEDULE_*)`，21 个码进入定时任务接口分类 | 错误码、HTTP 状态与国际化提示，不变 |
+| `ExecutionSafetyContext.SafetyFailure` | coding-agent-cli | `new CampusClawException(SCHEDULE_INTERACTION_REQUIRED 或 SCHEDULE_CREDENTIAL_UNAVAILABLE)` | 工具错误码，字符串值不变 |
+| `BuildModeRequiredException`、`RuntimeToolCallDeniedException`、`PlanReviewException`、`UserQuestionException`、`MateToolResponseException`、`SearchTools.SearchToolsException`、`MateToolResolver.ResolutionException`、`MateToolExecutor.InvalidDefinitionException` | coding-agent-cli | `new CampusClawException(<原字符串码>)`，原先带 cause 的位置改为源头记录 | 错误码，字符串值不变 |
+| `WorkspaceAccessException` | coding-agent-cli | `CampusClawException.visible(WORKSPACE_ACCESS_DENIED, 原文字)` | 原文字，例如“Path does not exist” |
+| `SkillTool.SkillExecutionException` | coding-agent-cli | `visible(SKILL_EXECUTION_FAILED, 原文字)` | 原文字 |
+| `MateToolExecutionException` | coding-agent-cli | `visible(MATE_TOOL_EXECUTION_FAILED, 原文字)` | 原文字 |
+| `SkillLoadException` | coding-agent-cli | `new CampusClawException(SKILL_LOAD_FAILED, diagnostic)`，原先带 cause 的位置改为源头记录 | 不对外，加载时跳过无效 Skill |
+| `CampusClawApplication.StartupException` | coding-agent-cli | `new CampusClawException(STARTUP_FAILED)` | 进程退出前的日志，取值不变 |
+| `ExceptionRedactionUtils.RedactedException` | coding-agent-cli | 保留，PMD 按类名豁免；只作为日志 cause，替换原异常消息并保留原堆栈 | 不对外 |
+
+`CampusClawErrorCode` 中工具分类的常量名与 `ClawConstants.RuntimeApi` 中的公开白名单字符串逐字相同，公共事件投影 `RuntimeCommittedEventFactory.toolErrorCode` 不需修改；新增的内部码（如 `WORKSPACE_ACCESS_DENIED`）不在白名单中，按现有规则投影为 `TOOL_EXECUTION_FAILED`。
+
+<a id="translation-sequence"></a>
+
+### 3.3 记录并转换失败的详细时序（UC1、UC2）
+
+![记录并转换失败](exception_translation.svg)
+
+[原尺寸 SVG](exception_translation.svg) · [PlantUML 源码](diagram.puml#L1)
+
+步骤 5～7 是统一写法：
+
+```java
+} catch (JsonProcessingException error) {
+    LOGGER.error("Failed to parse tool arguments, operation={}, errorCode={}",
+            "mate.response.toolArguments.parse", CampusClawErrorCode.INVALID_TOOL_ARGUMENTS, error);
+    throw new CampusClawException(CampusClawErrorCode.INVALID_TOOL_ARGUMENTS);
+}
+```
+
+步骤 8 的投影规则：
+
+| 投影入口 | 规则 | 迁移前对应实现 |
+|---|---|---|
+| 工具流水线 `ToolExecutionPipeline.failureResult` | `CampusClawException`：内容为公开说明，没有时为错误码，details 带 `errorCode`；其他异常保持现有 `getMessage()` 行为 | `StableErrorCode` 只给码，其余给消息 |
+| 运行时接口 `RuntimeExceptionHandler`（只作用于 `runtimeapi.web`） | 错误码属于 API 分类时按原 HTTP 状态与 `Retry-After` 返回国际化提示且不记录；其他分类带堆栈记录并按现有兜底返回内部错误 | `@ExceptionHandler(RuntimeApiException.class)` |
+| 定时任务接口 `ScheduleExceptionHandler`（只作用于 `ScheduleController`） | 错误码属于定时任务接口分类时按原 HTTP 状态返回国际化提示；请求反序列化异常沿 cause 查找该分类的 `CampusClawException`；其他异常按请求方法给 `SCHEDULE_*_FAILED` 并记录脱敏后的原异常 | `@ExceptionHandler(ScheduleApiException.class)` 与 cause 链中的 `instanceof ScheduleApiException` |
+| 定时运行调度 `ScheduleRunLauncher` | 按具体错误码映射为运行记录的失败类型，映射表不变 | 分别对 `ScheduleApiException`、`RuntimeApiException` 的 `errorCode()` 做 switch |
+
+原先“先 catch `RuntimeApiException` 原样抛出、再 catch `RuntimeException` 转换”的约 20 处，改为 catch `RuntimeException` 后用 `CampusClawErrorCode.isCategory(error, API)` 判断是否原样抛出，保持只放行 API 分类；定时任务代码中同样写法按 SCHEDULE 分类放行。其他按类型判断的位置（Skill 加载跳过、Mate 调用失败识别、工具 Schema 诊断等）改为判断分类或具体错误码，不匹配时原样抛出。
+
+## 4. 接口协议
+
+本模块不新增或修改接口。现有接口的错误码、HTTP 状态、`Retry-After`、公共事件中的工具错误码和定时运行记录的错误码保持不变，契约仍由各模块维护。
+
+## 5. 架构指标
+
+### 5.1 安全性
+
+- 对外投影只读错误码和公开说明；公开说明只能由 `visible(...)` 设置，并且只用作者撰写的固定文字与已校验的标识。
+- 诊断文字只进日志，根异常不携带 cause。禁止把捕获异常的 `getMessage()` 放入公开说明或诊断文字；需要时把原异常交给日志。
+- 新增内部错误码不在公共白名单内时按 `TOOL_EXECUTION_FAILED` 对外，不会泄露内部分类。
+
+### 5.2 稳定性
+
+#### 5.2.1 失败处理与恢复
+
+**不变量**（任何失败都不能破坏）：
+
+1. 每次转换都能在源头日志中找到原始异常。
+2. 对外错误码与迁移前逐字一致。
+3. 公共投影不包含诊断文字、原始异常或堆栈。
+
+| # | 失败 | 发生阶段 | 副作用状态 | 处理方 | 系统处置 | 用户可见结果与下一步 | 不保证项 |
+|---|---|---|---|---|---|---|---|
+| F1 | 非 API 分类的异常到达接口层 | 投影 | 未发生 | `RuntimeExceptionHandler` | 带堆栈记录，返回内部错误 | 内部错误码；运维按时间查日志 | 不推断更具体的接口错误码 |
+| F2 | 原先按类型放行的 catch 迁移后误吞了其他分类 | 迁移 | 未发生 | 各捕获点 | 判断分类或具体码，不匹配原样抛出；每处有测试 | 与迁移前相同 | 未覆盖测试的分支依赖评审 |
+| F3 | 合并时多个原枚举中同名的错误码 | 迁移 | 未发生 | 合并实现 | 单测保证 `code()` 在分类内唯一，跨分类只允许 `MANAGER_UNAVAILABLE` 一处共享；对外字符串保持原值 | 与迁移前相同 | 运行记录只存字符串，跨分类同名需结合日志区分 |
+| F4 | 抛出方把内部消息放进公开说明 | 编码 | 已提交 | 评审、AGENTS.md | 评审拦截；PMD 不检查参数内容 | 可能看到内部文字 | 无机械保证 |
+| F5 | 源头 catch 只读了 `getMessage()` 或没有记录原异常 | 编码 | 已提交 | PMD `CatchCauseLost` | 构建失败 | 无 | 原异常传给了不记录的方法时无法发现 |
+| F6 | 定时任务接口抛出的错误码属于其他分类（例如调度时遇到 `SESSION_BUSY`） | 投影 | 未发生 | `ScheduleExceptionHandler` | 按请求方法给 `SCHEDULE_*_FAILED` 并记录，与迁移前未知异常的处理相同 | 定时任务操作失败码 | 不把运行时接口码透传给定时任务接口 |
+
+#### 5.2.2 容量与限流
+
+不涉及：根异常不采集堆栈，与现有 `RuntimeApiException` 相同。
+
+#### 5.2.3 监控告警
+
+【缺口】现有日志未按错误码聚合；本设计只保证每次失败日志中带错误码，告警阈值另行设计。
+
+#### 5.2.4 应急预案
+
+纯代码重构，无运行时开关；出现行为差异时回滚实现 PR。
+
+<a id="compatibility"></a>
+
+### 5.3 兼容性
+
+- 对外契约不变（R5），由迁移前后的现有接口、事件与工具结果测试共同验证。实现中观察到两处变化待确认（T3）：少数原先不带码的工具失败在 details 中带出错误码，SSE 仍投影为 `TOOL_EXECUTION_FAILED`；Schema 无效时多一条只含上下文的 ERROR 日志。
+- 二进制兼容：删除的异常类都是 Claw 内部类型，公司镜像 `campusclaw/` 由同步脚本重新生成，无外部调用方。
+- 原 `ToolArgumentsInvalidException` 的替代者不再是 `IllegalArgumentException`，`AgentRuntimeException`、`MateToolResponseException` 的替代者不再是 `IllegalStateException`；依赖这些父类的 catch 与异常处理器在迁移中逐一检查。
+
+## 6. 质量保证
+
+### 6.1 灰度能力
+
+不涉及：无运行时开关，随版本发布。
+
+### 6.2 回滚能力
+
+回滚实现 PR 即可；无数据迁移，运行记录中的错误码取值不变。
+
+<a id="acceptance"></a>
+
+### 6.3 自动化测试
+
+| 切片 | 内容 | 验收 |
+|---|---|---|
+| S1 | common 新增 `CampusClawException`、`CampusClawErrorCode` | 单测覆盖消息优先级、公开说明、载荷、`hasCode`、无 cause 与空堆栈、`code()` 分类内唯一 |
+| S2 | 合并各模块错误码枚举，删除原枚举 | 单测证明工具分类与公开白名单字符串逐字一致；运行时与定时任务接口码的 HTTP 状态、`Retry-After` 与国际化 key 不变 |
+| S3 | 四个投影入口改读根异常，删除 `StableErrorCode` | 流水线测试区分公开说明与只给码；两个接口异常处理与定时运行调度的现有测试不改期望值 |
+| S4 | 迁移 20 个类及约 45 处按类型判断的位置；原先带 cause 的位置改为源头记录 | 全量单测通过；逐处保留或补充“不匹配分类原样抛出”的测试；源头记录有日志捕获测试 |
+| S5 | PMD `CustomExceptionClass`（含 `RedactedException` 豁免）、AGENTS.md 规则，镜像同步 | 规则能拦截示例代码且不拦截豁免类；`pmd:check`、Checkstyle、Spotless 通过；`campusclaw/` 同步 |
+
+### 6.4 QA 流程
+
+【缺口】无独立 QA 流程；以实现 PR 的 CI 与评审为准。
+
+## 7. 基建规范
+
+- PMD 规则集 `pmd-ruleset.xml` 绑定 `process-test-classes`，覆盖 main 与 test。
+- 代码规则写入 Java 仓 AGENTS.md“数据、异常与线程”节；跨仓经验沉淀在 codex-style J07。
+
+## 8. 其他补充
+
+<a id="source-evidence"></a>
+
+### 8.1 Claw 源码证据
+
+Java main `1446c58564539eb320fa3c6b495be34e5f985394`，2026-10-17 fetch；reactor 模块为 common、ai、agent-core、coding-agent-cli，原 cron 模块已删除。
+
+| 路径 | 符号 | 证明范围 |
+|---|---|---|
+| `modules/agent-core/src/main/java/com/campusclaw/agent/error/StableErrorCode.java` | `StableErrorCode` | 12 个类靠该接口暴露码，与类型判别并存 |
+| `modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java` | `failureResult`、`messageForException` | 带码异常只给码，其余给 `getMessage()` |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/error/RuntimeApiException.java` | 构造器 `super(code, cause, false, false)` | 接口异常无堆栈，但仍有带 cause 的构造器 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java` | `@ExceptionHandler(RuntimeApiException.class)` | 接口错误映射且不记录 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeCommittedEventFactory.java` | `toolErrorCode` | 公共工具错误码白名单，未知码投影为 `TOOL_EXECUTION_FAILED` |
+| `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java` | `RuntimeApi.*_ERROR_CODE`、`TOOL_ERROR_CODES` | 约 30 个字符串码 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/error/ScheduleApiException.java`、`ScheduleErrorCode.java` | 21 个常量，`status()`、`messageKey()` | 定时任务重写新增的第二套接口异常与错误码 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/web/ScheduleExceptionHandler.java` | `@RestControllerAdvice(assignableTypes = ScheduleController.class)`、`handleInvalidRequest` | 只处理定时任务接口，沿 cause 链查找领域异常 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleRunLauncher.java` | `toErrorType` | 运行记录只存由错误码映射的失败类型 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ExecutionSafetyContext.java` | `SafetyFailure` | 私有异常类，实现 `StableErrorCode` |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/util/ExceptionRedactionUtils.java` | `RedactedException` | 只给日志用的脱敏替身，保留原堆栈 |
+| `modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateChatSseParser.java` | `parseArguments` | 原问题位置，PR #347 已补带原异常记录 |
+| `pmd-ruleset.xml` | `CatchCauseLost` | PR #347 已实现的构建期拦截 |
+
+### 8.2 基线证据
+
+均于 2026-10-15 确认默认分支并 fetch 最新 HEAD。
+
+| 基线 | 提交 | 路径与符号 | 结论 |
+|---|---|---|---|
+| DeepSeek Harness（开发者预览） | master `571902028a75c64c1d767f4ae5fd099485f0ddf0` | `packages/llm/llm/src/error.ts` `HarnessError`；`packages/core/tools/src/schema.ts` `ToolArgsError`；`packages/core/tools/src/index.ts` `ToolNotFoundError`；`.agents/skills/dsh-error-handling/SKILL.md` | 一个基类携带稳定 `code` 和 cause，19 个按包派生的子类；规则要求预期失败有稳定判别、保留 cause、机器标识与展示文字分开、不解析 message |
+| Codex | main `e89b7c442c0433ad5167e72a5a25bb6d0712766a` | `codex-rs/protocol/src/error.rs` `CodexErr`（L78）、`CodexErrKind`（L96）、`CodexErrorDetails`（L101）、`Io(#[from] io::Error)`（L210）、`to_codex_protocol_error`（L487）、`http_status_code_value`（L546） | 单一错误类型加枚举判别，边界处映射为协议错误与 HTTP 状态 |
+| OpenCode | dev `4397ee44d038a5f17bf6ac161431673d93e563b5` | `Schema.TaggedError` 共 219 处；`packages/core/src/util/error.ts` `NamedError.create` | 每类失败一个带 tag 的类，tag 即类别 |
+| pi | main `9a3ca68bda4db67efc506ec114bffe64635e8569` | 47 处 `extends Error` | 无统一约定 |
+
+DSH 与本设计最接近的是“带码异常、按码路由”；Codex 最接近的是“单一类型加集中枚举”。Claw 取 Codex 的集中枚举，但不派生任何子类：Java 的 catch 按类型匹配，子类一多就会回到按类型判别的老路。
+
+### 8.3 版本历史
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| 0.3.1 | 2026-10-17 | 修正类图：载荷由工具流水线按类型读取而非 common 依赖 agent-core，并补齐错误码的对外码与状态码方法。 |
+| 0.3.0 | 2026-10-17 | 按 Java main 1446c585 重新梳理：纳入定时任务接口错误码与 `SafetyFailure`，豁免日志脱敏替身，删去已移除的 cron 模块。 |
+| 0.2.0 | 2026-10-15 | 只保留一个异常类，错误码集中到 `CampusClawErrorCode`，删去整体时序。 |
+| 0.1.0 | 2026-10-15 | 新增统一异常与错误码设计：一个只带错误码的根异常、按模块的错误码族、三通道文字与构建期拦截。 |

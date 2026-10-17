@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.35.0 |
-| 更新日期 | 2026-10-16 |
+| 文档版本 | 3.36.0 |
+| 更新日期 | 2026-10-17 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
@@ -132,7 +132,7 @@ Session 存储维护配置、单条追加时间线和内部执行状态；[会�
 
 ## 8. 源码证据与目标差异
 
-[源码证据表](source-evidence.md)保存已分析的 commit、相对路径和符号。Java `553dcd5e2ff682f9684810a043b442b37a02e54a` 已有统一 Session POST、组合事务与 mode，但 Controller/Service/Mapper/前端仍依赖 If-Match/ETag；取消条件 Header 的迁移待实现，见 [HTTP §8.3](chat-http-v1-design.md#session-header-free-migration)。其他模块保留各自证据范围，这些静态观察不能证明全部目标已经实现。
+[源码证据表](source-evidence.md)保存已分析的 commit、相对路径和符号。Java `a5e7775407fe5c0638b12e7a2131717ae9191bb6` 已取消 Session 更新的 If-Match/ETag，并发写入由数据库行锁加按字段合并控制，见 [HTTP §8.4](chat-http-v1-design.md#session-header-free-verified)。其他模块保留各自证据范围，这些静态观察不能证明全部目标已经实现。
 
 Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边界适配服务端产品。具体差异分类、收益与代价集中在 [Agent 架构对比](../07-Agent架构对比/README.md)。
 
@@ -147,7 +147,8 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 3.35.0 | 2026-10-16 | 接口清单新增查询深度思考可选值与查询工作模式可选值，供 /thinking、/mode 的选择列表使用，命令清单只返回占位提示。 |
+| 3.36.0 | 2026-10-17 | 接口清单新增查询深度思考可选值与查询工作模式可选值，供 /thinking、/mode 的选择列表使用；命令清单用 argumentType 说明参数形态，同步 HTTP 1.73.0。 |
+| 3.35.0 | 2026-10-17 | 同步 HTTP 1.72.0：Session 更新取消 ETag 已实现，并发写入由数据库行锁加按字段合并控制。 |
 | 3.34.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`（ListAgentCommands），同步 HTTP 1.68.0。 |
 | 3.33.0 | 2026-10-15 | ListAgentEvents 响应增加 total，ListTurnEvents 不变。 |
 | 3.32.0 | 2026-10-13 | 接口清单加入 ListAgentEvents 与 ListTurnEvents；ListAgentEvents 只列出 user.message。 |
