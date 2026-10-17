@@ -416,7 +416,7 @@ CampusClaw 采用 `Skill → SearchTools → CallTool`：Skill 正文引用唯�
 | `modules/ai/pom.xml`（:61） | 声明了 `json-schema-validator`，`ai` 模块源码没有使用 |
 | `modules/agent-core/pom.xml`（:41）、`campusclaw/pom.xml`（:106）、根 `pom.xml`（:34、:75） | compile scope 依赖；版本 1.5.2 由根 POM 管理 |
 
-框架工具定义的关键字用量（统计 `modules/*/src/main` 下 Java 源码中带引号的关键字，例如 `CronTool`、`ReadTool`、`AskUserQuestionTool`、`BuiltInToolContracts`）：`type`、`properties`、`required`、`additionalProperties`（全部为 `false`）、`enum`、`const`、`minLength`、`maxLength`、`pattern`、`items`、`minItems`、`maxItems`、`oneOf`（仅 `CronTool`）、`description`、`$schema`（仅 `AskUserQuestionTool`，取 2020-12）。没有 `integer`、类型数组、`minimum`、`maximum`、`format` 或 `$ref`。Mate 现网工具定义的关键字用量未核验。
+框架工具定义的关键字用量（统计 `modules/*/src/main` 下 Java 源码中带引号的关键字，例如 `CronTool`、`ReadTool`、`AskUserQuestionTool`、`BuiltInToolContracts`）：`type`、`properties`、`required`、`additionalProperties`（全部为 `false`）、`enum`、`const`、`minLength`（`CronTool`、`ExitPlanModeTool`、`AskUserQuestionTool`、`BuiltInToolContracts`、`SearchTools`、`TodoUpdateTool`）、`maxLength`、`minItems`、`maxItems`（`AskUserQuestionTool`、`TodoUpdateTool`）、`pattern`（作为关键字仅 `AskUserQuestionTool` 的问题 ID；`GrepTool`、`FindTool` 中的 `pattern` 是参数名）、`items`、`oneOf`（仅 `CronTool`）、`description`、`$schema`（仅 `AskUserQuestionTool`，取 2020-12）。没有 `integer`、类型数组、`title`、`default`、`examples`、`minimum`、`maximum`、`format` 或 `$ref`。Mate 现网工具定义的关键字用量未核验。
 
 `campusclaw-coding-agent` 的 `dependency:tree` 中，`json-schema-validator` 1.5.2 带入 `com.ethlo.time:itu` 1.10.2 和 `jackson-dataformat-yaml` 2.18.3，三者都只经它引入；本地 jar 大小分别为 576,375、53,903、55,579 字节，合计约 686 KB。`snakeyaml` 2.3 另由 `spring-boot-starter` 引入。源码中没有其他 `dataformat.yaml` 或 `com.ethlo` 使用者。公司父 POM 下的依赖树未核验。
 

@@ -607,28 +607,32 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 **状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码不再依赖该库；库只留在测试里做行为对照。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A19](../07-Agent架构对比/README.md#a19)。
 
-框架工具 Schema 实际只用到十几个关键字；Mate 工具 Schema 将由 Mate 规范约束，本节的关键字表就是该规范要对齐的范围（见 T1）。继续用完整校验库，要多带三个运行时 jar（约 686 KB），还带上子集用不到的能力，其中两项对外部 Schema 不利：默认加载器会在校验时按远程 `$ref` 发起网络请求；错误文案随 JVM 默认 Locale 变化，模型看到的修正依据不稳定。自写子集后，可接受的定义范围、错误文案和失败分类都由本节固定。
+框架工具 Schema 实际只用到 13 个校验关键字；Mate 工具 Schema 将由 Mate 规范约束，本节的关键字表就是该规范要对齐的范围（见 T1）。继续用完整校验库，要多带三个运行时 jar（约 686 KB），还带上子集用不到的能力，其中两项对外部 Schema 不利：默认加载器会在校验时按远程 `$ref` 发起网络请求；错误文案随 JVM 默认 Locale 变化，模型看到的修正依据不稳定。自写子集后，可接受的定义范围、错误文案和失败分类都由本节固定。
 
 #### 9.7.1 允许的关键字
 
-Schema 按 JSON Schema 2020-12 语义解释。`$schema` 可以省略；出现时必须等于 `https://json-schema.org/draft/2020-12/schema`。只接受下表关键字：
+关键字范围以 DeepSeek Harness 的自写子集为起点（见 [A19](../07-Agent架构对比/README.md#a19)），再按框架工具的实际用量扩展；语义仍按 JSON Schema 2020-12，不采用 DSH 额外的写法限制。`$schema` 可以省略；出现时必须等于 `https://json-schema.org/draft/2020-12/schema`。只接受下表关键字：
 
-| 类别 | 关键字 | 取值约束与语义 |
-|---|---|---|
-| 类型 | `type` | 一个类型名，或不重复的类型名数组；类型名取 `object`、`array`、`string`、`number`、`integer`、`boolean`、`null`。`integer` 按数学值判断，`1.0` 也是整数 |
-| 对象 | `properties`、`required`、`additionalProperties` | `properties` 的每个值是子 Schema；`required` 是不重复的字符串数组；`additionalProperties` 只能是布尔值 |
-| 数组 | `items`、`minItems`、`maxItems` | `items` 是单个子 Schema，不接受数组形式 |
-| 字符串 | `minLength`、`maxLength`、`pattern` | 长度按 Unicode 码点计数；`pattern` 用 `java.util.regex` 编译，按部分匹配（`find`）判断，与现状一致 |
-| 数值 | `minimum`、`maximum` | 闭区间；框架工具当前未使用，供 Mate 数值参数使用 |
-| 取值 | `enum`、`const` | 按 JSON 值相等比较，数值按数学值比较（`1` 与 `1.0` 相等）；`enum` 非空 |
-| 组合 | `oneOf` | 非空子 Schema 数组，恰好一个分支通过才算通过 |
-| 注解 | `$schema`、`$comment`、`title`、`description`、`default`、`examples`、`deprecated`、`format` | 只读取，不参与校验。`format` 与现状一致：1.5.2 在 2020-12 默认元 Schema 下也只把它当注解 |
+| 类别 | 关键字 | 来源 | 取值约束与语义 |
+|---|---|---|---|
+| 类型 | `type` | DSH | 单个类型名，取 `object`、`array`、`string`、`number`、`integer`、`boolean`、`null`；不接受类型数组。`integer` 按数学值判断，`1.0` 也是整数 |
+| 对象 | `properties`、`required`、`additionalProperties` | DSH | `properties` 的每个值是子 Schema；`required` 是不重复的字符串数组；`additionalProperties` 只能是布尔值 |
+| 数组 | `items` | DSH | 单个子 Schema，不接受数组形式 |
+| 数组 | `minItems`、`maxItems` | 扩展：`AskUserQuestionTool`、`TodoUpdateTool` | 非负整数 |
+| 字符串 | `minLength`、`maxLength` | 扩展：`CronTool`、`AskUserQuestionTool`、`TodoUpdateTool`、`SearchTools`、`ExitPlanModeTool` 等 | 非负整数；长度按 Unicode 码点计数，与现状一致 |
+| 字符串 | `pattern` | 扩展：`AskUserQuestionTool` 的问题 ID | 用 `java.util.regex` 编译，按部分匹配（`find`）判断，与现状一致 |
+| 取值 | `enum`、`const` | DSH | 按 JSON 值相等比较，数值按数学值比较（`1` 与 `1.0` 相等）；`enum` 非空 |
+| 组合 | `oneOf` | DSH | 非空子 Schema 数组，恰好一个分支通过才算通过 |
+| 注解 | `title`、`description`、`default`、`examples` | DSH | 只读取，不参与校验 |
+| 注解 | `$schema` | 扩展：`AskUserQuestionTool` | 只读取，取值限制见上 |
 
-关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items` 和数量限制只检查数组，长度和 `pattern` 只检查字符串，`minimum`、`maximum` 只检查数值。这与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
+DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字段必须在同级 `properties` 中声明。这两条不是 2020-12 的要求，`CronTool` 正是“外层声明字段、分支按 `action` 区分必填项”的写法，所以不采用。
 
-表外关键字一律判定义无效，包括 `$ref`、`$defs`、`$id`、`anyOf`、`allOf`、`not`、`if`/`then`/`else`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`uniqueItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`，以及 `x-` 开头的扩展字段。子 Schema 也不接受布尔形式（`true`/`false`）。嵌套深度上限为 32 层，超过同样判定义无效。
+关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items` 和数量限制只检查数组，长度和 `pattern` 只检查字符串。这与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
 
-不扩到完整 2020-12：完整对齐要实现 `$ref` 解析、动态引用、`unevaluated*` 求值追踪和二十多种 `format`，主代码估计 3000～5000 行，还要接入官方测试集，成本接近重写一个库。Mate 规范确需表外关键字时，按本节改设计后再扩充，校验器不预留隐式兼容。
+表外关键字一律判定义无效，包括 `$ref`、`$defs`、`$id`、`anyOf`、`allOf`、`not`、`if`/`then`/`else`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`uniqueItems`、`minimum`、`maximum`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`format`、`$comment`、`deprecated`，以及 `x-` 开头的扩展字段。子 Schema 也不接受布尔形式（`true`/`false`）。嵌套深度上限为 32 层，超过同样判定义无效。
+
+不扩到完整 2020-12：完整对齐要实现 `$ref` 解析、动态引用、`unevaluated*` 求值追踪和二十多种 `format`，主代码估计 3000～5000 行，还要接入官方测试集，成本接近重写一个库。扩展只按实际用量做：框架工具或 Mate 规范确需表外关键字时，先改本节再实现，校验器不预留隐式兼容。`minimum`、`maximum`、`format` 都属于这类候选，目前没有用量证据。
 
 #### 9.7.2 校验流程
 
@@ -645,13 +649,12 @@ Schema 按 JSON Schema 2020-12 语义解释。`$schema` 可以省略；出现时
 
 | 关键字 | 文案模板 |
 |---|---|
-| `type` | 类型应为 {类型}（多个类型用“或”连接） |
+| `type` | 类型应为 {类型} |
 | `required` | 缺少必填字段 |
 | `additionalProperties` | 不允许的字段 |
 | `enum` / `const` | 取值应为以下之一：{取值列表} / 取值应为 {取值} |
 | `minLength` / `maxLength` | 长度应至少为 {n} 个字符 / 长度应不超过 {n} 个字符 |
 | `pattern` | 格式应匹配正则 {pattern} |
-| `minimum` / `maximum` | 应不小于 {n} / 应不大于 {n} |
 | `minItems` / `maxItems` | 元素数量应至少为 {n} / 元素数量应不超过 {n} |
 | `oneOf` | 应恰好满足一种参数组合，当前满足 {k} 种 |
 
@@ -689,7 +692,7 @@ F2 是这次唯一的对外行为变化：现在能用的 Mate 工具，只要 S
 
 | 编号 | 事项 | 影响 |
 |---|---|---|
-| T1 | Mate 规范是否采纳 §9.7.1 的关键字表；是否还需要 `anyOf`、`exclusiveMinimum`、`x-` 扩展等 | 需要的话先改本节再实现；Mate 发布工具时宜按同一张表校验，避免发布后才在 Claw 侧失效 |
+| T1 | Mate 规范是否采纳 §9.7.1 的关键字表；是否还需要 `minimum`、`maximum`、`format`、`anyOf`、`x-` 扩展等 | 需要的话先改本节再实现；Mate 发布工具时宜按同一张表校验，避免发布后才在 Claw 侧失效 |
 | T2 | 切换前用现网 Mate 工具定义导出跑一次 `validateDefinition` 普查 | 列出会变成 F2 的工具，由 Mate 侧修改定义后再切换 |
 
 ## 10. Subagent Execution

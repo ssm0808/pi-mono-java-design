@@ -713,7 +713,7 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | OpenCode | MCP Schema 转成 Effect Schema 后校验；转换失败时跳过校验 |
 | DeepSeek Harness | 自有工具用自写严格子集，表外关键字直接拒绝；MCP 输入 Schema 原样透传，本地不校验 |
 | CampusClaw 已观察 | Java `1446c585` 用 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具与 Mate 工具；`format` 只作注解，错误文案随 JVM 默认 Locale 变化，默认加载器可按远程 `$ref` 发请求；框架工具只用到十几个关键字 |
-| CampusClaw 目标 | agent-core 自写子集校验器：框架工具已用的关键字加 `minimum`、`maximum`，`format` 等作注解；表外关键字判定义无效；错误路径指向字段本身，文案为固定中文模板；Mate 工具与框架工具共用同一张关键字表；networknt 降为测试依赖做差分对照 |
+| CampusClaw 目标 | agent-core 自写子集校验器：以 DSH 的 8 个校验关键字和 4 个注解为起点，按框架工具实际用量扩展 `minLength`、`maxLength`、`pattern`、`minItems`、`maxItems` 和注解 `$schema`；语义按 2020-12，不采用 DSH 对 `oneOf` 同级关键字和 `required` 声明位置的额外限制；表外关键字判定义无效；错误路径指向字段本身，文案为固定中文模板；Mate 工具与框架工具共用同一张关键字表；networknt 降为测试依赖做差分对照 |
 | 差异分类 | 架构变更：校验从通用库改为自有子集实现，运行时少三个 jar；安全加固：外部 Schema 不能再触发远程 `$ref` 加载，表外关键字不再被静默忽略；产品约束：Mate 工具 Schema 由 Mate 规范约束在同一子集内，关键字表待与 Mate 对齐 |
 | 理由与代价 | 采用 DeepSeek Harness 的“表外即拒绝”，而不是 Codex 的静默丢弃：丢弃后模型看到的约束和实际执行的约束会不一致。和 DSH 不同，Mate 工具也走同一子集校验，因为 Mate 工具在 Claw 本地执行确认和参数修正，不能把校验全交给服务端。代价是校验语义要自己维护，靠差分测试证明与 networknt 一致；用了表外关键字的现网 Mate 工具在切换后会变成定义无效 |
 | 备选与重新评估条件 | 不采用 pi 的类型转换：静默改参数会让确认弹窗里的参数和模型给的不一致。不保留库只加白名单：运行时依赖一个不少。Mate 规范确需 `$ref`、`anyOf` 等关键字时重新评估，届时保留库可能比自写更划算 |
