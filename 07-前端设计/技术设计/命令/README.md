@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.13.0 |
-| 更新日期 | 2026-10-16 |
+| 文档版本 | 1.14.0 |
+| 更新日期 | 2026-10-17 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
@@ -323,7 +323,7 @@ expectedResultKind。必须校验所选协议的 Content-Type 与完整 Schema�
 | `skills` 空参 | `skills` | 只按纯文本显示 Skill 名称和描述，不读取本地路径、正文或远程资源 |
 | `skill:<name>` | 内部 skillEvents 已确认，公共映射待确认 | 不进入 CommandResultRegion；公共接入后复用消息时间线、工具确认和恢复，当前生产执行仍关闭 |
 
-Gateway/状态适配器原子应用完整 Session 快照，不发送 If-Match/Idempotency-Key，不要求 ETag，也不改用同用途的 body/query 令牌。Mate 公共配置仍需确认自身路径、字段与准入，不增加版本映射门禁。旧 Runtime 条件更新实现的迁移仍待完成。
+Gateway/状态适配器原子应用完整 Session 快照，不发送 If-Match/Idempotency-Key，不要求 ETag，也不改用同用途的 body/query 令牌。Mate 公共配置仍需确认自身路径、字段与准入，不增加版本映射门禁。Runtime 前端的条件 Header 移除已在 `pi-mono-java@a5e7775407fe5c0638b12e7a2131717ae9191bb6` 核验为已实现，见 [HTTP §8.4](../../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#session-header-free-verified)。
 
 Help `useCases` 未来若增加“填入输入框”，也只能把纯文本放入消息草稿，并要求用户再次确认发送；
 本期不提供点击场景即执行。
@@ -503,6 +503,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.14.0 | 2026-10-17 | Runtime 前端取消条件 Header 已实现，引用 HTTP §8.4 核验。 |
 | 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。清单 stateKey 加入可选 sessionId：新对话只取智能体级命令，已有 Chat 取完整命令。 |
 | 1.12.0 | 2026-10-16 | 命令清单改为按 Agent 读取与缓存，stateKey 只含 agentId；运行状态只决定置灰，不触发重读；错误态改为 404/422。 |
 | 1.11.0 | 2026-10-04 | 命令结果消费取消版本响应头与 ETag 依赖，保留完整资源和不确定结果对账。 |

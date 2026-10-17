@@ -605,13 +605,13 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 ### 9.7 工具 Schema 子集与本地校验器
 
-**状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码不再依赖该库；库只留在测试里做行为对照。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A19](../07-Agent架构对比/README.md#a19)。
+**状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码不再依赖该库；库只留在测试里做行为对照。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A20](../07-Agent架构对比/README.md#a20)。
 
 框架工具 Schema 实际只用到 13 个校验关键字；Mate 工具 Schema 将由 Mate 规范约束，本节的关键字表就是该规范要对齐的范围（见 T1）。继续用完整校验库，要多带三个运行时 jar（约 686 KB），还带上子集用不到的能力，其中两项对外部 Schema 不利：默认加载器会在校验时按远程 `$ref` 发起网络请求；错误文案随 JVM 默认 Locale 变化，模型看到的修正依据不稳定。自写子集后，可接受的定义范围、错误文案和失败分类都由本节固定。
 
 #### 9.7.1 允许的关键字
 
-关键字范围以 DeepSeek Harness 的自写子集为起点（见 [A19](../07-Agent架构对比/README.md#a19)），再按框架工具的实际用量扩展；语义仍按 JSON Schema 2020-12，不采用 DSH 额外的写法限制。`$schema` 可以省略；出现时必须等于 `https://json-schema.org/draft/2020-12/schema`。只接受下表关键字：
+关键字范围以 DeepSeek Harness 的自写子集为起点（见 [A20](../07-Agent架构对比/README.md#a20)），再按框架工具的实际用量扩展；语义仍按 JSON Schema 2020-12，不采用 DSH 额外的写法限制。`$schema` 可以省略；出现时必须等于 `https://json-schema.org/draft/2020-12/schema`。只接受下表关键字：
 
 | 类别 | 关键字 | 来源 | 取值约束与语义 |
 |---|---|---|---|
