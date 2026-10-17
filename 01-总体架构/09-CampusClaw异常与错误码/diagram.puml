@@ -1,0 +1,118 @@
+@startuml exception_translation
+' Java 基线：1446c58564539eb320fa3c6b495be34e5f985394；2026-10-17 拉取 main。
+' 源码：modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java failureResult、messageForException。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeExceptionHandler.java。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/web/ScheduleExceptionHandler.java。
+' 场景：Claw 内部一次失败从捕获、记录、转换到投影给调用方的过程。
+' 目标：待实现；CampusClawException 与 CampusClawErrorCode 取代各自定义异常类和各模块错误码枚举。
+' 表达方式：只画正常的转换路径；错误码族不匹配时的处理见 README.md 第 5.2.1 节。
+title 记录并转换失败（UC1、UC2）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "执行入口\n（工具流水线 / 接口异常处理 / 定时运行调度）" as Boundary
+participant "业务代码" as Source
+participant "JDK 或第三方库" as Library
+participant "日志" as Log
+autonumber
+[-> Boundary ++ : 执行一次操作
+Boundary -> Source ++ : 调用业务方法
+Source -> Library ++ : 调用解析、I/O 或远端接口
+return 抛出 JDK 或库异常
+Source -> Log ++ : 记录一次（操作名、错误码、原异常）
+return 已记录
+return 抛出 CampusClawException（错误码）
+Boundary -> Boundary : 按错误码分类投影\n（错误码，或作者撰写的公开说明）
+[<-- Boundary : 返回错误码\n（接口响应、工具结果或运行记录）
+deactivate Boundary
+@enduml
+
+@startuml exception_architecture
+' Java 基线：1446c58564539eb320fa3c6b495be34e5f985394；2026-10-17 拉取 main。
+' 源码：modules/agent-core/src/main/java/com/campusclaw/agent/error/StableErrorCode.java（待删除）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/error/RuntimeApiException.java（待删除）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/error/ScheduleApiException.java（待删除）。
+' 目标：待实现；一个只带错误码的异常类（无 cause、无堆栈、无子类）、一个错误码枚举和四个投影入口。
+' 依赖方向：common <- ai <- agent-core <- coding-agent-cli，异常类和错误码枚举都放在 common。
+title 异常与错误码：全局目标类图
+skinparam backgroundColor white
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 50
+
+package "common（待实现）" as CommonPkg {
+  class CampusClawException <<final：待实现>> {
+    - errorCode : CampusClawErrorCode
+    - publicDetail : String
+    - payload : Object
+    + CampusClawException(code)
+    + CampusClawException(code, diagnostic)
+    + {static} visible(code, publicDetail) : CampusClawException
+    + {static} withPayload(code, diagnostic, payload) : CampusClawException
+    + errorCode() : CampusClawErrorCode
+    + code() : String
+    + publicDetail() : Optional<String>
+    + payload(type) : Optional<T>
+    + hasCode(code) : boolean
+  }
+  enum CampusClawErrorCode <<待实现>> {
+    模型调用：MODEL_RATE_LIMITED ……
+    工具结果：TOOL_ARGUMENTS_INVALID ……
+    运行时：RUNTIME_PREPARE_FAILED ……
+    接口：SESSION_NOT_FOUND ……
+    定时任务接口：SCHEDULE_NOT_FOUND ……
+    启动：STARTUP_FAILED
+    --
+    - category : Category
+    - httpStatus : int
+    - retryAfterSeconds : Integer
+    - warning : boolean
+    + category() : Category
+    + code() : String
+    + messageKey() : String
+    + {static} isCategory(e, category) : boolean
+  }
+  enum Category <<待实现>> {
+    MODEL
+    TOOL
+    RUNTIME
+    API
+    SCHEDULE
+    STARTUP
+  }
+}
+
+package "agent-core" as CorePkg {
+  class ToolArgumentsRecovery <<record：待实现>> {
+    toolName : String
+    inputSchema : JsonNode
+    errors : List<ValidationError>
+  }
+  class ToolExecutionPipeline {
+    - failureResult(e) : AgentToolResult
+  }
+}
+
+package "coding-agent-cli" as CliPkg {
+  class RuntimeExceptionHandler {
+    + handle(CampusClawException) : ResponseEntity
+  }
+  class ScheduleExceptionHandler {
+    + handle(CampusClawException) : ResponseEntity
+  }
+  class ScheduleRunLauncher {
+    - toErrorType(e) : String
+  }
+}
+
+CampusClawException o--> "1" CampusClawErrorCode : 错误码
+CampusClawErrorCode +-- Category : 内部分类
+CampusClawException o--> "0..1" ToolArgumentsRecovery : 参数恢复载荷
+ToolExecutionPipeline ..> CampusClawException : 工具结果只投影\n错误码或公开说明
+RuntimeExceptionHandler ..> CampusClawErrorCode : 只有 API 分类\n映射为运行时接口错误
+ScheduleExceptionHandler ..> CampusClawErrorCode : 只有 SCHEDULE 分类\n映射为定时任务接口错误
+ScheduleRunLauncher ..> CampusClawErrorCode : 按错误码映射\n运行记录失败类型
+@enduml
