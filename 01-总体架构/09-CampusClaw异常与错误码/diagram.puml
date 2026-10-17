@@ -67,11 +67,14 @@ package "common（待实现）" as CommonPkg {
     启动：STARTUP_FAILED
     --
     - category : Category
+    - code : String
     - httpStatus : int
     - retryAfterSeconds : Integer
     - warning : boolean
     + category() : Category
     + code() : String
+    + httpStatus() : int
+    + retryAfterSeconds() : OptionalInt
     + messageKey() : String
     + {static} isCategory(e, category) : boolean
   }
@@ -110,7 +113,7 @@ package "coding-agent-cli" as CliPkg {
 
 CampusClawException o--> "1" CampusClawErrorCode : 错误码
 CampusClawErrorCode +-- Category : 内部分类
-CampusClawException o--> "0..1" ToolArgumentsRecovery : 参数恢复载荷
+ToolExecutionPipeline ..> ToolArgumentsRecovery : payload(ToolArgumentsRecovery.class)\n按类型读取载荷
 ToolExecutionPipeline ..> CampusClawException : 工具结果只投影\n错误码或公开说明
 RuntimeExceptionHandler ..> CampusClawErrorCode : 只有 API 分类\n映射为运行时接口错误
 ScheduleExceptionHandler ..> CampusClawErrorCode : 只有 SCHEDULE 分类\n映射为定时任务接口错误
