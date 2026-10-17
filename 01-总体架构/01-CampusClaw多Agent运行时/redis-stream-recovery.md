@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 0.1.0 / 2026-09-22 |
+| 版本 / 日期 | 0.1.1 / 2026-10-16 |
 | 状态 | Redis 选型下的推荐目标设计；新增能力待实现，HTTP 增量为 proposed，尚未并入精确契约 |
 | Java 核验 | 本地 `53eff85c7f41de23eb434e027782f5085a8b8e45`，仅 §10 所列范围，不声明为最新远端 |
 | 外部基线 | OpenCode 默认分支 dev，已隔离 fetch `fe3f3a41f79ad292cc3c7c629567385a20ec5130`；experimental v2，不等于稳定发布 |
@@ -183,6 +183,8 @@ Java 当前根 BOM 为 Boot 3.4.5；`modules/coding-agent-cli/pom.xml` 与 `camp
 
 不选 Redisson：本方案只需基础数据结构、脚本和读流，不使用分布式锁/Java 对象代理。可直接使用 Lettuce 减少 Spring 抽象，但当前项目已有 Boot，选择 Starter 统一配置。只用 JDK 自写 Redis 协议会增加连接、认证和重连维护，不采用。不新增该依赖则无法按此方案实现 Redis Adapter，现有数据库恢复只保证完整记录。
 
+[Model 全局许可](../../02-服务与接口/03-Model/README.md#http-transport-global-permits)也接入同一 Redis 服务，两份设计共用一个客户端和 `spring.data.redis.*` 配置。用户于 2026-10-16 确认客户端采用 Redisson（削减目标只是不引入 reactor-netty，Netty 可以保留），接入方式见 [Model D5](../../02-服务与接口/03-Model/README.md#http-transport-decisions)：`redisson` 加 `redisson-spring-data-34`，本专题仍可通过 Spring Data Redis 的 `RedisTemplate` 访问 Hash 和 Stream。本节上表与“不选 Redisson”的结论在本专题实施时按此修订；阻塞读取与 Redisson 共用连接池、1 秒命令超时的关系届时核验。
+
 ## 9. 实施切片与验收
 
 | 切片 | 交付内容 | 必须验证 |
@@ -234,4 +236,5 @@ OpenCode 于 2026-09-22 用 `ls-remote --symref ... HEAD` 确认默认分支 dev
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.1 | 2026-10-16 | 注明 Model 全局许可共用 Redis 客户端与配置，客户端改用 Redisson。 |
 | 0.1.0 | 2026-09-22 | 以事件源侧 Redis 快照和短期 Stream 设计浏览器重开恢复，保留数据库权威与执行故障边界。 |
