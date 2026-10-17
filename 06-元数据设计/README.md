@@ -105,7 +105,7 @@ binding_skills 保留既有元数据字段，不由本样例定义递归展开�
 | permission | Tool 自身的权限配置 | string；仅 ask / allow / deny，分别表示需要确认、允许、禁止；Agent 关联未配置权限时继承 Tool 权限 |
 | metadata | Tool 的扩展配置 | object；可省略；包含下表字段 |
 | source | Tool 来源 | string；仅 builtin-toolset / mcp-toolset |
-| input_schema | Tool 输入参数的结构与约束 | object；使用 JSON Schema 2020-12 子集描述参数，可用关键字以[工具系统 §9.7.1](../01-总体架构/02-CampusClaw工具系统/README.md#tool-schema-subset)为准，表外关键字使 Tool 定义无效；运行时在权限确认前校验业务参数 |
+| input_schema | Tool 输入参数的结构与约束 | object；使用 JSON Schema 2020-12 子集描述参数，可用关键字以[工具系统 §9.7.1](../01-总体架构/02-CampusClaw工具系统/README.md#tool-schema-subset)为准，表外关键字静默丢弃、不参与校验；运行时在权限确认前校验业务参数 |
 | output_schema | 预期成功业务结果的结构与约束 | object；使用 JSON Schema 描述结果，不据此宣称已实现统一的运行时输出校验 |
 
 | metadata 字段 | 含义 | 规则 |
