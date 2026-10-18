@@ -96,13 +96,13 @@ POST 接受 user.message、user.interrupt、user.tool_confirmation 三类输入�
 
 Session 的名称、默认模型、深度思考和工作模式统一由 `POST /sessions/{sessionId}` 修改，operationKey 为 `UpdateSession`。采用 Claude Managed Agents 的资源级 POST 与可选属性更新方式；当前前端每次只提交所操作的一个字段，接口同时允许多字段组合，未提交属性保留，不要求提交完整 GET 资源。精确字段、单项/组合示例、错误和 Header 唯一维护在[操作 07](接口契约/操作/07-update-session.json)。
 
-`GET /sessions/{sessionId}/models` 继续提供 Session scope 的可选模型清单。统一操作属于 API 架构变更：四类操作共用资源更新与结果对账流程，不将当前页面的一次单项操作固化为服务端只能修改一项的限制。多字段请求在同一事务内读取最新行并合并校验；当前前端无需增加批量编辑或保存流程。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
+Session scope 的可选模型由 §2.4.5 的命令可选值接口提供。统一操作属于 API 架构变更：四类操作共用资源更新与结果对账流程，不将当前页面的一次单项操作固化为服务端只能修改一项的限制。多字段请求在同一事务内读取最新行并合并校验；当前前端无需增加批量编辑或保存流程。保留原有名称与执行配置不同的准入规则；不照搬 Claude 的会话模型不可变约束，也不改变 Agent/Tool/Skill 元数据。
 
-#### 2.4.1 GET Session Models
+<a id="241-get-session-models"></a>
 
-该接口实时读取 Model Manager，返回 Agent enabledModels 与当前可用模型的交集，保持 Agent 配置顺序、不分页。models 是 modelId 字符串数组，可以为空；已保存的 currentModelId 可能因后续停用而不在候选数组中。清单不是执行预约，更新仍需重新验证。
+#### 2.4.1 Session 可选模型
 
-精确响应由[操作 06](接口契约/操作/06-list-session-models.json)维护。模型展示名与供应商能力仍由 Mate/Model Manager 目录负责；不在本接口公开 baseUrl、凭据、价格、请求 Headers 或供应商参数。Manager 不可用继续返回 MANAGER_UNAVAILABLE。
+独立的 `GET /sessions/{sessionId}/models` 已删除（2026-10-18）。会话可选模型改由 [§2.4.5](#245-get-session-command-values) 的 `GET /sessions/{sessionId}/commands/model/values` 返回，`/model` 无参执行也返回同一份数据（字段为 currentModelId、models）。取值规则不变：实时读取 Model Manager，返回 Agent enabledModels 与当前可用模型的交集，保持 Agent 配置顺序、不分页；可以为空；已保存的当前模型可能因后续停用而不在候选中。清单不是执行预约，更新仍需重新验证。模型展示名与供应商能力仍由 Mate/Model Manager 目录负责；不公开 baseUrl、凭据、价格、请求 Headers 或供应商参数。Manager 不可用返回 MANAGER_UNAVAILABLE。
 
 #### 2.4.2 POST Session 统一更新
 
@@ -183,11 +183,11 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 
 #### 2.4.5 GET Session Command Values
 
-`GET /sessions/{sessionId}/commands/{commandName}/values` 返回会话中某个选项型命令（命令清单里 argumentType 为 options）的当前值与可选值，结构是 `{currentValue, values}`，值与该命令的参数相同，不带显示名。model、thinking、mode 都走这一个接口：model 的值是 modelId，范围与 GET Session Models 相同；thinking 按会话当前模型实时计算，支持时为 on、off，不支持时只有 off，规则与[操作 07](接口契约/操作/07-update-session.json)的能力校验一致；mode 当前为 plan、build。其他命令返回 404 COMMAND_VALUES_NOT_FOUND。精确响应由[操作 09](接口契约/操作/09-list-session-command-values.json)维护。
+`GET /sessions/{sessionId}/commands/{commandName}/values` 返回会话中某个选项型命令（命令清单里 argumentType 为 options）的当前值与可选值，结构是 `{currentValue, values}`，值与该命令的参数相同，不带显示名。model、thinking、mode 都走这一个接口：model 的值是 modelId，取值规则见 §2.4.1；thinking 按会话当前模型实时计算，支持时为 on、off，不支持时只有 off，规则与[操作 07](接口契约/操作/07-update-session.json)的能力校验一致；mode 当前为 plan、build。其他命令返回 404 COMMAND_VALUES_NOT_FOUND。精确响应由[操作 09](接口契约/操作/09-list-session-command-values.json)维护。
 
 为什么是一个接口而不是每个命令一个：调用方要的都是同一件事，即"这个命令现在能选什么、当前是什么"，结构也相同。合成一个后，新增选项型命令只在 Runtime 登记取值逻辑，接口、Mate 与前端都不变；按命令分开时，每加一个命令就要新增一个 Runtime 接口和一个 Mate 适配。这与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（`interactive-mode.ts:733-773` 的 `getArgumentCompletions`），而不是由客户端分别调用不同查询。命令清单仍只用 argumentType 说明参数形态，不列值，因为可选值随会话和当前模型变化，清单在没有会话时也要能查。
 
-GET Session Models 保留：它是模型目录查询，`/model` 无参执行的响应也复用它的结构；Mate 命令选项不再调用它。不把可选值加进 Session 资源，因为 Session 资源同时是更新和命令执行的响应，加字段会改变所有这些响应。
+原来的 GET Session Models 一并删除：它返回的数据与本接口的 model 取值完全相同，目标设计中已无调用方（Mate 命令选项改调本接口，前端不直接读取）；`/model` 无参执行仍返回 currentModelId、models，结构由[操作 13](接口契约/操作/13-execute-session-command.json)维护。不把可选值加进 Session 资源，因为 Session 资源同时是更新和命令执行的响应，加字段会改变所有这些响应。
 
 ### 2.5 执行控制
 
@@ -347,7 +347,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 | 操作 | 实际保留的请求 Header 与适用范围 |
 |---|---|
-| CreateSession、GetSession、DeleteSession、ListSessionModels、ListSessionCommandValues、ListAgentCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
+| CreateSession、GetSession、DeleteSession、ListSessionCommandValues、ListAgentCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
 | ListSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
 | UpdateSession | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选 |
 | QuerySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
@@ -485,7 +485,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.74.0 | 2026-10-18 | ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），model、thinking、mode 共用，结构 `{currentValue, values}`；非选项型命令返回 404 COMMAND_VALUES_NOT_FOUND。GET Session Models 保留。 |
+| 1.74.0 | 2026-10-18 | ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），model、thinking、mode 共用，结构 `{currentValue, values}`；非选项型命令返回 404 COMMAND_VALUES_NOT_FOUND。ListSessionModels（`GET /sessions/{sessionId}/models`）一并删除，会话可选模型改由本接口的 model 取值提供，`/model` 无参执行仍返回 currentModelId、models。 |
 | 1.73.0 | 2026-10-17 | ListAgentCommands 去掉 hints 值列表，改为返回 argumentType（name 与技能命令为 text，model、thinking、mode 为 options），不返回占位文字；新增 ListSessionThinkingValues 与 ListSessionModes，按会话返回深度思考与工作模式的当前值和可选值。 |
 | 1.72.0 | 2026-10-17 | 写明 Session 更新由数据库行锁加按字段合并控制并发写入、同字段后写生效而不使用 ETag 的理由、放弃方案与代价，并把 Header 移除标为已实现。 |
 | 1.71.0 | 2026-10-16 | ListAgentCommands 优化 Builtin 中文描述，hints 改为固定参数值列表（thinking 为 on/off，mode 为 plan/build），不含界面文案；新增可选查询参数 sessionId，省略时只返回 help、skills 与技能命令，传入时返回完整命令，并补 400 INVALID_SESSION_ID 与 404 SESSION_NOT_FOUND。 |

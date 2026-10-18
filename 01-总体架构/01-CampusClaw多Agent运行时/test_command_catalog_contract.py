@@ -155,9 +155,10 @@ class CommandCatalogContractTest(unittest.TestCase):
     def test_one_values_query_serves_every_option_command(self):
         operations = ROOT / "接口契约/操作"
         values = json.loads((operations / "09-list-session-command-values.json").read_text())["operation"]
-        models = json.loads((operations / "06-list-session-models.json").read_text())["operation"]
-        session_models = models["responses"][0]["bodies"]["en-US"]["result"]
-        validate_command_values(values, session_models)
+        execute = json.loads((operations / "13-execute-session-command.json").read_text())["operation"]
+        model_query = next(item for item in execute["responses"] if item.get("id") == "200-model-query")
+        model_query = next(iter(model_query["bodies"].values()))["result"]
+        validate_command_values(values, model_query)
         for mutate in (lambda op: op["parameters"][1].update(schema="model | thinking"),
                        lambda op: op["responses"].pop(4),
                        lambda op: op["responses"][0]["bodies"]["en-US"]["result"]["values"].pop(),
@@ -166,7 +167,7 @@ class CommandCatalogContractTest(unittest.TestCase):
             broken = copy.deepcopy(values)
             mutate(broken)
             with self.subTest(mutate=mutate), self.assertRaises(RuntimeError):
-                validate_command_values(broken, session_models)
+                validate_command_values(broken, model_query)
 
 
 if __name__ == "__main__":

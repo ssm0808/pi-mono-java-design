@@ -39,7 +39,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 | T4 | Mate 公共清单是否保留 `/chats/{chatId}/commands`；当前设计由 Mate 以 Chat 映射的 sessionId 调用 Runtime，始终返回完整命令 | Lotus | [Mate 聊天命令 API](../../02-服务与接口/06-mate-service聊天命令API/README.md) |
 | T5 | Skill 执行错误码设计与实现不一致（缓存不可用、解析失败、事件流背压） | Lotus | [§5.2.1](#failure-recovery) |
 | T7 | 确认选项型命令的取数与显示名交给 Mate：清单带 argumentType，新增命令选项接口，前端不按命令名写逻辑 | Lotus | [D6](#key-decisions) · [Mate 命令选项](../../02-服务与接口/06-mate-service聊天命令API/README.md#command-options) |
-| T8 | ~~参数形态与可选值的归属~~ 已确认（2026-10-17）：Runtime 清单返回 argumentType，不返回 hints 或占位文字；thinking、mode 的可选值由 Runtime 会话查询提供。已调整（2026-10-18）：model、thinking、mode 的可选值合并为一个 Runtime 接口 ListSessionCommandValues | Lotus | [D7](#key-decisions) · [§4.4](#command-interaction-flow) |
+| T8 | ~~参数形态与可选值的归属~~ 已确认（2026-10-17）：Runtime 清单返回 argumentType，不返回 hints 或占位文字；thinking、mode 的可选值由 Runtime 会话查询提供。已调整（2026-10-18）：model、thinking、mode 的可选值合并为一个 Runtime 接口 ListSessionCommandValues，原 models 接口一并删除 | Lotus | [D7](#key-decisions) · [§4.4](#command-interaction-flow) |
 | T6 | ~~Builtin 描述按 Accept-Language 本地化的契约~~ 已确认（2026-10-16）：Builtin 国际化，Skill 原样返回 | Lotus | [§4.1](#31-get-轻量清单已确认) · [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
 
 ### 需求信息
@@ -128,7 +128,7 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | D3 | 清单与执行如何保持一致 | OpenCode 执行时按名称重新取 Command；pi 每次 prompt 重新展开 Skill | 清单可能过期；绑定和会话状态随时变化 | GET 与 POST 各自解析一份请求级快照，共用 Definition 身份；描述与会话无关，准入在执行时按会话检查 | 每次执行都重新解析来源，不能复用 GET 的结果 |
 | D4 | Builtin 与技能命令用什么响应 | OpenCode 会话命令 POST 返回 JSON 消息，事件流独立；pi 的 Skill 展开后作为普通 prompt | Builtin 是一次性查询或修改；技能命令会跑完整一轮推理并可能等待确认 | 同一 POST 入口：Builtin 返回 JSON 业务资源，技能命令返回与普通消息相同的请求级 SSE | 调用方要按自己提交的命令区分响应类型 |
 | D6 | 选项型命令的候选与显示名由谁提供 | pi 由各命令的 `getArgumentCompletions` 生成 `{value, label}` 候选（`interactive-mode.ts:733-773`）；Codex 由服务端 `model/list` 返回 `displayName`（`v2/model.rs:118-175`）。两者都在单一进程或单一服务内，没有模型名称归属另一服务的情况 | 模型名称只在 Mate 模型管理中，Claw 数据库没有对应字段；前端若按命令分别查询，每新增一个选项型命令都要新增适配 | Runtime 给命令清单（含 argumentType）与会话的可选值；Mate 提供 `GET /chats/{chatId}/commands/{commandName}/options`，返回 currentValue 与 value/label 候选，只补显示名；前端按 argumentType 统一处理 | 打开选项多一次 Mate 请求和一次 Runtime 请求；选项与执行之间不是原子快照，仍由 POST 终判 |
-| D7 | 命令清单怎样描述参数 | pi 命令描述有 `argumentHint`（如 `<level>`）作终端占位文字，可选值由挂在命令上的补全函数按会话实时取：thinking 取 `getAvailableThinkingLevels()`，随当前模型变化（`interactive-mode.ts:761`），RPC 另有 `get_available_thinking_levels`；Codex 用 `model/list`、`collaborationMode/list` 单独查询可选值 | 前端是图形界面：选项型命令直接展示列表，占位文字与 description 重复；thinking 能否开启取决于当前模型，固定列表会给出不可用的值；参数形态是命令自身属性，Runtime 定义命令时就知道 | 清单返回 argumentType：name 与技能命令为 text，model、thinking、mode 为 options，其余省略表示不带参数；不返回 hints 或占位文字。可选值按会话由一个 Runtime 接口 `GET /sessions/{sessionId}/commands/{commandName}/values` 提供，所有选项型命令共用，结构 `{currentValue, values}`，对应 pi 挂在命令上的补全；Mate 清单与 Runtime 清单逐项相同 | Runtime 多一个只读接口，要为每个选项型命令登记取值逻辑；文本参数的输入框没有服务端占位文字，靠 description 说明 |
+| D7 | 命令清单怎样描述参数 | pi 命令描述有 `argumentHint`（如 `<level>`）作终端占位文字，可选值由挂在命令上的补全函数按会话实时取：thinking 取 `getAvailableThinkingLevels()`，随当前模型变化（`interactive-mode.ts:761`），RPC 另有 `get_available_thinking_levels`；Codex 用 `model/list`、`collaborationMode/list` 单独查询可选值 | 前端是图形界面：选项型命令直接展示列表，占位文字与 description 重复；thinking 能否开启取决于当前模型，固定列表会给出不可用的值；参数形态是命令自身属性，Runtime 定义命令时就知道 | 清单返回 argumentType：name 与技能命令为 text，model、thinking、mode 为 options，其余省略表示不带参数；不返回 hints 或占位文字。可选值按会话由一个 Runtime 接口 `GET /sessions/{sessionId}/commands/{commandName}/values` 提供，所有选项型命令共用，结构 `{currentValue, values}`，对应 pi 挂在命令上的补全；Mate 清单与 Runtime 清单逐项相同 | Runtime 要为每个选项型命令登记取值逻辑，原 models 接口删除后 `/model` 无参查询成为另一处返回可选模型的地方；文本参数的输入框没有服务端占位文字，靠 description 说明 |
 | D5 | 是否保存通用命令记录 | DeepSeek Harness 有 CommandExecution 与命令日志（alpha） | 现有会话、领域 Entry 和事件已能对账 | 不生成 commandId，不保存通用命令生命周期；状态变化复用会话和既有领域 Entry | 无法按命令维度审计，需要时只能从领域 Entry 与事件推断 |
 
 完整基线证据见 [源码证据 §1.2](source-evidence.md#agent-catalog-evidence)。差异分类：D1、D2、D6、D7 是架构变更，D3、R5 是安全加固，D4、D5 是产品约束。
@@ -218,7 +218,7 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | 会话业务服务 | `SessionModelConfigurationService`、`SessionThinkingConfigurationService`、`SessionCompactionApplicationService` 等 |
 
 - 执行顺序：读取会话、归一 arguments、单次解析、按名称精确查找、参数准入、锁内复核、调用 Handler、组装结果。合法但未注册的名称为 COMMAND_NOT_FOUND；Builtin 名称正则不覆盖 `skill:*`。
-- 成功结果复用 GET Session 或 GET Models 的完整资源；Help、Compact、Skills 没有对应独立接口，只返回最小业务结果。结果不含 command、changed、sourceEventSeq，也不返回 ETag。精确映射见 [内置命令 §8](01-内置命令/README.md#8-json-与错误)。
+- 成功结果复用 GET Session 的完整资源，`/model` 无参查询返回 currentModelId 与 models；Help、Compact、Skills 没有对应独立接口，只返回最小业务结果。结果不含 command、changed、sourceEventSeq，也不返回 ETag。精确映射见 [内置命令 §8](01-内置命令/README.md#8-json-与错误)。
 - Compact 断线不取消，调用方通过 GET Session/Events 对账，不自动重放；Mate 凭据只在本次 Active Holder 中保留到执行结束，见 [内置命令 §7](01-内置命令/README.md#7-compact-生命周期)。
 
 <a id="execute-skill-sequence"></a>
@@ -459,7 +459,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.5.0 | 2026-10-18 | 按 Lotus 决定，model、thinking、mode 的可选值合并为一个 Runtime 接口 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），替代 thinking-values 与 modes；D7、T8、§4、§4.4 同步。 |
+| 2.5.0 | 2026-10-18 | 按 Lotus 决定，model、thinking、mode 的可选值合并为一个 Runtime 接口 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），替代 models、thinking-values 与 modes；D7、T8、§4、§4.4 同步。 |
 | 2.4.0 | 2026-10-17 | 新增 D6/T7：选项型命令的当前值、候选与显示名交给 Mate，新增 Mate 命令选项接口。新增 D7/T8（已确认）：Runtime 清单去掉 hints，返回 argumentType，不返回占位文字；thinking、mode 的可选值改由 Runtime 会话查询提供。新增 §4.4 交互流程与接口调用。 |
 | 2.3.0 | 2026-10-16 | 优化 Builtin 描述为面向用户的中文（会话、智能体、技能、计划/实施）；hints 改为可提交的固定参数值列表（thinking 为 on/off，mode 为 plan/build），其他命令省略，接口不带界面文案；sessionId 改为可选查询参数，省略时只返回 help、skills 与技能命令，传入时返回完整命令，会话不存在或不属于该 Agent 返回 404。 |
 | 2.2.0 | 2026-10-16 | 确认 T6：Builtin description 按 Accept-Language 国际化（zh-CN/en-US，回退 en-US），Skill description 原样返回，hints 不随语言变化。 |

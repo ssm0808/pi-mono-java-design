@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/commands/{commandName}/values",
     "summary": "列出 Session 中某个选项型命令的当前值与可选值",
-    "description": "查询指定会话中某个 argumentType=options 的命令的当前值和可选值，用于展示该命令的选择列表。所有选项型命令共用本接口，结构都是 {currentValue, values}：model 的值是 modelId，取自会话实时可选模型，规则与 ListSessionModels 相同，values 可以为空，currentValue 不承诺出现在 values 中；thinking 的值按会话当前模型计算，模型支持深度思考时为 on、off，不支持时只有 off；mode 的值为 plan、build。值与该命令的参数相同，与语言无关；显示名由调用方决定。新增选项型命令时只在 Runtime 登记取值，接口不变。",
+    "description": "查询指定会话中某个 argumentType=options 的命令的当前值和可选值，用于展示该命令的选择列表。所有选项型命令共用本接口，结构都是 {currentValue, values}：model 的值是 modelId，取自会话实时可选模型，即 Agent enabledModels 与 Model Manager 当前可用模型的交集，保持 Agent 配置顺序、不分页；values 可以为空，已保存的 currentValue 可能因后续停用而不在 values 中；thinking 的值按会话当前模型计算，模型支持深度思考时为 on、off，不支持时只有 off；mode 的值为 plan、build。值与该命令的参数相同，与语言无关；显示名由调用方决定。新增选项型命令时只在 Runtime 登记取值，接口不变。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -32,7 +32,7 @@
         "id": "200-model",
         "status": "200",
         "label": "OK · model",
-        "summary": "model：currentValue 为会话当前模型，values 为会话实时可选模型，与 ListSessionModels 的 currentModelId、models 相同。",
+        "summary": "model：currentValue 为会话当前模型，values 为会话实时可选模型，与 /model 无参查询返回的 currentModelId、models 相同。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "en-US"
@@ -228,7 +228,7 @@
     "baselineAlignment": {
       "status": "已确认",
       "confirmedAt": "2026-10-18",
-      "decision": "选项型命令合用一个按命令取值的接口，替代原 thinking-values 与 modes 两个专用接口。与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（getArgumentCompletions），不写在命令清单里；thinking 保持 on/off，不引入多级 level。ListSessionModels 保留，仍供 /model 无参执行与模型目录使用。"
+      "decision": "选项型命令合用一个按命令取值的接口，替代原 models、thinking-values 与 modes 三个专用接口。与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（getArgumentCompletions），不写在命令清单里；thinking 保持 on/off，不引入多级 level。模型展示名、baseUrl、凭据与价格不在本接口公开。"
     }
   }
 }

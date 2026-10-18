@@ -149,15 +149,15 @@ def value_examples(operation):
     return results
 
 
-def validate_command_values(operation, session_models):
-    """One query serves every option command; model mirrors ListSessionModels, thinking follows the model."""
+def validate_command_values(operation, model_query):
+    """One query serves every option command; model matches the /model query result, thinking follows the model."""
     command_name = next(item for item in operation["parameters"] if item.get("name") == "commandName")
     require(command_name["in"] == "path" and command_name["schema"] == " | ".join(OPTION_COMMANDS),
             "commandName must list exactly the commands whose argumentType is options")
     results = value_examples(operation)
-    require(results["200-model"] == {"currentValue": session_models["currentModelId"], "values": session_models["models"]},
-            "Model values must be the Session model list")
-    require(results["200-model-empty"] == {"currentValue": session_models["currentModelId"], "values": []},
+    require(results["200-model"] == {"currentValue": model_query["currentModelId"], "values": model_query["models"]},
+            "Model values must be the models the /model query returns")
+    require(results["200-model-empty"] == {"currentValue": model_query["currentModelId"], "values": []},
             "Empty model values keep the current model")
     require(results["200-thinking"] == {"currentValue": "on", "values": ["on", "off"]}
             and results["200-thinking-unsupported"] == {"currentValue": "off", "values": ["off"]},
