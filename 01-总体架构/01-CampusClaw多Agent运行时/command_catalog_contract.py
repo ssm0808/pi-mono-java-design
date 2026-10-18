@@ -15,7 +15,7 @@ def require(condition, message):
 def validate_descriptor(command):
     require(isinstance(command, dict), "Descriptor must be an object")
     require({"name", "type", "description"} <= set(command)
-            and set(command) <= {"name", "type", "description", "hints"},
+            and set(command) <= {"name", "type", "description", "argumentType"},
             "Descriptor fields differ from lightweight contract")
     require(all(isinstance(command[key], str) and command[key].strip()
                 for key in ("name", "type", "description")), "Required descriptor strings must be nonblank")
@@ -25,12 +25,8 @@ def validate_descriptor(command):
     else:
         require(re.fullmatch(r"skill:[a-z0-9]+(?:-[a-z0-9]+)*", command["name"])
                 and len(command["name"]) <= 70, "Invalid Skill command name")
-    expected = BUILTIN_HINTS.get(command["name"])
-    if expected is None:
-        require("hints" not in command, f"Only fixed-value commands return hints: {command['name']}")
-    else:
-        require(command.get("hints") == expected,
-                f"hints must list the fixed submit values in order, without UI copy: {command['name']}")
+    require(command.get("argumentType") == expected_argument_type(command),
+            f"argumentType must follow the command's argument: {command['name']}")
 
 
 def validate_commands(commands, scope="session"):
@@ -49,8 +45,14 @@ def validate_commands(commands, scope="session"):
 
 
 HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
-# Fixed submit values per Builtin; model candidates are session-dependent and free text has no hints.
-BUILTIN_HINTS = {"thinking": ["on", "off"], "mode": ["plan", "build"]}
+# How each command takes its argument, so any client picks the input control without per-command logic.
+# text: free text; options: values from the Session queries (ListSessionModels, ListSessionThinkingValues,
+# ListSessionModes), shown through Mate command options. Skills take text; Builtins not listed take no argument.
+ARGUMENT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
+
+
+def expected_argument_type(command):
+    return "text" if command.get("type") == "skill" else ARGUMENT_TYPE_BY_COMMAND.get(command.get("name"))
 
 
 SESSION_SUCCESS_IDS = {"200-commands", "200-no-skills"}
@@ -107,8 +109,8 @@ def validate_localized_pair(chinese, english):
     for left, right in zip(chinese, english):
         require((left["name"], left["type"]) == (right["name"], right["type"]),
                 "name and type stay language-neutral")
-        require(left.get("hints") == right.get("hints"),
-                f"hints are language-neutral: {left['name']}")
+        require(left.get("argumentType") == right.get("argumentType"),
+                f"argumentType is language-neutral: {left['name']}")
         if left["type"] == "builtin":
             require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
         else:

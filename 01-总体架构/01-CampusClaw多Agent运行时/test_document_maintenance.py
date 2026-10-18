@@ -71,11 +71,11 @@ class DocumentMaintenanceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             project_help_model(source)
 
-    def test_mate_only_retains_get_without_approving_public_boundary(self):
+    def test_mate_retains_catalog_and_options_without_approving_public_boundary(self):
         common, models = MATE.load_contract()
         MATE.validate_contract(common, models)
         MATE.validate_retirement()
-        self.assertEqual(len(models), 1)
+        self.assertEqual(len(models), 2)
         extra = copy.deepcopy(models[0])
         extra["operation"]["method"] = "POST"
         with self.assertRaises(RuntimeError):
@@ -90,6 +90,7 @@ class DocumentMaintenanceTest(unittest.TestCase):
             operations = root / "接口契约/操作"
             operations.mkdir(parents=True)
             (operations / "01-list-chat-commands.json").touch()
+            (operations / "02-list-chat-command-options.json").touch()
             MATE.validate_retirement(root)
             for relative in ("接口契约/操作/02-execute-chat-command.json", "设计图/diagram.puml",
                              "设计图/public_command_boundary.svg", "设计图/public_sse_projection.svg"):

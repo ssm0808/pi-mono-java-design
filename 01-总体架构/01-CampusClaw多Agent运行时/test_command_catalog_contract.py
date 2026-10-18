@@ -22,7 +22,7 @@ class CommandCatalogContractTest(unittest.TestCase):
 
     def test_retired_fields_are_rejected(self):
         for field in ("kind", "input", "acceptsFiles", "acceptsArguments", "available",
-                      "unavailableCode", "allowedValues", "catalogVersion", "snapshot", "argument"):
+                      "unavailableCode", "allowedValues", "catalogVersion", "snapshot", "argument", "hints"):
             with self.subTest(field=field):
                 command = copy.deepcopy(self.idle[0])
                 command[field] = True
@@ -46,31 +46,29 @@ class CommandCatalogContractTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 validate_descriptor(command)
 
-    def test_hints_list_fixed_submit_values(self):
+    def test_argument_type_follows_the_command(self):
         by_name = {command["name"]: command for command in self.idle}
-        self.assertEqual(by_name["thinking"]["hints"], ["on", "off"])
-        self.assertEqual(by_name["mode"]["hints"], ["plan", "build"])
+        self.assertEqual({name: command.get("argumentType") for name, command in by_name.items()},
+                         {"help": None, "status": None, "name": "text", "model": "options", "thinking": "options",
+                          "mode": "options", "compact": None, "skills": None, "skill:pdf": "text"})
         invalid = (
-            ("help", ["x"]),
-            ("name", ["新的会话名称"]),
-            ("model", ["gpt"]),
-            ("skill:pdf", ["说明要处理的内容"]),
-            ("thinking", ["on"]),
-            ("thinking", ["开启", "关闭"]),
-            ("thinking", [{"value": "on", "label": "开启"}, {"value": "off", "label": "关闭"}]),
-            ("mode", ["build", "plan"]),
-            ("mode", []),
+            ("help", "argumentType", "text"),
+            ("skill:pdf", "argumentType", "options"),
+            ("name", "argumentType", "options"),
+            ("thinking", "argumentType", ["on", "off"]),
+            ("model", "argumentHint", "<model>"),
+            ("thinking", "hints", ["on", "off"]),
         )
-        for name, hints in invalid:
-            with self.subTest(name=name, hints=hints):
+        for name, field, value in invalid:
+            with self.subTest(name=name, field=field):
                 command = copy.deepcopy(by_name[name])
-                command["hints"] = hints
+                command[field] = value
                 with self.assertRaises(RuntimeError):
                     validate_descriptor(command)
-        for name in ("thinking", "mode"):
+        for name in ("name", "model", "thinking", "mode", "skill:pdf"):
             with self.subTest(missing=name):
                 command = copy.deepcopy(by_name[name])
-                del command["hints"]
+                del command["argumentType"]
                 with self.assertRaises(RuntimeError):
                     validate_descriptor(command)
 
@@ -81,7 +79,7 @@ class CommandCatalogContractTest(unittest.TestCase):
                     validate_commands([command for command in self.idle if command["name"] != name])
         validate_commands([command for command in self.idle if command["type"] != "skill"])
         examples = self.runtime["responses"]
-        examples[2]["bodies"]["zh-CN"]["result"]["commands"][4]["hints"] = ["x"]
+        examples[2]["bodies"]["zh-CN"]["result"]["commands"][4]["argumentType"] = "text"
         with self.assertRaises(RuntimeError):
             validate_catalog_examples(self.runtime)
 
@@ -115,8 +113,8 @@ class CommandCatalogContractTest(unittest.TestCase):
         cases = (
             ("untranslated Builtin", lambda: english(0).update(description=self.idle[0]["description"])),
             ("translated Skill", lambda: english(-1).update(description="Analyze and generate PDF documents")),
-            ("hint value translated", lambda: english(4).update(hints=["开启", "关闭"])),
-            ("hints dropped in one language", lambda: english(5).pop("hints")),
+            ("argumentType changed in one language", lambda: english(4).update(argumentType="text")),
+            ("argumentType dropped in one language", lambda: english(5).pop("argumentType")),
             ("missing en-US", lambda: self.runtime["responses"][0]["bodies"].pop("en-US")),
         )
         for label, mutate in cases:
@@ -136,6 +134,13 @@ class CommandCatalogContractTest(unittest.TestCase):
         validate_commands(self.idle[:-1] + [skill, self.idle[-1]])
         with self.assertRaises(RuntimeError):
             validate_commands(self.idle + [skill])
+
+    def test_mate_list_is_the_runtime_list_unchanged(self):
+        public = self.public["responses"][0]["bodies"]["en-US"]["result"]["commands"]
+        self.assertEqual(public, self.runtime["responses"][0]["bodies"]["en-US"]["result"]["commands"])
+        public[3]["label"] = "Model"
+        with self.assertRaises(RuntimeError):
+            validate_projection_pair(self.runtime, self.public)
 
     def test_missing_state_example_and_cross_boundary_drift(self):
         self.runtime["responses"] = self.runtime["responses"][1:]

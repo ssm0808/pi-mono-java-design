@@ -1,0 +1,139 @@
+{
+  "operation": {
+    "shortName": "查询深度思考可选值",
+    "operationKey": "ListSessionThinkingValues",
+    "method": "GET",
+    "path": "/sessions/{sessionId}/thinking-values",
+    "summary": "列出 Session 当前模型下深度思考的可选值",
+    "description": "查询指定会话深度思考的当前值和可选值，用于展示 /thinking 的选择列表。可选值取决于会话当前模型：模型支持深度思考时为 on、off，不支持时只有 off。值与 /thinking 命令参数相同，与语言无关；显示名由调用方决定。",
+    "parameters": [
+      {
+        "$ref": "parameters.sessionId"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不支持按模型或能力过滤的参数。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-thinking-values",
+        "status": "200",
+        "label": "OK · 支持深度思考",
+        "summary": "当前模型支持深度思考：values 为 on、off，currentValue 是会话当前的深度思考开关。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "on",
+              "values": [
+                "on",
+                "off"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking-unsupported",
+        "status": "200",
+        "label": "OK · 不支持深度思考",
+        "summary": "当前模型不支持深度思考：values 只有 off，会话的深度思考已按模型能力关闭。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "off",
+              "values": [
+                "off"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "status": "404",
+        "label": "Not Found",
+        "summary": "Session 不存在或已删除。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "status": "503",
+        "label": "Service Unavailable",
+        "summary": "Model Manager 暂时不可用，无法确认当前模型是否支持深度思考。",
+        "headers": {
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager 暂时不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-09-22",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    },
+    "baselineAlignment": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-16",
+      "decision": "与 pi 的 get_available_thinking_levels 对齐：可选值按会话当前模型实时计算，不写在命令清单里；thinking 保持 on/off 开关，不引入多级 level。"
+    }
+  }
+}

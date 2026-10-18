@@ -42,12 +42,14 @@ def topic_diagram(design_path: Path) -> Path:
 
 HELP_ROOT = REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"displayName", "description", "useCases"}
-EXPECTED_OPERATION_COUNT = 7
+EXPECTED_OPERATION_COUNT = 9
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
     ("DELETE", "/sessions/{sessionId}"),
     ("GET", "/sessions/{sessionId}/models"),
+    ("GET", "/sessions/{sessionId}/thinking-values"),
+    ("GET", "/sessions/{sessionId}/modes"),
     ("POST", "/sessions/{sessionId}"),
     ("GET", "/agents/{agentId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
@@ -460,7 +462,7 @@ def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
     validate_descriptor(descriptor)
     require(descriptor["name"] == "help" and descriptor["type"] == "builtin"
             and descriptor["description"] == "介绍当前智能体的用途和使用场景"
-            and "hints" not in descriptor,
+            and "argumentType" not in descriptor,
             "Help descriptor must advertise only the no-argument Agent guide")
 
 

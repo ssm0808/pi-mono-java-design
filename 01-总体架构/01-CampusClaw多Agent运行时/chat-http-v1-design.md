@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.72.0 |
+| 文档版本 | 1.73.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新的 Header 移除核验见 §8.4，历史核验保留在 §8.1～§8.3 |
@@ -181,6 +181,12 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 
 管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。下一次消息接受时如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
 
+#### 2.4.5 GET Session Thinking Values 与 Modes
+
+`GET /sessions/{sessionId}/thinking-values` 与 `GET /sessions/{sessionId}/modes` 分别返回深度思考和工作模式的当前值与可选值，结构都是 `{currentValue, values}`，值与 `/thinking`、`/mode` 的命令参数相同，不带显示名。深度思考的可选值按会话当前模型实时计算：支持时为 on、off，不支持时只有 off，规则与[操作 07](接口契约/操作/07-update-session.json)的能力校验一致；工作模式当前为 plan、build。精确响应由[操作 09](接口契约/操作/09-list-session-thinking-values.json)和[操作 10](接口契约/操作/10-list-session-modes.json)维护。
+
+这两个接口与 GET Session Models 一起承担“按会话列出可选值”，命令清单只用 argumentType 说明参数形态（text 或 options），不列值。依据是基线做法：pi 用 `get_available_models`、`get_available_thinking_levels` 两个独立查询提供候选（`modes/rpc/rpc-types.ts:35,40`），Codex 用 `model/list` 与 `collaborationMode/list`。不把可选值加进 Session 资源，因为 Session 资源同时是更新和命令执行的响应，加字段会改变所有这些响应。
+
 ### 2.5 执行控制
 
 停止执行通过 user.interrupt 完成；调整方向是在实际停止后提交新的 user.message，不等同于 pi Steer。当前不提供 FollowUp 队列，M1 未完成前拒绝 M2。[FollowUp 未来设计](chat-follow-up-future-design.md) 记录可选扩展及启用条件，不属于当前接口。
@@ -263,7 +269,7 @@ Session 只暴露 idle/running，实时阶段在事件层表达。跨实例控�
 
 精确状态码、中英文消息和各操作错误集合由契约模型维护。错误枚举名、MessageSource key 与 resCode 必须一致；配置合并不改写 Command 既有错误码。
 
-Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据；name、type、hints 不随语言变化，hints 只列 thinking、mode 的固定参数值，不含界面文案。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
+Locale 由 Accept-Language 解析，支持 zh-CN/en-US；缺失、不支持或 key 缺失回退 en-US，不使用 JVM 系统 Locale。Content-Language 返回实际语言。同一 Locale 也用于 ListAgentCommands 的 Builtin description；Skill description 原样返回作者元数据；name、type、argumentType 不随语言变化；argumentType 只说明参数形态，可选值见 §2.4.5。Service 异常只携带错误码与有界参数，Controller Advice 负责消息格式化、状态和响应包装。
 
 异常不得暴露凭据、内部 Header、私有 claim、Prompt、原始 thinking、OBS 地址、Bucket、预签名 URL 或堆栈。503 的建议重试时间使用 Retry-After，不扩展 ResultBean 字段。
 
@@ -477,6 +483,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.73.0 | 2026-10-17 | ListAgentCommands 去掉 hints 值列表，改为返回 argumentType（name 与技能命令为 text，model、thinking、mode 为 options），不返回占位文字；新增 ListSessionThinkingValues 与 ListSessionModes，按会话返回深度思考与工作模式的当前值和可选值。 |
 | 1.72.0 | 2026-10-17 | 写明 Session 更新由数据库行锁加按字段合并控制并发写入、同字段后写生效而不使用 ETag 的理由、放弃方案与代价，并把 Header 移除标为已实现。 |
 | 1.71.0 | 2026-10-16 | ListAgentCommands 优化 Builtin 中文描述，hints 改为固定参数值列表（thinking 为 on/off，mode 为 plan/build），不含界面文案；新增可选查询参数 sessionId，省略时只返回 help、skills 与技能命令，传入时返回完整命令，并补 400 INVALID_SESSION_ID 与 404 SESSION_NOT_FOUND。 |
 | 1.70.0 | 2026-10-16 | ListAgentCommands 的 Builtin description 按 Accept-Language 国际化，成功示例补 en-US；Skill description 原样返回。 |

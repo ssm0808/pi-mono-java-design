@@ -129,7 +129,7 @@ def render_page_guide() -> str:
     return (
         '<section class="review-guide">'
         '<h1>mate-service Chat Command API 评审页</h1>'
-        '<p>默认内容用于产品、前端和后端澄清业务行为；这里只展示 GET 清单；公共认证、bridge 和错误映射仍待评审，不代表接口已发布。精确 HTTP、JSON 位于折叠区。</p>'
+        '<p>默认内容用于产品、前端和后端澄清业务行为；这里展示 GET 清单与命令选项；公共认证、bridge 和错误映射仍待评审，不代表接口已发布。精确 HTTP、JSON 位于折叠区。</p>'
         '<div class="review-guide-steps">'
         '<div class="review-guide-step"><strong>1. 先看触发场景</strong><span>确认用户什么时候会调用这个接口。</span></div>'
         '<div class="review-guide-step"><strong>2. 再看界面结果</strong><span>确认前端如何展示成功、不可用和失败。</span></div>'
@@ -151,10 +151,13 @@ def render_business_flow(flow: list[dict[str, str]]) -> str:
     return '<div class="business-flow">' + ''.join(steps) + '</div>'
 
 
+ARGUMENT_TYPE_LABELS = {"text": "文本输入", "options": "调用命令选项接口"}
+
+
 def command_state(command: dict[str, Any]) -> list[str]:
-    hint = "、".join(command.get("hints", [])) or "无提示"
     files = "允许附件" if command["type"] == "skill" else "无附件"
-    return [f'/{command["name"]}', command["description"], hint, files]
+    argument_type = ARGUMENT_TYPE_LABELS.get(command.get("argumentType"), "无参数，直接执行")
+    return [f'/{command["name"]}', command["description"], argument_type, files]
 
 
 def render_command_example(operation: dict[str, Any]) -> str:
@@ -168,7 +171,25 @@ def render_command_example(operation: dict[str, Any]) -> str:
             '<section class="business-section">'
             f'<h3>{html.escape(response["tabLabel"])}</h3>'
             f'<p>{html.escape(response["summary"])}</p>'
-            f'{SHARED.static_table(["命令", "用途", "输入提示", "附件"], rows)}</section>'
+            f'{SHARED.static_table(["命令", "用途", "参数类型", "附件"], rows)}</section>'
+        )
+    return ''.join(sections)
+
+
+def render_command_options_example(operation: dict[str, Any]) -> str:
+    sections = []
+    for response in operation["responses"]:
+        if response["status"] != "200":
+            continue
+        result = response["bodies"]["zh-CN"]["result"]
+        current_value = result["currentValue"]
+        rows = [[option["value"], option["label"], "当前值" if option["value"] == current_value else ""]
+                for option in result["options"]] or [["（无候选）", "", f"当前值 {current_value}"]]
+        sections.append(
+            '<section class="business-section">'
+            f'<h3>{html.escape(response["tabLabel"])}</h3>'
+            f'<p>{html.escape(response["summary"])}</p>'
+            f'{SHARED.static_table(["value（提交）", "label（展示）", "状态"], rows)}</section>'
         )
     return ''.join(sections)
 
@@ -210,6 +231,8 @@ def render_business_review(model: dict[str, Any]) -> str:
     ]
     if operation["operationKey"] == "ListChatCommands":
         sections.append(render_command_example(operation))
+    elif operation["operationKey"] == "ListChatCommandOptions":
+        sections.append(render_command_options_example(operation))
     sections.append(render_error_summary(operation))
     for note in view.get("notes", []):
         sections.append(
