@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/chats/{chatId}/commands/{commandName}/options",
     "summary": "列出选项型命令的当前值与候选",
-    "description": "查询当前 Chat 中某个 argumentType=options 的命令可选择的值，返回当前值 currentValue 与候选列表 options，每个候选带可直接提交的 value 和可直接展示的 label。候选值都按会话从 Runtime 读取：model 取自会话可选模型，label 为 mate-service 模型管理中的模型名称（没有名称时回退为 modelId）；thinking 取自会话深度思考可选值，当前模型不支持深度思考时只有 off；mode 取自会话工作模式可选值。thinking 与 mode 的 label 按 Accept-Language 返回。前端把选中的 value 原样作为命令参数提交，不再自行查询模型信息或维护显示名。",
+    "description": "查询当前 Chat 中某个 argumentType=options 的命令可选择的值，返回当前值 currentValue 与候选列表 options，每个候选带可直接提交的 value 和可直接展示的 label。所有选项型命令都只调用一个 Runtime 接口取值：GET /sessions/{sessionId}/commands/{commandName}/values（ListSessionCommandValues），currentValue 与候选顺序原样保留；thinking 在当前模型不支持深度思考时只有 off。mate-service 只补 label：model 的 label 为模型管理中的模型名称（没有名称时回退为 modelId），各语言相同；其他命令的 label 来自文案资源，按 Accept-Language 返回，没有文案时回退为 value。前端把选中的 value 原样作为命令参数提交，不再自行查询模型信息或维护显示名。",
     "parameters": [
       {
         "$ref": "parameters.chatId"
@@ -29,7 +29,7 @@
         "status": "200",
         "label": "OK",
         "tabLabel": "200 · model",
-        "summary": "model：当前值为会话当前模型，候选为该会话可选模型；模型名称是业务数据，各语言相同。",
+        "summary": "model：当前值与候选取自 Runtime 命令可选值（200-model），label 为模型名称；模型名称是业务数据，各语言相同。",
         "headers": {
           "Cache-Control": "no-store",
           "Content-Language": "zh-CN"
@@ -318,7 +318,7 @@
         "status": "404",
         "tabLabel": "404 · COMMAND_OPTIONS_NOT_FOUND",
         "label": "Not Found",
-        "summary": "commandName 不是该 Chat 清单中 argumentType=options 的命令，包括无参命令、文本命令和技能命令。",
+        "summary": "commandName 不是该 Chat 清单中 argumentType=options 的命令，包括无参命令、文本命令和技能命令；Runtime 返回 404 COMMAND_VALUES_NOT_FOUND 时映射为本错误。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -338,7 +338,7 @@
         "status": "503",
         "tabLabel": "503 · COMMAND_OPTIONS_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "暂时无法读取会话可选值、可选模型或模型管理；UI 保留 Slash 草稿。",
+        "summary": "暂时无法读取 Runtime 命令可选值或模型管理；UI 保留 Slash 草稿。",
         "headers": {
           "Content-Language": "zh-CN",
           "Retry-After": "3"
@@ -367,7 +367,7 @@
         },
         {
           "actor": "mate-service",
-          "action": "按 commandName 选择选项来源，从 Runtime 读取该会话的当前值与可选值，补充模型名称或本地化显示名",
+          "action": "用 commandName 调用 Runtime ListSessionCommandValues 取得该会话的当前值与可选值，补充模型名称或本地化显示名",
           "outcome": "返回 currentValue 与 value/label 候选"
         },
         {
@@ -377,11 +377,11 @@
         }
       ],
       "notes": [
-        "每个选项型命令在 mate-service 有一个选项提供者；新增选项型命令只需新增提供者并在清单映射中标为 options，前端不改。",
+        "所有选项型命令共用一条取值路径：mate-service 不按命令写查询，只按命令选择显示名来源（model 用模型名称，其他用文案资源）。新增选项型命令时 Runtime 登记取值，Mate 补文案即可，缺文案时 label 回退为 value；前端不改。",
         "选项是读取时的观察结果，不是执行授权；运行中仍只允许无参查询，提交以执行接口的最终准入为准。",
-        "thinking 与 mode 的可选值由 Runtime 按会话给出（ListSessionThinkingValues、ListSessionModes），mate-service 不写死取值，只补显示名；当前模型不支持深度思考时 thinking 只返回 off。",
-        "model 的候选范围只来自 Runtime 的会话可选模型，模型管理只补名称，不能增加或删除候选；某个模型在模型管理中没有名称时 label 回退为 modelId，模型管理整体不可用时返回 503。",
-        "上游依赖与提供者结构见 mate-service 聊天命令 API 设计 §3。"
+        "可选值全部由 Runtime 按会话给出（ListSessionCommandValues），mate-service 不写死取值；当前模型不支持深度思考时 thinking 只返回 off。",
+        "model 的候选范围只来自 Runtime，模型管理只补名称，不能增加或删除候选；某个模型在模型管理中没有名称时 label 回退为 modelId，模型管理整体不可用时返回 503。",
+        "上游依赖与类结构见 mate-service 聊天命令 API 设计 §3。"
       ]
     },
     "questions": []

@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from command_catalog_contract import validate_catalog_examples, validate_commands, validate_descriptor, validate_projection_pair
+from command_catalog_contract import (validate_catalog_examples, validate_command_values, validate_commands,
+                                      validate_descriptor, validate_projection_pair)
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT.parents[1] / "02-服务与接口/06-mate-service聊天命令API"
@@ -150,6 +151,22 @@ class CommandCatalogContractTest(unittest.TestCase):
         self.public["responses"][1]["bodies"]["zh-CN"]["result"]["commands"][-1]["description"] = "different"
         with self.assertRaises(RuntimeError):
             validate_projection_pair(self.runtime, self.public)
+
+    def test_one_values_query_serves_every_option_command(self):
+        operations = ROOT / "接口契约/操作"
+        values = json.loads((operations / "09-list-session-command-values.json").read_text())["operation"]
+        models = json.loads((operations / "06-list-session-models.json").read_text())["operation"]
+        session_models = models["responses"][0]["bodies"]["en-US"]["result"]
+        validate_command_values(values, session_models)
+        for mutate in (lambda op: op["parameters"][1].update(schema="model | thinking"),
+                       lambda op: op["responses"].pop(4),
+                       lambda op: op["responses"][0]["bodies"]["en-US"]["result"]["values"].pop(),
+                       lambda op: op["responses"][3]["bodies"]["en-US"]["result"]["values"].append("on"),
+                       lambda op: op["responses"][2]["bodies"]["en-US"]["result"].update(label="On")):
+            broken = copy.deepcopy(values)
+            mutate(broken)
+            with self.subTest(mutate=mutate), self.assertRaises(RuntimeError):
+                validate_command_values(broken, session_models)
 
 
 if __name__ == "__main__":

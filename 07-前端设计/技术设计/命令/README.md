@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.15.0 |
-| 更新日期 | 2026-10-17 |
+| 文档版本 | 1.16.0 |
+| 更新日期 | 2026-10-18 |
 | 本次前端修订基线 | 设计仓 `761b7640f76b74162423c0372496cdef0b88d708` |
 | Runtime 命令契约基线 | `879746e59189a07335e32c7df807c7f5048fdc28`；B13 已确认 Skill SSE，Builtin JSON 不变 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
@@ -220,7 +220,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 | skill:<name> | 请求文本与可选附件；按 type=skill 准入附件 | 上传成功取得 fileIds，与 arguments 一起冻结，执行共享 SSE | 上传未完成不提交；失败保留文本/附件；文件拒绝不能静默去掉附件后重发 |
 
 选项列表复用清单的 listbox/option、键盘和触摸规则；勾选表示当前值，键盘活动项单独显示。
-Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。三个命令共用同一个选项列表组件和同一个 Gateway 方法，表中差异只在执行后的结果类型。新增选项型命令时 Mate 新增提供者并标 argumentType=options，前端不改。
+Escape 先关闭选项列表，恢复选择前的参数；选中那次 Enter 不再次提交。三个命令共用同一个选项列表组件和同一个 Gateway 方法，表中差异只在执行后的结果类型。新增选项型命令时 Runtime 标 argumentType=options 并登记取值，Mate 补选项文案，前端不改。
 选项读取失败显示同位置错误和重试，保留草稿；COMMAND_OPTIONS_NOT_FOUND 视为清单过期并重读清单。Mate 接口实现前，Runtime 直连的开发适配层直接使用 Runtime 清单的 argumentType、按同一 value/label 结构返回选项，组件不感知来源；该适配不是产品契约。命令规则集中消费已对账的 Session 状态，候选是否仍可用和 POST 最终准入由后端决定。
 状态变为 running 时关闭修改列表并保留已选草稿，用户可清空参数后显式查询；未知状态、清单过期或恢复中暂停提交。
 
@@ -509,6 +509,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.16.0 | 2026-10-18 | 同步 Runtime 选项取值合并为一个接口：新增选项型命令只需 Runtime 登记取值、Mate 补文案，前端仍不改。 |
 | 1.15.0 | 2026-10-17 | 控件按清单的 argumentType 统一选择（Runtime 返回，Mate 透传，替代 hints 值列表）；model/thinking/mode 的当前值、候选与显示名改由 Mate 命令选项接口提供，前端不再按命令名查询模型信息或维护显示名。 |
 | 1.14.0 | 2026-10-17 | Runtime 前端取消条件 Header 已实现，引用 HTTP §8.4 核验。 |
 | 1.13.0 | 2026-10-16 | hints 改为固定参数值列表，thinking/mode 的选项值取自 hints；占位提示与选项显示名由前端维护。清单 stateKey 加入可选 sessionId：新对话只取智能体级命令，已有 Chat 取完整命令。 |

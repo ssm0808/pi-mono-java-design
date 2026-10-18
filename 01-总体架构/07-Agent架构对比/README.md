@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.105.0 |
-| 更新日期 | 2026-10-17 |
+| 文档版本 | 1.106.0 |
+| 更新日期 | 2026-10-18 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -80,12 +80,12 @@ M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Ski
 展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现，Mate 公共接入独立确认。
 这不改变原有产品约束、安全加固或架构取舍；实现映射与测试未重跑边界由主设计维护。
 外部基线历史 SHA 与比较结论保持原核验范围，不把进度校正描述为新的上游比较。
-M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与按会话的可选值（模型、深度思考、工作模式），Runtime 清单以 argumentType 说明参数形态，Mate 通过命令选项接口返回 currentValue 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 argumentType 统一组装命令参数，不按命令名写取数逻辑。可选值不放在命令清单，与 pi 按会话补全一致；不返回 pi 式占位文字，因为图形界面里它与 description 重复。此项为接口架构变更，不改变全局类图结构。
+M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与按会话的可选值（模型、深度思考、工作模式共用一个按命令取值的接口），Runtime 清单以 argumentType 说明参数形态，Mate 通过命令选项接口返回 currentValue 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 argumentType 统一组装命令参数，不按命令名写取数逻辑。可选值不放在命令清单，与 pi 按会话补全一致；不返回 pi 式占位文字，因为图形界面里它与 description 重复。此项为接口架构变更，不改变全局类图结构。
 
 M05 描述符专项于 2026-09-22 重新确认默认分支并 fetch pi `main@d201760ffee16564aa8d9a759e0c85b70db33674`
 与 OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`，只更新命令发现和请求边界；默认分支快照不等于稳定发布。
 pi 的 RpcSlashCommand 与 OpenCode 的 Command.Info 均将发现描述和实际调用分开，后者 hints 仅为占位提示。
-CampusClaw 采用 name/type/description 与可选 argumentType（text 或 options）：不返回 hints 或占位文字，可选值由 Runtime 按会话单独查询（对应 pi 的 get_available_thinking_levels）；按类别统一附件，按会话状态限制修改。
+CampusClaw 采用 name/type/description 与可选 argumentType（text 或 options）：不返回 hints 或占位文字，可选值由 Runtime 一个按命令取值的接口按会话查询（对应 pi 挂在命令上的 getArgumentCompletions）；按类别统一附件，按会话状态限制修改。
 收益是固定选项由接口给出且文案留在界面层，代价是前端需集中维护并验证命令状态规则，POST 始终最终准入。
 Java 53eff85c 的 VO/组装器及前端仍用 kind/input，新投影与客户端迁移待实现；未运行产品测试。
 相对路径、符号、旧新提交范围及差异理由见[专项证据](../04-CampusClaw命令系统/source-evidence.md#command-descriptor-baseline)，其余比较不升级。
@@ -773,6 +773,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.106.0 | 2026-10-18 | M05/M07 模型、深度思考、工作模式的可选值合并为 Runtime 一个按命令取值的接口，对应 pi 挂在命令上的补全。 |
 | 1.105.0 | 2026-10-17 | M05/M07 选项型命令的候选与显示名改由 Mate 命令选项接口提供，前端按 argumentType 统一处理；Runtime 清单去掉 hints，返回 argumentType，可选值改由 Runtime 会话查询提供。 |
 | 1.104.0 | 2026-10-17 | 新增 A19，对比单一异常类加集中错误码枚举、源头记录原始异常的基线做法。 |
 | 1.103.0 | 2026-10-16 | 新增 A18：模型调用改用 JDK HttpClient，用 Redis 全局许可把合计并发限制在 100，与 pi/Codex 的客户端做法对照。 |

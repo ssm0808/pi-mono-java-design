@@ -12,9 +12,9 @@ SPEC.loader.exec_module(GATE)
 
 
 class ControlRetirementTest(unittest.TestCase):
-    def test_current_catalog_has_fourteen_operations(self):
+    def test_current_catalog_has_thirteen_operations(self):
         _, models = load_catalog()
-        self.assertEqual(14, len(models))
+        self.assertEqual(13, len(models))
         GATE.validate_control_retirement(models)
 
     def test_each_retired_operation_is_rejected(self):

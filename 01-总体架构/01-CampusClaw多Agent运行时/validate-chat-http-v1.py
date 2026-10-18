@@ -42,14 +42,13 @@ def topic_diagram(design_path: Path) -> Path:
 
 HELP_ROOT = REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南"
 HELP_RESULT_FIELDS = {"displayName", "description", "useCases"}
-EXPECTED_OPERATION_COUNT = 9
+EXPECTED_OPERATION_COUNT = 8
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
     ("DELETE", "/sessions/{sessionId}"),
     ("GET", "/sessions/{sessionId}/models"),
-    ("GET", "/sessions/{sessionId}/thinking-values"),
-    ("GET", "/sessions/{sessionId}/modes"),
+    ("GET", "/sessions/{sessionId}/commands/{commandName}/values"),
     ("POST", "/sessions/{sessionId}"),
     ("GET", "/agents/{agentId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
@@ -355,6 +354,10 @@ def validate_response_contract(
             validate_session_update(operation, codes)
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
+    elif key == ("GET", "/sessions/{sessionId}/commands/{commandName}/values"):
+        from command_catalog_contract import validate_command_values
+        models = json.loads((CONTRACT_ROOT / "操作/06-list-session-models.json").read_text(encoding="utf-8"))
+        validate_command_values(operation, models["operation"]["responses"][0]["bodies"]["en-US"]["result"])
     elif key == ("GET", "/agents/{agentId}/commands"):
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in SLASH_DESIGN_PATHS[0].read_text(encoding="utf-8"),
                 "Command catalog must reflect unified Builtin and Skill ownership")

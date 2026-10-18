@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.36.0 |
-| 更新日期 | 2026-10-17 |
+| 文档版本 | 3.37.0 |
+| 更新日期 | 2026-10-18 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
@@ -66,18 +66,17 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 4 | `POST` | `/sessions/{sessionId}/events` | 提交事件并接收对应推送 |
 | 5 | `GET` | `/sessions/{sessionId}/events` | 查看对话历史 |
 | 6 | `GET` | `/sessions/{sessionId}/models` | 查询可用模型 |
-| 7 | `GET` | `/sessions/{sessionId}/thinking-values` | 查询深度思考可选值 |
-| 8 | `GET` | `/sessions/{sessionId}/modes` | 查询工作模式可选值 |
-| 9 | `POST` | `/sessions/{sessionId}` | 更新会话 |
-| 10 | `GET` | `/agents/{agentId}/commands` | 查看 Agent 命令清单 |
-| 11 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
-| 12 | `POST` | `/internal/skills/load-statistics/query` | 按 skillIds 批量查询累计/精确范围激活统计；排名、趋势暂缓 |
-| 13 | `GET` | `/agents/{agentId}/events` | 按 Agent 与时间范围跨会话列出用户请求（user.message），供 Mate Trace 使用 |
-| 14 | `GET` | `/sessions/{sessionId}/events/{eventId}/turn` | 由任意一条事件读取所在轮次的全部事件 |
+| 7 | `GET` | `/sessions/{sessionId}/commands/{commandName}/values` | 查询选项型命令（model、thinking、mode）的当前值与可选值 |
+| 8 | `POST` | `/sessions/{sessionId}` | 更新会话 |
+| 9 | `GET` | `/agents/{agentId}/commands` | 查看 Agent 命令清单 |
+| 10 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
+| 11 | `POST` | `/internal/skills/load-statistics/query` | 按 skillIds 批量查询累计/精确范围激活统计；排名、趋势暂缓 |
+| 12 | `GET` | `/agents/{agentId}/events` | 按 Agent 与时间范围跨会话列出用户请求（user.message），供 Mate Trace 使用 |
+| 13 | `GET` | `/sessions/{sessionId}/events/{eventId}/turn` | 由任意一条事件读取所在轮次的全部事件 |
 
 统计查询由 [M05 使用统计 §6](../04-CampusClaw命令系统/03-Skill加载统计/README.md#6-查询接口)维护：F19 采用按指定 skillIds 的累计或精确时间范围查询，返回 activationCount/lastLoadedAt；排名和日趋势暂缓。接口不返回 scope；采集入口、去重和存储目标的其他差异仍由 F20 及专题证据单独对齐，不表示整项验收。
 
-第 13、14 项供 Mate Trace 只读调用，设计见 [Agent 用户事件与轮次查询](agent-user-events-design.md)。
+第 12、13 项供 Mate Trace 只读调用，设计见 [Agent 用户事件与轮次查询](agent-user-events-design.md)。
 
 ## 5. 执行主线与恢复
 
@@ -147,6 +146,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.37.0 | 2026-10-18 | 查询深度思考可选值与查询工作模式可选值合并为一个查询选项型命令可选值的接口，model、thinking、mode 共用，同步 HTTP 1.74.0。 |
 | 3.36.0 | 2026-10-17 | 接口清单新增查询深度思考可选值与查询工作模式可选值，供 /thinking、/mode 的选择列表使用；命令清单用 argumentType 说明参数形态，同步 HTTP 1.73.0。 |
 | 3.35.0 | 2026-10-17 | 同步 HTTP 1.72.0：Session 更新取消 ETag 已实现，并发写入由数据库行锁加按字段合并控制。 |
 | 3.34.0 | 2026-10-16 | 命令清单改为 `GET /agents/{agentId}/commands`（ListAgentCommands），同步 HTTP 1.68.0。 |
