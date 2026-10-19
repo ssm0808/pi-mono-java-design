@@ -14,10 +14,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.5.0 |
-| 更新日期 | 2026-10-18 |
+| 文档版本 | 2.6.0 |
+| 更新日期 | 2026-10-19 |
 | 模块 | M05 · Command 与 Skill · Slash Command 通用模块 |
-| 设计状态 | 按 Agent 与可选 sessionId 查询命令清单待实现；七个 Builtin、Skill 执行与前端 Slash 已实现；mode、type/argumentType 描述符、Skill 统一结构待实现。逐项见 [§8.1](#current-runtime-status) |
+| 设计状态 | 按 Agent 查询命令清单、type/argumentType 描述符、可选值接口、mode 与描述国际化已在实现 PR #364 完成，待合并；七个 Builtin、Skill 执行与前端 Slash 已实现；Skill 统一结构待实现。逐项见 [§8.1](#current-runtime-status) |
 | 源码基线 | `pi-mono-java` main `fd4310026be808a16f471c550dff4b024ce91e24`，2026-10-16 核验清单链路；其他能力沿用 [§8.1](#current-runtime-status) 所列核验提交 |
 | 主基线 | OpenCode dev `e25b7abf8955a4fa1b02b935964cb47db4c3a02a`（命令清单路由为 Experimental）；辅以 Codex main `6b991972c5b539198dcea9bac4fc14e57559c3af`、pi main `4954d760504c11df9b2cbdc040346107b6a8153d`，均为 2026-10-16 默认分支快照 |
 
@@ -176,6 +176,23 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 为什么这样分：清单与会话脱钩后，Definition 的描述不能再依赖会话快照，否则 Agent 级清单无从计算；把“能不能执行”全部收拢到准入策略，既让清单可以跨会话复用，也保证执行入口仍是唯一的最终判断点。实现时先改 `CommandDefinition.describe` 与 `CompositeCommandRegistry.resolve` 的签名，再改清单服务和 Controller，最后迁移前端读取路径。
 
 八个 Contributor/Handler 的精确映射见 [内置命令 §2](01-内置命令/README.md#2-全局目标与核心扩展)；Help 的元数据与缓存见 [Help 设计](01-内置命令/Help-Agent使用指南/README.md)。
+
+<a id="command-design-patterns"></a>
+
+#### 3.2.1 设计模式与命名
+
+命令核心组合了下面几种常见模式。类名以实现 PR #364（`78b30499`，待合并）为准，证据见 [源码证据 §8](source-evidence.md#command-patterns-evidence)。
+
+| 模式 | 落在哪些类 | 解决什么 | 边界与代价 |
+|---|---|---|---|
+| 注册表（插件式注册） | 每个 Builtin 一个 `XxxCommandContributor`；`BuiltinCommandSource` 注入 `List<BuiltinCommandContributor>` 并在启动期查重；`CompositeCommandRegistry` 再聚合 Builtin 与 Skill 两个 `CommandDefinitionSource` | 新增命令或命令来源只加类，不改中央 switch | 重名在 Spring 启动期失败。`CompositeCommandRegistry` 只把来源平铺合并成一张清单，没有树形嵌套，不是 GoF 组合模式，名称沿用 main |
+| 策略 | `BuiltinCommandDefinition` 持有 `CommandAdmissionPolicy`（当前状态能否执行）、`CommandHandler`（执行）与可选的 `CommandValuesProvider`（选项型命令的当前值与可选值） | `CommandExecutionService`、`CommandValuesService` 只按接口调用，不按命令名分支 | argumentType 为 options 的命令必须登记取值逻辑，其他命令不得登记，构造 Definition 时校验 |
+| 命令模式（轻量） | Definition 封装“做什么”，`CommandExecutionService` 按名称查找、检查准入后调用 Handler | 执行入口统一，最终准入仍在各业务服务的锁内完成 | 不支持撤销与排队，也不保存通用命令记录（见 D5） |
+| Assembler | `CommandDiscoveryResponseAssembler` 把 Builtin 元数据与 Skill 转成清单描述符，负责排序和描述本地化；`CommandResponseAssembler` 组装执行结果 | 业务服务不依赖 VO，Controller 不依赖内部 DTO | 转换方法用 `toXxx`，校验用 `requireXxx` |
+
+命名约定沿用实现仓 AGENTS.md：`Assembler` 是约定后缀之一，`Mapper` 在实现仓专指 MyBatis 持久化接口，不用于响应转换。Builtin 命令名集中在 `ClawConstants.RuntimeApi.Command`（如 `COMPACT_COMMAND`），Contributor、展示顺序和不带 sessionId 时返回的命令都引用这些常量。Builtin 描述只在 i18n 资源文件中维护，key 为 `COMMAND_BUILTIN_<NAME>_DESCRIPTION`，与错误码一样用大写下划线；每个 Builtin 在中英文资源中都必须有描述，由单元测试检查。
+
+基线对照（2026-10-19 默认分支快照）：pi、OpenCode、Codex 都没有 Assembler 这类转换类。pi 在 RPC `get_commands` 分支里直接拼出 `RpcSlashCommand`；OpenCode 的 `command.list` 直接返回 `Command.Service.list()` 的结果；Codex 把内外模型转换放在 `mappers.rs`、`event_mapping.rs`、`item_builders.rs` 中，用 `impl From<A> for B`、`xxx_to_yyy`、`build_xxx` 表达。三者用的都是函数或语言内置转换。Java 没有扩展函数，转换要放进类里，集中到一个 Spring 组件也便于注入 MessageSource 和单独测试，所以保留 Assembler 类名，方法名与基线一样用 `to` 前缀。
 
 <a id="list-commands-sequence"></a>
 
@@ -436,11 +453,11 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 
 | 能力 | 状态 | 核验提交与证据 |
 |---|---|---|
-| 按 Agent 与可选 sessionId 查询清单 | 待实现 | `fd431002`：仍为 `/sessions/{sessionId}/commands`，描述依赖会话，见 [源码证据 §1.1](source-evidence.md#agent-catalog-evidence) |
-| type/argumentType 描述符 | 待实现 | `fd431002`：`CommandDiscoveryResponseAssembler` 仍输出 input{hint, acceptsFiles} |
-| Builtin 描述国际化 | 待实现 | `53eff85c`：Contributor 描述固定为英文，清单服务未接收 Locale，见 [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
+| 按 Agent 与可选 sessionId 查询清单 | 已实现，待合并 | PR #364 `78b30499`：`RuntimeCommandCatalogController.listCommands` → `CommandCatalogService.listCommands`；main `fd431002` 仍为 `/sessions/{sessionId}/commands`，见 [源码证据 §1.1](source-evidence.md#agent-catalog-evidence) |
+| type/argumentType 描述符与可选值接口 | 已实现，待合并 | PR #364 `78b30499`：`CommandDiscoveryResponseAssembler`、`CommandValuesService.listValues`；main `fd431002` 仍输出 input{hint, acceptsFiles} |
+| Builtin 描述国际化 | 已实现，待合并 | PR #364 `78b30499`：描述只在 i18n 资源中维护（`COMMAND_BUILTIN_<NAME>_DESCRIPTION`）；main `53eff85c` 描述固定为英文，见 [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
 | 七个 Builtin 与业务响应 | 已实现 | `53eff85c`，路径见 [内置命令 §8.3](01-内置命令/README.md#83-当前-runtime-实现与验收边界) |
-| mode Builtin | 待实现 | `fd431002`：Contributor 仍只有七个 |
+| mode Builtin | 已实现，待合并 | PR #364 `78b30499`：`ModeCommandContributor`、`SessionModeConfigurationService`；main `fd431002` 仍只有七个 Contributor |
 | 统一 Session POST | 已实现 | `53eff85c`：RuntimeSessionController.update → RuntimeSessionUpdateService.update |
 | Skill 严格名称 | 已实现 | `53eff85c`，见 [技能命令 §4.2](02-技能命令/README.md#42-当前实现剩余增量与测试证据) |
 | Skill Runtime POST/SSE 与文本分离 | 已实现 | `53eff85c`；错误码差距见 F11 |
@@ -459,6 +476,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.6.0 | 2026-10-19 | 新增 §3.2.1，说明命令核心采用的设计模式、命名约定与基线对照，并按实现 PR #364 更新 §8.1 状态。 |
 | 2.5.0 | 2026-10-18 | 按 Lotus 决定，model、thinking、mode 的可选值合并为一个 Runtime 接口 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），替代 models、thinking-values 与 modes；D7、T8、§4、§4.4 同步。 |
 | 2.4.0 | 2026-10-17 | 新增 D6/T7：选项型命令的当前值、候选与显示名交给 Mate，新增 Mate 命令选项接口。新增 D7/T8（已确认）：Runtime 清单去掉 hints，返回 argumentType，不返回占位文字；thinking、mode 的可选值改由 Runtime 会话查询提供。新增 §4.4 交互流程与接口调用。 |
 | 2.3.0 | 2026-10-16 | 优化 Builtin 描述为面向用户的中文（会话、智能体、技能、计划/实施）；hints 改为可提交的固定参数值列表（thinking 为 on/off，mode 为 plan/build），其他命令省略，接口不带界面文案；sessionId 改为可选查询参数，省略时只返回 help、skills 与技能命令，传入时返回完整命令，会话不存在或不属于该 Agent 返回 404。 |
