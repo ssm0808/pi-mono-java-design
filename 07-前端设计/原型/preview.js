@@ -27,7 +27,7 @@
     rail.addEventListener('click', event => { if (event.target.closest('[data-chat-select]')) close(); });
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && rail.dataset.open === 'true') { close(); toggle.focus(); } });
     document.addEventListener('click', event => { if (!rail.contains(event.target) && event.target !== toggle) close(); });
-  } else if (view === 'slash' && ['catalog', 'argument', 'running', 'help', 'unmatched'].includes(state)) {
+  } else if (view === 'slash' && ['catalog', 'argument', 'options', 'running', 'help', 'unmatched'].includes(state)) {
     location.hash = state;
   }
 })();

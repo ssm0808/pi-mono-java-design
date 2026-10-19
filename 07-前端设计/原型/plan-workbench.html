@@ -15,13 +15,13 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
 .demo-panel{flex-shrink:0;background:#fff;border-bottom:1px solid var(--line)}.demo-panel>summary{min-height:44px;padding:10px 20px;font-size:12px;cursor:pointer}.demo{border:0;padding-top:0}.question-card{border:1px solid var(--line);border-radius:12px;margin:18px 0;overflow:hidden}.question-card>summary{display:flex;gap:12px;justify-content:space-between;align-items:center;min-height:56px;padding:14px 20px;cursor:pointer;flex-wrap:wrap}.question-card fieldset{min-width:0;border:0;border-top:1px solid var(--line);padding:20px;margin:0}.question-card legend{float:left;width:100%;margin-bottom:12px;font-weight:600;overflow-wrap:anywhere}.question-card legend small{display:block;color:var(--muted);font-weight:400}.question-options{clear:both;display:grid;gap:7px}.question-option{display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer;overflow-wrap:anywhere}.question-option:has(input:checked){background:var(--soft);border-color:#96867b}.question-option input{margin:5px 0 0;accent-color:var(--action);flex-shrink:0}.question-option small{display:block;color:var(--muted);font-weight:400}.question-custom{clear:both;display:block;margin-top:12px;font-size:12px;color:var(--muted)}.question-custom textarea{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);resize:vertical;min-height:68px;margin-top:7px;color:var(--ink)}.question-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:14px 20px;border-top:1px solid var(--line)}.question-card fieldset:disabled .question-option{cursor:default}.question-card input:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
-.composer{position:relative}.command-palette{position:absolute;z-index:8;left:0;right:0;bottom:calc(100% + 8px);max-height:min(360px,45dvh);overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #2c272417;padding:6px}.command-option{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;min-height:44px;padding:10px 12px;border-radius:8px;cursor:pointer;align-items:center}.command-option[aria-selected=true]{background:var(--soft)}.command-option strong{font:600 13px ui-monospace,monospace;overflow-wrap:anywhere}.command-option span{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.command-chip{display:inline-flex;border:1px solid var(--line);background:var(--rail);border-radius:9px;max-width:100%}.command-chip button:first-child{font:600 13px ui-monospace,monospace;overflow-wrap:anywhere}.command-result{margin-bottom:8px;border-bottom:1px solid var(--line);font-size:12px}.command-result summary{min-height:44px;padding:10px;cursor:pointer;color:var(--muted)}.command-result .row{max-height:15dvh;overflow:auto;padding:0 12px 8px;justify-content:space-between}.command-result p{white-space:pre-wrap;overflow-wrap:anywhere}#command-empty{padding:14px}.command-chip+label+textarea[hidden]{display:none}
+.composer{position:relative}.command-palette{position:absolute;z-index:8;left:0;right:0;bottom:calc(100% + 8px);max-height:min(360px,45dvh);overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #2c272417;padding:6px}.command-option{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;min-height:44px;padding:10px 12px;border-radius:8px;cursor:pointer;align-items:center}.command-option[aria-selected=true]{background:var(--soft)}.command-option strong{font:600 13px ui-monospace,monospace;overflow-wrap:anywhere}.command-option span{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.command-chip{display:inline-flex;border:1px solid var(--line);background:var(--rail);border-radius:9px;max-width:100%}.command-chip button:first-child{font:600 13px ui-monospace,monospace;overflow-wrap:anywhere}.command-result{margin-bottom:8px;border-bottom:1px solid var(--line);font-size:12px}.command-result summary{min-height:44px;padding:10px;cursor:pointer;color:var(--muted)}.command-result .row{max-height:15dvh;overflow:auto;padding:0 12px 8px;justify-content:space-between}.command-result p{white-space:pre-wrap;overflow-wrap:anywhere}#command-empty{padding:14px}.command-chip+label+textarea[hidden]{display:none}.values-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:6px 12px 2px;color:var(--muted);font-size:13px}.values-title kbd{padding:2px 8px;border-radius:8px;background:var(--rail);font:12px ui-monospace,monospace;white-space:nowrap}#command-values .command-option{display:flex;gap:12px}#command-values .command-option span:last-child{margin-left:auto}#command-values strong{font-family:inherit;font-size:14px;font-weight:500}.value-index{display:inline-grid;width:22px;height:22px;flex:0 0 22px;place-items:center;border-radius:50%;background:var(--rail);color:var(--muted);font-size:12px}#command-values:focus-visible{outline:none}#command-values:focus-visible .command-option[aria-selected=true]{box-shadow:inset 0 0 0 1px var(--focus)}#command-values:focus-visible:not(:has([aria-selected=true])){outline:1px solid var(--focus);outline-offset:-4px;border-radius:10px}.command-option[aria-disabled=true]{color:var(--muted);cursor:default}
 @media(max-width:480px){.question-card fieldset{padding:16px}.question-card>summary,.question-footer{padding:12px 16px}.command-option{grid-template-columns:minmax(0,1fr);gap:3px}.demo-panel>summary{padding:10px 12px}}
 .dock:has(#command-result:not([hidden])) .progress ul{max-height:15dvh}
 .question-card>summary{list-style:none}.question-card>summary::-webkit-details-marker{display:none}.question-card>summary:after{content:"⌄";color:var(--muted)}.question-card[open]>summary:after{content:"⌃"}#question-status{margin-left:auto}
 .mode-menu{position:fixed;bottom:auto;min-width:0;width:210px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;z-index:40}.rail{min-height:0;overflow-y:auto}.question-footer .row{margin-left:auto}.question-summary{flex-basis:100%;padding:0;color:var(--muted);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.question-card[open] .question-summary{display:none}.question-card>summary strong{font-weight:600}.question-step{font-variant-numeric:tabular-nums}.commentary:empty{display:none}.dock{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="fidelity.css?v=1.0.0">
+<link rel="stylesheet" href="fidelity.css?v=1.0.1">
 </head>
 <body>
 <details class="demo-panel" open><summary>原型场景与模拟事件 <span class="muted">· 设计评审</span></summary><div class="demo" aria-label="设计演示控制，不属于产品">
@@ -61,7 +61,7 @@
   <div class="dock">
    <details class="progress" id="progress" open><summary id="progress-summary">实施进度</summary><ul id="todos"></ul></details>
    <details id="command-result" class="command-result" hidden open><summary>命令结果 · 仅当前页面</summary><div class="row"><p id="command-result-text"></p><button id="command-result-close" aria-label="关闭命令结果">×</button></div></details>
-   <div class="composer"><div id="command-palette" class="command-palette" hidden><div id="command-list" role="listbox" aria-label="可用命令"></div><p id="command-empty" class="muted" hidden>没有匹配命令</p></div><div id="command-chip" class="command-chip" hidden><button id="command-name" aria-label="更换命令"></button><button id="command-remove" aria-label="移除命令">×</button></div><label for="draft" class="sr-only">消息草稿</label><select id="command-mode-choice" aria-label="命令工作模式" hidden><option value="">查询当前模式</option><option value="plan">计划（plan）</option><option value="build">实施（build）</option></select><textarea id="draft" rows="2" placeholder="补充目标、约束或期望结果…"></textarea>
+   <div class="composer"><div id="values-palette" class="command-palette" hidden><p id="values-title" class="values-title"></p><div id="command-values" role="listbox" tabindex="0" aria-describedby="command-hint"></div></div><div id="command-palette" class="command-palette" hidden><div id="command-list" role="listbox" aria-label="可用命令"></div><p id="command-empty" class="muted" hidden>没有匹配命令</p></div><div id="command-chip" class="command-chip" hidden><button id="command-name" aria-label="更换命令"></button><button id="command-remove" aria-label="移除命令">×</button></div><label for="draft" class="sr-only">消息草稿</label><span id="command-hint" class="sr-only"></span><textarea id="draft" rows="2" placeholder="补充目标、约束或期望结果…"></textarea>
     <button id="command-run" class="secondary" hidden>执行命令</button><p id="command-error" class="error" role="alert" hidden></p><div class="toolbar"><button aria-label="添加附件，暂未接入" title="原型未接入附件上传" disabled>＋</button><div class="mode-wrap"><button id="mode" aria-haspopup="menu" aria-expanded="false" aria-controls="mode-menu">Plan ⌄</button><div class="mode-menu" id="mode-menu" role="menu" hidden><button id="mode-build" role="menuitemradio" aria-checked="false">Build<small>直接推进任务</small></button><button id="mode-plan" role="menuitemradio" aria-checked="true">Plan<small>先形成方案，审核后实施</small></button></div></div><button id="model" class="desktop-config" title="演示模型设置">模型 A ⌄</button><button id="thinking" class="desktop-config" aria-pressed="true">深度思考</button><button id="settings-toggle" aria-expanded="false" aria-controls="settings">设置</button><button id="send" class="primary" aria-label="停止生成">■</button></div>
     <div id="settings" class="settings" hidden><span class="small muted" id="config-current">模型 A · 深度思考开启</span><p class="small muted">模型与思考控件复用完整会话配置；运行中不可修改。</p></div>
     <p id="input-error" class="error" role="alert" hidden></p>
@@ -331,22 +331,49 @@
  $('question-form').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.isComposing||e.repeat||e.keyCode===229))e.preventDefault();});
  $('question-card').addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!composing){e.preventDefault();$('question-card').open=false;$('question-card').querySelector('summary').focus();}});
  // Separate local command buffers. Server fixtures own availability, never mode captions.
+ // argumentType 决定参数输入方式：text 用文本框，options 只能从可选值中单选，缺省表示不接收参数。
  const catalogIdle=[
-  {name:'help',type:'builtin',description:'了解助手的用途与使用场景',hints:[]}, {name:'status',type:'builtin',description:'查看当前会话状态',hints:[]},
-  {name:'name',type:'builtin',description:'查看或设置会话名称',hints:['displayName']}, {name:'model',type:'builtin',description:'查看或切换模型',hints:['modelId']},
-  {name:'thinking',type:'builtin',description:'查看或切换思考模式',hints:['on|off']}, {name:'mode',type:'builtin',description:'查看或切换 plan/build 工作模式',hints:['plan|build']}, {name:'compact',type:'builtin',description:'压缩当前会话上下文',hints:[]},
-  {name:'skills',type:'builtin',description:'查看可用技能',hints:[]}, {name:'skill:inspection-plan',type:'skill',description:'整理园区巡检计划',hints:['request']}
+  {name:'help',type:'builtin',description:'了解助手的用途与使用场景'}, {name:'status',type:'builtin',description:'查看当前会话状态'},
+  {name:'name',type:'builtin',description:'查看或设置会话名称',argumentType:'text'}, {name:'model',type:'builtin',description:'查看或切换模型',argumentType:'options'},
+  {name:'thinking',type:'builtin',description:'查看或切换思考模式',argumentType:'options'}, {name:'mode',type:'builtin',description:'查看或切换 plan/build 工作模式',argumentType:'options'}, {name:'compact',type:'builtin',description:'压缩当前会话上下文'},
+  {name:'skills',type:'builtin',description:'查看可用技能'}, {name:'skill:inspection-plan',type:'skill',description:'整理园区巡检计划',argumentType:'text'}
  ];
+ // 选项型命令的可选值，对应 GET /commands/{name}/values 的 {currentValue, values}；mode 的当前值取会话模式
+ const commandValues={model:{currentValue:'模型 A',values:['模型 A','模型 B']},thinking:{currentValue:'on',values:['on','off']}};
+ function valuesOf(name){return name==='mode'?{currentValue:mode,values:['plan','build']}:commandValues[name];}
  function catalog(){return ready()?catalogIdle:catalogIdle.filter(c=>c.type!=='skill'&&c.name!=='compact');}
- function commandAcceptsArguments(c){return !!c&&(c.name==='name'||(ready()&&(c.type==='skill'||['model','thinking','mode'].includes(c.name))));}
+ function isOptions(c){return c?.argumentType==='options';}
+ // 参数能否执行：无参数命令不能带参数；选项型参数须是可选值之一，会话非空闲时只能查询（参数为空）
+ function argumentsValid(c,args){return !args||(isOptions(c)?ready()&&valuesOf(c.name).values.includes(args):!!c?.argumentType);}
+ // 默认勾选当前值；手输值不在可选值中时同样回到当前值。当前值不可选或会话非空闲时不勾选，执行即查询
+ function defaultValue(c,args){const {currentValue,values}=valuesOf(c.name);return !ready()?'':values.includes(args)?args:values.includes(currentValue)?currentValue:'';}
+ function argumentHint(c){return isOptions(c)?(ready()?'用上下键选择，回车、数字键或点击即执行':'当前只能查看当前值，回车执行查询'):c?.argumentType==='text'?(c.type==='skill'?'补充要求（可选）':'输入新值，留空则查看当前值'):'';}
+ // 选项型命令选中后，可选值在命令清单的位置弹出（参考 Codex 的模型选择），清单打开时让位
+ function valuesOpen(){return cmd.active&&isOptions(cmd.selected)&&!cmd.palette;}
+ // 选项型命令聚焦可选值列表，用 aria-activedescendant 指向高亮项；可选值不可点时焦点落在执行按钮
+ function focusCommand(c){if(isOptions(c)&&ready())$('command-values').focus();else(c?.argumentType==='text'?$('draft'):ready()?$('send'):$('command-run')).focus();}
+ function chooseValue(value){if(!ready()||pending||!valuesOf(cmd.selected.name).values.includes(value))return;cmd.args=value;renderCommands();focusCommand(cmd.selected);}
+ // 点选可选值即执行，与回车一致；会话非空闲时只能查询，点选无效
+ function runValue(value){if(!ready()||pending)return;chooseValue(value);executeCommand();}
+ // 上下键与 Home/End 在可选值间移动高亮，首尾循环
+ function moveValue(key){const {values}=valuesOf(cmd.selected.name),i=values.indexOf(cmd.args),last=values.length-1;if(!values.length)return;
+  chooseValue(values[key==='Home'?0:key==='End'?last:key==='ArrowDown'?(i<0||i===last?0:i+1):(i<=0?last:i-1)]);}
+ function renderValues(c){const list=$('command-values');$('values-palette').hidden=!valuesOpen();list.replaceChildren();list.removeAttribute('aria-activedescendant');if(!isOptions(c))return;
+  const {currentValue,values}=valuesOf(c.name);const keys=document.createElement('kbd');keys.setAttribute('aria-hidden','true');keys.textContent=ready()?'↑↓ · 1–9 · 回车':'回车查询';
+  $('values-title').replaceChildren(`${c.name} 的可选值`,keys);list.setAttribute('aria-label',`${c.name} 的可选值`);
+  // 高亮项就是待提交的参数；当前值不可选或会话非空闲时没有高亮项，执行即查询
+  values.forEach((value,i)=>{const option=document.createElement('div'),active=value===cmd.args,number=document.createElement('span'),name=document.createElement('strong'),mark=document.createElement('span');
+   option.id=`workbench-value-${i}`;option.className='command-option';option.dataset.value=value;option.setAttribute('role','option');option.setAttribute('aria-selected',String(active));if(!ready()||pending)option.setAttribute('aria-disabled','true');
+   number.className='value-index';number.setAttribute('aria-hidden','true');number.textContent=String(i+1);name.textContent=value;mark.textContent=value===currentValue?'当前':'';option.append(number,name,mark);
+   if(active)list.setAttribute('aria-activedescendant',option.id);option.onmousedown=e=>e.preventDefault();option.onclick=()=>runValue(value);list.append(option);});}
  function commandMatches(){const name=/^\/([^\s]*)/u.exec(cmd.query)?.[1];return name===undefined?[]:catalog().filter(c=>c.name.startsWith(name));}
- function commandValid(){const current=catalog().find(c=>c.name===cmd.selected?.name);return !!current&&(!cmd.args||commandAcceptsArguments(current))&&current.type!=='skill'&&(current.name!=='mode'||['','plan','build'].includes(cmd.args));}
+ function commandValid(){const current=catalog().find(c=>c.name===cmd.selected?.name);return !!current&&argumentsValid(current,cmd.args)&&current.type!=='skill';}
  function commandAllowed(){return (ready()||canStop())&&!pending;}
  function clearCommand(focus=true){if(cmd.active)$('draft').value=cmd.message;Object.assign(cmd,{active:false,palette:false,selected:null,args:'',query:'/',index:0,replacement:null});if(focus)$('draft').focus();}
  function chooseCommand(c){if(!c||composing)return;const args=cmd.query.match(/^\/[^\s]+\s+([\s\S]*)$/u)?.[1]||'';
-  if(args&&!commandAcceptsArguments(c)){$('command-error').textContent='此命令不接受参数';$('command-error').hidden=false;return;}
-  cmd.args=cmd.replacement?.selected.name===c.name&&!args?cmd.replacement.args:args;cmd.selected=c;cmd.replacement=null;cmd.palette=false;$('draft').value=cmd.args;render();
-  (c.name==='mode'?$('command-mode-choice'):commandAcceptsArguments(c)?$('draft'):ready()?$('send'):$('command-run')).focus();
+  if(args&&!c.argumentType){$('command-error').textContent='此命令不接受参数';$('command-error').hidden=false;return;}
+  cmd.args=cmd.replacement?.selected.name===c.name&&!args?cmd.replacement.args:args;if(isOptions(c))cmd.args=defaultValue(c,cmd.args);
+  cmd.selected=c;cmd.replacement=null;cmd.palette=false;$('draft').value=cmd.args;render();focusCommand(c);
  }
  function commandInput(){if(composing)return;const value=$('draft').value;
   if(cmd.selected)cmd.args=value;
@@ -356,24 +383,24 @@
  }
  let dockFolds=null;
  function renderCommands(){
-  if(cmd.palette&&!dockFolds){dockFolds=[$('progress').open,$('command-result').open];$('progress').open=false;$('command-result').open=false;}
-  else if(!cmd.palette&&dockFolds){[$('progress').open,$('command-result').open]=dockFolds;dockFolds=null;}
+  const popupOpen=cmd.palette||valuesOpen();
+  if(popupOpen&&!dockFolds){dockFolds=[$('progress').open,$('command-result').open];$('progress').open=false;$('command-result').open=false;}
+  else if(!popupOpen&&dockFolds){[$('progress').open,$('command-result').open]=dockFolds;dockFolds=null;}
   const options=commandMatches();cmd.index=Math.max(0,Math.min(cmd.index,options.length-1));
   $('command-palette').hidden=!cmd.palette;$('command-chip').hidden=!cmd.selected;$('command-name').textContent=cmd.selected?.name||'';
   $('command-list').replaceChildren();options.forEach((c,i)=>{const option=document.createElement('div');option.id=`workbench-command-${i}`;option.className='command-option';option.dataset.name=c.name;option.setAttribute('role','option');option.setAttribute('aria-selected',String(i===cmd.index));const name=document.createElement('strong'),desc=document.createElement('span');name.textContent=c.name;desc.textContent=c.description;option.append(name,desc);option.onmousedown=e=>e.preventDefault();option.onclick=()=>chooseCommand(c);$('command-list').append(option);});
   $('command-empty').hidden=!!options.length;
   const descriptor=catalog().find(c=>c.name===cmd.selected?.name);
-  $('draft').hidden=!!cmd.selected&&!commandAcceptsArguments(descriptor)&&!cmd.args;
-  const modeChoice=$('command-mode-choice');modeChoice.hidden=cmd.selected?.name!=='mode';modeChoice.disabled=!!pending;modeChoice.value=cmd.args;
-  [...modeChoice.options].forEach(o=>{o.disabled=!ready()&&!!o.value;o.textContent=({'':'查询当前模式',plan:'计划（plan）',build:'实施（build）'})[o.value]+(o.value===mode?' ✓ 当前':'');});
-  if(cmd.selected?.name==='mode'&&['','plan','build'].includes(cmd.args))$('draft').hidden=true;
-  $('draft').placeholder=cmd.selected?(descriptor?.hints||[]).join('、')||'请输入请求内容':cmd.active?'输入名称筛选命令':'补充目标、约束或期望结果，或输入 / 选择命令…';
+  // 会话非空闲时选项型草稿回到查询；选项型命令只显示可选值，无参数命令仅在误带参数时显示文本框
+  if(!ready()&&isOptions(cmd.selected))cmd.args='';
+  $('draft').hidden=!!cmd.selected&&(isOptions(cmd.selected)||(!cmd.selected.argumentType&&!cmd.args));
+  renderValues(cmd.selected);$('command-hint').textContent=argumentHint(cmd.selected);
+  $('draft').placeholder=cmd.selected?argumentHint(descriptor)||'请输入请求内容':cmd.active?'输入名称筛选命令':'补充目标、约束或期望结果，或输入 / 选择命令…';
   $('draft').setAttribute('aria-label',cmd.selected?`编辑 ${cmd.selected.name} 参数`:cmd.active?'查找命令':'消息草稿');
   for(const key of ['role','aria-controls','aria-expanded','aria-autocomplete','aria-activedescendant'])$('draft').removeAttribute(key);
   if(cmd.active&&!cmd.selected){$('draft').setAttribute('role','combobox');$('draft').setAttribute('aria-autocomplete','list');$('draft').setAttribute('aria-controls','command-list');$('draft').setAttribute('aria-expanded',String(cmd.palette));if(cmd.palette&&options.length)$('draft').setAttribute('aria-activedescendant',`workbench-command-${cmd.index}`);}
   $('command-run').hidden=ready()||!cmd.selected;$('command-run').disabled=!commandAllowed()||!commandValid()||cmd.palette;
-  let error=cmd.selected&&!descriptor?'当前状态下此命令不可用，草稿已保留。':cmd.selected&&cmd.args&&!commandAcceptsArguments(descriptor)?'当前只可查询。请先清除参数，再明确执行。':cmd.selected?.type==='skill'?'公共 Skill 执行尚未接入。':'';
-  if(cmd.selected?.name==='mode'&&!['','plan','build'].includes(cmd.args))error='模式只支持 plan/build，草稿已保留。';
+  let error=cmd.selected&&!descriptor?'当前状态下此命令不可用，草稿已保留。':cmd.selected&&!argumentsValid(descriptor,cmd.args)?'当前只可查询。请先清除参数，再明确执行。':cmd.selected?.type==='skill'?'公共 Skill 执行尚未接入。':'';
   if(cmd.active&&Array.from(cmd.args).length>2048)error='参数过长，请缩短后再提交。';
   $('command-error').textContent=error;$('command-error').hidden=!error;
   if(cmd.active&&ready()){$('send').disabled=!cmd.selected||cmd.palette||!!error||!commandAllowed();$('send').setAttribute('aria-label',cmd.selected?`运行 ${cmd.selected.name}`:'选择命令后运行');}
@@ -385,23 +412,30 @@
  function executeCommand(){if(!cmd.selected||cmd.palette||!commandAllowed()||!commandValid()||Array.from(cmd.args).length>2048||composing)return;
   write('command',{name:cmd.selected.name,args:cmd.args,from:phase});phase='commandPending';render();
  }
- function showCommandResult(invocation){if(invocation.name==='mode'&&invocation.args)mode=invocation.args;const texts={help:'园区运维助手\n分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${mode==='plan'?'Plan':'Build'}`,name:`会话名称：${invocation.args||$('title').textContent}`,model:'当前模型：模型 A',thinking:'深度思考：开启',mode:`当前工作模式：${mode}`,compact:'本次无需压缩上下文。',skills:'inspection-plan · 整理园区巡检计划'};
+ function showCommandResult(invocation){
+  // 回执后才更新当前值；勾选本身只是草稿
+  if(invocation.name==='mode'&&invocation.args)mode=invocation.args;else if(commandValues[invocation.name]&&invocation.args)commandValues[invocation.name].currentValue=invocation.args;
+  const texts={help:'园区运维助手\n分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${mode==='plan'?'Plan':'Build'}`,name:`会话名称：${invocation.args||$('title').textContent}`,model:`当前模型：${commandValues.model.currentValue}`,thinking:`深度思考：${commandValues.thinking.currentValue==='on'?'开启':'关闭'}`,mode:`当前工作模式：${mode}`,compact:'本次无需压缩上下文。',skills:'inspection-plan · 整理园区巡检计划'};
   if(invocation.name==='name'&&invocation.args)$('title').textContent=invocation.args;
   $('command-result').hidden=false;$('command-result').open=true;$('command-result-text').textContent=texts[invocation.name];
  }
  function commandKey(e){if(!cmd.active)return false;if(e.isComposing||composing||e.keyCode===229)return true;if(e.repeat&&e.key==='Enter'){e.preventDefault();return true;}
+  if($('command-values').contains(e.target)&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();moveValue(e.key);return true;}
+  // 数字键直接执行对应序号的可选值，与列表左侧的序号一致
+  if($('command-values').contains(e.target)&&/^[1-9]$/.test(e.key)&&!e.ctrlKey&&!e.metaKey&&!e.altKey){const value=valuesOf(cmd.selected.name).values[Number(e.key)-1];if(value!==undefined){e.preventDefault();runValue(value);}return true;}
   if(e.key==='Escape'){e.preventDefault();if(cmd.palette){cmd.palette=false;if(cmd.replacement){cmd.selected=cmd.replacement.selected;cmd.args=cmd.replacement.args;cmd.replacement=null;$('draft').value=cmd.args;}}else clearCommand();render();return true;}
   if(cmd.palette&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();cmd.index=e.key==='Home'?0:e.key==='End'?commandMatches().length-1:cmd.index+(e.key==='ArrowDown'?1:-1);renderCommands();$(`workbench-command-${cmd.index}`)?.scrollIntoView?.({block:'nearest'});return true;}
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(cmd.palette)chooseCommand(commandMatches()[cmd.index]);else if(cmd.selected)executeCommand();else{cmd.palette=true;renderCommands();}return true;}
   if(e.key==='Backspace'&&((cmd.selected&&!cmd.args)||(!cmd.selected&&cmd.query==='/'))){e.preventDefault();clearCommand();render();return true;}
   return false;
  }
- $('command-mode-choice').onchange=()=>{cmd.args=$('command-mode-choice').value;renderCommands();};
  $('command-run').onclick=executeCommand;$('command-remove').onclick=()=>{clearCommand();render();};
  $('command-name').onclick=()=>{cmd.replacement={selected:cmd.selected,args:cmd.args};cmd.selected=null;cmd.query='/';cmd.palette=true;$('draft').value='/';render();$('draft').focus();};
  $('command-result-close').onclick=()=>{$('command-result').hidden=true;$('draft').focus();};
- document.querySelector('.composer').addEventListener('keydown',e=>{if(e.target!==$('draft')&&cmd.active&&e.key==='Escape')commandKey(e);});
- document.addEventListener('click',e=>{if(cmd.palette&&!e.target.closest('.composer')){cmd.palette=false;renderCommands();}});
+ document.querySelector('.composer').addEventListener('keydown',e=>{if(e.target!==$('draft')&&cmd.active&&(e.key==='Escape'||$('command-values').contains(e.target)))commandKey(e);});
+ document.addEventListener('click',e=>{const inside=e.composedPath().includes(document.querySelector('.composer'));if(cmd.palette&&!inside){cmd.palette=false;renderCommands();}
+  // 与 Codex 一致：可选值弹层打开时点到外面即取消命令；用派发路径判断，点选命令后清单行已被重绘移除
+  else if(valuesOpen()&&!pending&&!inside){clearCommand(false);render();}});
 
  // Deterministic probes consume synthetic events only; no API or persistence methods.
  window.planDemo={setQuestion,applyTodo,recovered,receipt,advance,reset,get snapshot(){return {phase,mode,plan,pending,todos,rootId,generation,writes,receipts,question,questionAnswers,questionDrafts,questionIndex,cmd};}};
@@ -409,6 +443,6 @@
  const entry=new URLSearchParams(location.search).get('scene');if(['question','buildQuestion','slash','review'].includes(entry)){$('scenario').value=entry;reset(entry);}
 })();
 </script>
-<script src="preview.js?v=1.0.0"></script>
+<script src="preview.js?v=1.0.1"></script>
 </body>
 </html>

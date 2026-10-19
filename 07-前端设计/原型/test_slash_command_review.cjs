@@ -42,6 +42,8 @@ function fixture(t, state = "catalog") {
     select(name) { document.querySelector('[data-name="' + name + '"]').click(); },
     state(name) { document.querySelector('[data-state="' + name + '"]').click(); },
     names: () => [...document.querySelectorAll(".command-name")].map((node) => node.textContent),
+    values: () => [...document.querySelectorAll('#command-values [role="option"]')],
+    checked: () => document.querySelector('#command-values [aria-selected="true"]')?.dataset.value ?? null,
     calls: () => JSON.parse(window.eval("JSON.stringify(demoInvocations)")),
     async complete() {
       pending.splice(0).forEach((callback) => callback());
@@ -94,7 +96,7 @@ test("parameters remain separate and preserve text, slash and line breaks", asyn
   f.key("Enter");
   assert.equal(f.input.value, "夜间 /巡检\n  第二行");
   assert.equal(f.input.getAttribute("role"), null);
-  assert.equal(f.input.placeholder, "displayName");
+  assert.equal(f.input.placeholder, "输入新值，留空则查看当前值");
   assert.equal(f.get("submit-button").getAttribute("aria-label"), "运行 name");
   f.key("Enter", { shiftKey: true });
   assert.equal(f.calls().length, 0);
@@ -137,8 +139,9 @@ test("replacement selection changes name; empty Backspace restores ordinary draf
   f.click("selected-command-name");
   f.select("model");
   assert.equal(f.get("selected-command-name").textContent, "model");
-  assert.equal(f.input.value, "");
-  assert.equal(f.input.placeholder, "modelId");
+  assert.equal(f.input.hidden, true);
+  assert.equal(f.checked(), null);
+  assert.equal(f.get("values-palette").hidden, false);
   f.key("Backspace");
   assert.equal(f.get("command-chip").hidden, true);
   assert.equal(f.input.value, "");
@@ -177,11 +180,15 @@ test("IME and repeated Enter cannot select or run a command", (t) => {
   assert.equal(f.calls().length, 0);
 });
 
-test("running fixture omits unavailable commands but keeps hints; normal draft cannot submit", (t) => {
+test("running fixture omits unavailable commands; options only query; normal draft cannot submit", (t) => {
   const f = fixture(t, "running");
   assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "mode", "skills"]);
-  f.select("model");
+  f.select("thinking");
   assert.equal(f.input.hidden, true);
+  assert.equal(f.checked(), null);
+  assert.equal(f.values().every((option) => option.getAttribute("aria-disabled") === "true"), true);
+  assert.equal(f.document.activeElement, f.get("command-run"));
+  assert.equal(f.get("parameter-hint").textContent, "任务运行中只能查看当前值，回车执行查询");
   assert.equal(f.get("submit-button").disabled, false);
   f.click("remove-command"); f.type("等待任务结束");
   assert.equal(f.get("submit-button").getAttribute("aria-label"), "停止生成");
@@ -250,57 +257,114 @@ test("palette temporarily collapses the result and restores its disclosure choic
 });
 
 
-test("hints never control parameter editing or running admission", (t) => {
+test("argumentType alone decides text input, value popup or no input", (t) => {
   const f = fixture(t);
-  f.window.eval('delete idleCatalog.find(c => c.name === "name").hints');
   f.select("name");
   assert.equal(f.input.hidden, false);
-  assert.equal(f.input.placeholder, "");
-  f.click("remove-command");
-  f.type("/model"); f.select("model"); f.type("chosen-model");
-  f.window.eval('running = true; catalog = runningCatalog; render()');
-  assert.equal(f.input.value, "chosen-model");
-  assert.equal(f.get("command-run").disabled, true);
-  assert.equal(f.window.eval('selected.hints[0]'), "modelId");
-  f.type("");
-  assert.equal(f.get("command-run").disabled, false);
+  assert.equal(f.get("values-palette").hidden, true);
+  f.click("remove-command"); f.type("/"); f.select("skill:inspection-plan");
+  assert.equal(f.input.placeholder, "补充要求（可选）");
+  f.click("remove-command"); f.type("/"); f.select("status");
   assert.equal(f.input.hidden, true);
+  assert.equal(f.get("values-palette").hidden, true);
+  f.click("remove-command"); f.type("/"); f.select("thinking");
+  assert.equal(f.input.hidden, true);
+  assert.equal(f.get("command-palette").hidden, true);
+  assert.equal(f.get("values-palette").hidden, false);
+  assert.equal(f.get("command-values").getAttribute("role"), "listbox");
+  assert.match(f.get("values-title").textContent, /^thinking 的可选值/);
+  assert.deepEqual(f.values().map((option) => option.textContent), ["1on", "2off当前"]);
+});
+
+test("values popup highlights the current value; arrows wrap and Enter executes", async (t) => {
+  const f = fixture(t); f.select("thinking");
+  const listbox = f.get("command-values");
+  assert.equal(f.checked(), "off");
+  assert.equal(f.document.activeElement, listbox);
+  assert.equal(listbox.getAttribute("aria-activedescendant"), "value-option-1");
+  f.key("ArrowDown");
+  assert.equal(f.checked(), "on");
+  assert.equal(listbox.getAttribute("aria-activedescendant"), "value-option-0");
+  f.key("ArrowUp");
+  assert.equal(f.checked(), "off");
+  f.key("Home");
+  assert.equal(f.checked(), "on");
+  assert.equal(f.calls().length, 0);
+  f.key("Enter");
+  assert.deepEqual(f.calls(), [{ name: "thinking", arguments: "on" }]);
+  await f.complete();
+  assert.match(f.document.querySelector(".help-description").textContent, /思考模式：on/);
+  assert.equal(f.get("values-palette").hidden, true);
+});
+
+test("clicking a value or pressing its number executes right away", async (t) => {
+  const f = fixture(t); f.select("mode");
+  f.document.querySelector('[data-value="plan"]').click();
+  assert.deepEqual(f.calls(), [{ name: "mode", arguments: "plan" }]);
+  assert.equal(f.window.eval("commandValues.mode.currentValue"), "build");
+  await f.complete();
+  assert.equal(f.window.eval("commandValues.mode.currentValue"), "plan");
+  f.type("/thinking"); f.key("Enter");
+  f.key("3");
+  assert.equal(f.calls().length, 1);
+  f.key("1");
+  assert.deepEqual(f.calls()[1], { name: "thinking", arguments: "on" });
+  await f.complete();
+});
+
+test("Escape or an outside click cancels the values popup", (t) => {
+  const f = fixture(t, "help");
+  f.type("/thinking"); f.key("Enter", {}, f.input);
+  assert.equal(f.get("values-palette").hidden, false);
+  f.key("Escape");
+  assert.equal(f.get("values-palette").hidden, true);
+  assert.equal(f.get("command-chip").hidden, true);
+  f.type("/mode"); f.key("Enter", {}, f.input);
+  assert.equal(f.get("values-palette").hidden, false);
+  f.document.querySelector(".timeline-inner").click();
+  assert.equal(f.get("values-palette").hidden, true);
+  assert.equal(f.get("command-chip").hidden, true);
   assert.equal(f.calls().length, 0);
 });
 
-
-test("mode choice is a draft until explicit execution succeeds", async (t) => {
-  const f = fixture(t); f.select("mode");
-  const choice = f.get("mode-choice");
-  assert.equal(choice.hidden, false); assert.equal(f.input.hidden, true);
-  choice.value = "plan"; choice.dispatchEvent(new f.window.Event("change"));
-  assert.equal(f.calls().length, 0); assert.equal(f.window.eval("sessionMode"), "build");
-  f.click("submit-button"); assert.equal(f.window.eval("sessionMode"), "build");
-  assert.deepEqual(f.calls()[0], {name: "mode", arguments: "plan"});
-  await f.complete(); assert.equal(f.window.eval("sessionMode"), "plan");
+test("current value that is not offered stays unhighlighted so Enter queries", (t) => {
+  const f = fixture(t); f.select("model");
+  assert.equal(f.checked(), null);
+  assert.equal(f.get("command-values").getAttribute("aria-activedescendant"), null);
+  assert.equal(f.document.activeElement, f.get("command-values"));
+  f.key("Enter");
+  assert.deepEqual(f.calls(), [{ name: "model", arguments: "" }]);
 });
 
-test("mode draft is preserved when running begins and clearing is explicit", async (t) => {
-  const f = fixture(t); f.type("/mode build"); f.select("mode");
+test("options review tab shows the popup with the current value highlighted", (t) => {
+  const f = fixture(t, "options");
+  assert.equal(f.get("selected-command-name").textContent, "thinking");
+  assert.equal(f.checked(), "off");
+  assert.equal(f.input.hidden, true);
+  assert.equal(f.get("values-palette").hidden, false);
+  assert.equal(f.get("submit-button").disabled, false);
+});
+
+test("options draft returns to a query when running begins", async (t) => {
+  const f = fixture(t); f.type("/mode plan"); f.key("Enter");
+  assert.equal(f.checked(), "plan");
   f.window.eval("running = true; catalog = runningCatalog; render()");
-  assert.equal(f.get("mode-choice").value, "build");
-  assert.equal(f.get("command-run").disabled, true);
-  f.get("mode-choice").value = "";
-  f.get("mode-choice").dispatchEvent(new f.window.Event("change"));
+  assert.equal(f.checked(), null);
   assert.equal(f.get("command-run").disabled, false);
+  f.document.querySelector('[data-value="build"]').click();
+  assert.equal(f.calls().length, 0);
   f.click("command-run"); await f.complete();
   assert.deepEqual(f.calls()[0], {name: "mode", arguments: ""});
 });
 
-test("invalid mode remains editable and cannot execute", (t) => {
+test("typed value outside the options falls back to the current value", (t) => {
   const f = fixture(t); f.type("/mode PLAN"); f.select("mode");
-  assert.equal(f.input.value, "PLAN"); assert.equal(f.input.hidden, false);
-  assert.equal(f.get("submit-button").disabled, true); assert.equal(f.calls().length, 0);
+  assert.equal(f.checked(), "build"); assert.equal(f.input.hidden, true);
+  assert.equal(f.get("submit-button").disabled, false); assert.equal(f.calls().length, 0);
 });
-
 
 test("complete mode name selects mode despite the model prefix", (t) => {
   const f = fixture(t); f.type("/mode plan"); f.key("Enter");
   assert.equal(f.get("selected-command-name").textContent, "mode");
-  assert.equal(f.get("mode-choice").value, "plan"); assert.equal(f.calls().length, 0);
+  assert.equal(f.checked(), "plan"); assert.equal(f.calls().length, 0);
 });

@@ -186,6 +186,12 @@ window.frontendScenes = [
         "view": "slash"
       },
       {
+        "id": "options",
+        "label": "选项选择",
+        "frame": "slash-command-review.html",
+        "view": "slash"
+      },
+      {
         "id": "running",
         "label": "运行中命令",
         "frame": "slash-command-review.html",
