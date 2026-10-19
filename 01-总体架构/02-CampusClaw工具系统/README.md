@@ -615,8 +615,8 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 | 类别 | 关键字 | 来源 | 取值约束与语义 |
 |---|---|---|---|
-| 类型 | `type` | DSH | 单个类型名，取 `object`、`array`、`string`、`number`、`integer`、`boolean`、`null`；不接受类型数组。`integer` 按数学值判断，`1.0` 也是整数 |
-| 对象 | `properties`、`required`、`additionalProperties` | DSH | `properties` 的每个值是子 Schema；`required` 是不重复的字符串数组；`additionalProperties` 只能是布尔值 |
+| 类型 | `type` | DSH；类型数组为扩展：对齐 networknt | 单个类型名，或非空、不重复的类型名数组，命中任一即通过（例如 `["string", "null"]` 表示可空字符串）；类型名取 `object`、`array`、`string`、`number`、`integer`、`boolean`、`null`。`integer` 按数学值判断，`1.0` 也是整数；`number` 包含整数 |
+| 对象 | `properties`、`required`、`additionalProperties` | DSH | `properties` 的每个值是子 Schema；`required` 是不重复的字符串数组；`additionalProperties` 是布尔值或子 Schema：`false` 拒绝同级 `properties` 之外的字段，子 Schema 形式要求这些字段的值都满足它（子 Schema 形式为扩展：对齐 networknt） |
 | 数组 | `items` | DSH | 单个子 Schema，不接受数组形式 |
 | 数组 | `minItems`、`maxItems` | 扩展：`AskUserQuestionTool`、`TodoUpdateTool` | 非负整数 |
 | 数组 | `uniqueItems` | 扩展：Mate 工具（2026-10-19 确认） | 布尔值；`true` 时元素两两不相等，相等按 `enum` 的 JSON 值比较；`false` 不起作用 |
@@ -627,6 +627,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | 组合 | `oneOf` | DSH | 非空子 Schema 数组，恰好一个分支通过才算通过 |
 | 组合 | `allOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，全部分支通过才算通过 |
 | 组合 | `anyOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，至少一个分支通过才算通过 |
+| 子 Schema | 布尔形式 `true`、`false` | 扩展：对齐 networknt | 任何允许写子 Schema 的位置都可以写布尔值：`true` 接受任意值，`false` 拒绝任意值。例如 `"properties": {"debug": false}` 表示不允许出现 `debug` 字段 |
 | 组合 | `if`、`then`、`else` | 扩展：Mate 工具（2026-10-19 确认） | `if` 通过时按 `then` 校验，不通过时按 `else` 校验；`if` 自身的错误不报告。没有 `if` 时 `then`、`else` 不起作用，记为丢弃项 |
 | 注解 | `title`、`description`、`default`、`examples` | DSH | 只读取，不参与校验 |
 | 注解 | `$schema` | 扩展：`AskUserQuestionTool` | 只读取，不限取值 |
@@ -638,7 +639,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items` 和数量限制只检查数组，长度和 `pattern` 只检查字符串，`minimum`、`maximum` 只检查数值。`additionalProperties` 只认同级 `properties` 里的字段，看不到 `allOf` 或 `then` 分支里声明的字段。这些都与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
 
-表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`format`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如类型数组、对象形式的 `additionalProperties`、数组形式的 `items`、无法编译的 `pattern`、负数 `minLength`。布尔子 Schema（`true`/`false`）也丢弃，等同空 Schema。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
+表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`format`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如数组形式的 `items`、空的或含重复项的类型数组、无法编译的 `pattern`、负数 `minLength`。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
 
 丢弃只能放宽校验，不能收紧。表内有两处会因此出问题，分别处理：
 
@@ -654,7 +655,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | 档位 | 候选关键字 | 实现要点 | 建议 |
 |---|---|---|---|
 | 单节点校验 | `exclusiveMinimum`、`exclusiveMaximum`、`multipleOf` | 只看当前数值，按数学值比较，`multipleOf` 用十进制精确计算；每个几十行 | 按 Mate 用量 |
-| 单节点校验 | `minProperties`、`maxProperties`、`dependentRequired`、`propertyNames`；类型数组；对象形式的 `additionalProperties` | 只看当前对象或类型；每个几十行 | 按 Mate 用量 |
+| 单节点校验 | `minProperties`、`maxProperties`、`dependentRequired`、`propertyNames` | 只看当前对象；每个几十行 | 按 Mate 用量 |
 | 跨关键字协同 | `patternProperties`、`prefixItems`、`contains`、`minContains`、`maxContains` | `patternProperties` 会改变 `additionalProperties` 的“额外字段”判定，`prefixItems` 会改变 `items` 的作用范围，要一起实现 | 按 Mate 用量 |
 | 组合 | `not` | 内部有丢弃项时结果会收紧，这种情况整块丢弃 | 按 Mate 用量 |
 | 不建议 | `$ref`、`$defs`、`$id`、`$anchor`、`$dynamicRef`、`unevaluatedProperties`、`unevaluatedItems` | 引用要处理循环和解析范围，`unevaluated*` 要追踪哪些字段已求值，复杂度成倍增加 | 不加入；只支持文档内 `$ref` 时可另行评估 |
@@ -675,7 +676,8 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 | 关键字 | 文案模板 |
 |---|---|
-| `type` | 类型应为 {类型} |
+| `type` | 类型应为 {类型}（类型数组用“或”连接） |
+| 布尔子 Schema `false` | 不允许出现该值 |
 | `required` | 缺少必填字段 |
 | `additionalProperties` | 不允许的字段 |
 | `enum` / `const` | 取值应为以下之一：{取值列表} / 取值应为 {取值} |
@@ -709,12 +711,12 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | `modules/ai/pom.xml` | 删除未使用的依赖声明 |
 | `modules/agent-core/pom.xml`、`modules/coding-agent-cli/pom.xml`、`campusclaw/pom.xml` | 依赖改为 `test` scope，只供对照测试；根 POM 的 `dependencyManagement` 保留版本号 |
 
-运行时产物去掉 `json-schema-validator` 1.5.2、`itu` 1.10.2、`jackson-dataformat-yaml` 2.18.3 三个 jar，约 686 KB。`snakeyaml` 仍由 Spring Boot 引入，不受影响。主代码估计 600～800 行，测试约 1200 行。
+运行时产物去掉 `json-schema-validator` 1.5.2、`itu` 1.10.2、`jackson-dataformat-yaml` 2.18.3 三个 jar，约 686 KB。`snakeyaml` 仍由 Spring Boot 引入，不受影响。主代码估计 650～850 行，测试约 1300 行。
 
 #### 9.7.5 测试对照
 
-- **关键字单测：** 逐个关键字覆盖通过、失败和边界值，包括按码点计数的 emoji、`1` 与 `1.0`、`integer`、深层嵌套路径、指针转义，以及 Cron 的 `oneOf` 分支；`allOf` 的错误合并；`anyOf` 无分支通过时的最接近分支；`if` 通过和不通过两条路径，以及 `if` 含丢弃项时整组丢弃。
-- **定义单测：** 每个表外关键字、不符合形状的取值、布尔子 Schema 和超深嵌套都进入丢弃清单，且不影响同级其余关键字的校验；分支含丢弃项的 `oneOf` 按“至少一个”判断；只有根节点不是对象时判定义无效。
+- **关键字单测：** 逐个关键字覆盖通过、失败和边界值，包括按码点计数的 emoji、`1` 与 `1.0`、`integer`、深层嵌套路径、指针转义，以及 Cron 的 `oneOf` 分支；类型数组含 `null` 和 `integer` 的组合；子 Schema 形式 `additionalProperties` 的字段路径；`true`、`false` 子 Schema 出现在 `properties`、`items` 和组合分支中；`allOf` 的错误合并；`anyOf` 无分支通过时的最接近分支；`if` 通过和不通过两条路径，以及 `if` 含丢弃项时整组丢弃。
+- **定义单测：** 每个表外关键字、不符合形状的取值和超深嵌套都进入丢弃清单，且不影响同级其余关键字的校验；分支含丢弃项的 `oneOf` 按“至少一个”判断；只有根节点不是对象时判定义无效。
 - **框架工具全量编译：** 从 Runtime、Cron、Subagent 三入口的框架工具清单枚举全部工具（不手写名单），逐个编译输入 Schema；任何一个的丢弃清单非空都让测试失败，失败信息给出工具名和丢弃项位置。
 - **差分对照：** networknt 只在测试 scope 中使用。语料是全部框架工具定义加按关键字构造的 Schema；参数用合法样例加确定性变异生成（删必填字段、换类型、越过长度、数量和数值边界、加多余字段、改枚举值、制造重复元素）。两边的有效、无效判定必须一致；只有一个错误的用例，字段路径也要一致（比较前把 networknt 的 `required` 和 `additionalProperties` 位置换算到字段路径）。文案不比较。另加含表外关键字的语料，只做单向比较：networknt 判有效的参数，本实现也必须判有效，证明丢弃只放宽、不收紧。
 - **依赖验收：** `campusclaw-coding-agent` 的 `dependency:tree` 在 compile 和 runtime scope 下不再出现上述三个构件，镜像同步后 `campusclaw/pom.xml` 一致。
@@ -953,7 +955,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ### 13.4 Schema 子集校验器
 
-- §9.7.1 表内每个关键字的通过、失败和边界用例通过；表外关键字、不符合形状的取值、布尔子 Schema 和超过 32 层的子 Schema 只丢弃、不阻塞调用，丢弃项写 WARN；含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组 `if`/`then`/`else` 丢弃；只有根节点不是对象时判定义无效；
+- §9.7.1 表内每个关键字的通过、失败和边界用例通过；表外关键字、不符合形状的取值和超过 32 层的子 Schema 只丢弃、不阻塞调用，丢弃项写 WARN；含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组 `if`/`then`/`else` 丢弃；只有根节点不是对象时判定义无效；
 - 框架工具全量编译测试从工具清单枚举、不依赖手写名单，全部框架工具定义编译后没有丢弃项；Cron 的 `oneOf` 在缺字段时报出所缺字段，在命中多个分支时报汇总错误；
 - 与 networknt 1.5.2 的差分对照中，有效、无效判定全部一致，单错误用例的字段路径一致；含表外关键字的语料中，networknt 判有效的参数本实现全部判有效；
 - 错误文案与 JVM 默认 Locale 无关；模型结果不含参数值和定义诊断信息；
