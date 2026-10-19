@@ -647,7 +647,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 - `if`：条件丢了关键字后会更容易通过，`then` 就会套用到原本不该套用的参数上。所以 `if` 的子 Schema（含下层）有丢弃项时，整组 `if`/`then`/`else` 一起丢弃。`then`、`else` 里的丢弃只会放宽，不受影响。
 - `properties`：整个 `properties` 因取值不合规被丢弃时，同级 `additionalProperties` 会把所有字段都当成多余字段，反而收紧。所以这种情况下同级 `additionalProperties` 一起丢弃。
 
-编译时把每个丢弃项记成 JSON Pointer 加原因（例如 `/properties/count/multipleOf: 表外关键字`），校验照常进行，记录方式见 §9.7.2。
+编译时把每个丢弃项记成 JSON Pointer 加原因（例如 `/properties/count/multipleOf: 表外关键字`），校验照常进行；清单的用途见 §9.7.2。
 
 不扩到完整 2020-12：完整对齐要实现 `$ref` 解析、动态引用、`unevaluated*` 求值追踪和二十多种 `format`，主代码估计 3000～5000 行，还要接入官方测试集，成本接近重写一个库。**子集必须覆盖全部框架工具。** 新增或修改框架工具时，输入 Schema 只能使用上表关键字。工具 Schema 本身合理、只是用到表外关键字时，以工具需要为准扩展子集，不为迁就子集改写工具 Schema：先在本节扩展关键字表（写明来源工具），再改校验器和测试，最后才合入该工具。这条由 §9.7.5 的“框架工具全量编译”测试兜底：测试从三入口的框架工具清单枚举工具，不维护手写名单，新工具只要有丢弃项，构建就会失败。运行时的丢弃是给 Mate 工具兜底的，框架工具不依赖它。
 
@@ -666,7 +666,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 每次校验分两步，都在 before hook 之前完成，位置与 [§9.6](#tool-argument-recovery) 相同：
 
-1. **编译定义。** 按 §9.7.1 识别关键字和取值形状，编译 `pattern`，生成不可变的 `CompiledToolSchema` 和丢弃清单。只有根节点不是 JSON 对象时才抛出 `ToolSchemaInvalidException`，因为这样的定义连参数对象都描述不了。丢弃清单非空时写一条 WARN 日志，`operation=tool.schema.keyword.ignored`，带工具名和全部丢弃项；丢弃项不进入模型结果。
+1. **编译定义。** 按 §9.7.1 识别关键字和取值形状，编译 `pattern`，生成不可变的 `CompiledToolSchema` 和丢弃清单。只有根节点不是 JSON 对象时才抛出 `ToolSchemaInvalidException`，因为这样的定义连参数对象都描述不了。丢弃清单只供测试和 T2 普查读取，运行时不写日志，也不进入模型结果：哪些关键字参与校验由 §9.7.1 的表唯一确定，丢弃是预期行为，不是异常。
 2. **校验参数。** 对 `mapper.valueToTree(arguments)` 逐层检查，收集全部错误，不在第一个错误处停止。错误按路径、再按文案排序，交给现有 `ToolArgumentsInvalidException` 和 §9.6 的恢复反馈。
 
 每次调用都重新编译定义，不跨调用缓存。工具 Schema 很小，编译开销可以忽略；跨调用缓存会和 [§9.2.1](#tool-definition-consistency) 的定义版本同步耦合，那部分另行设计。`validateDefinition` 只做第 1 步并返回丢弃清单，供 Mate 定义解析和 T2 普查使用。
@@ -694,8 +694,8 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 | 编号 | 场景 | 结果 |
 |---|---|---|
-| F1 | 框架工具定义有丢弃项 | 框架工具全量编译测试失败，这种定义不会随版本发布；运行时即使出现，也只丢弃并写 WARN，不阻塞调用 |
-| F2 | Mate 工具定义有丢弃项 | 丢弃项不校验，调用照常进入确认和 Mate execute；写 WARN 日志 `tool.schema.keyword.ignored`。被丢弃的约束由 Mate execute 自己负责 |
+| F1 | 框架工具定义有丢弃项 | 框架工具全量编译测试失败，这种定义不会随版本发布；运行时即使出现，也只丢弃，不阻塞调用 |
+| F2 | Mate 工具定义有丢弃项 | 丢弃项不校验，调用照常进入确认和 Mate execute，不写日志。被丢弃的约束由 Mate execute 自己负责；有哪些丢弃项由 T2 普查列出 |
 | F3 | 定义根节点不是 JSON 对象 | 返回 `TOOL_DEFINITION_INVALID`，与现状路径相同；Mate 工具沿用 `MateToolExecutor.InvalidDefinitionException` 和日志 `validationReason=INVALID_TOOL_SCHEMA`；不弹确认，不请求 Mate execute。SearchTools 对这类工具按“定义无效”失败 |
 | F4 | 参数不满足表内关键字 | 返回 `TOOL_ARGUMENTS_INVALID` 和 §9.6 的恢复反馈，业务未执行 |
 | F5 | 校验器自身抛出未预期异常 | 按定义无效处理，不当作参数错误，也不放行执行 |
@@ -708,7 +708,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 |---|---|
 | agent-core `ToolSchemaValidator` | 保留静态入口 `validate` 和 `validateDefinition`，去掉 `JsonSchemaFactory` 参数；`validateDefinition` 改为返回丢弃清单；异常类型和稳定错误码不变 |
 | agent-core `ToolSchemaCompiler`、`CompiledToolSchema` | 新增，包内可见：前者负责第 1 步，后者是编译结果并负责第 2 步；无状态或不可变，线程安全 |
-| `ToolExecutionPipeline`、`MateToolExecutor` | 删除 `JsonSchemaFactory` 字段和 networknt import，调用新入口；丢弃清单非空时写 WARN |
+| `ToolExecutionPipeline`、`MateToolExecutor` | 删除 `JsonSchemaFactory` 字段和 networknt import，调用新入口 |
 | `modules/ai/pom.xml` | 删除未使用的依赖声明 |
 | `modules/agent-core/pom.xml`、`modules/coding-agent-cli/pom.xml`、`campusclaw/pom.xml` | 依赖改为 `test` scope，只供对照测试；根 POM 的 `dependencyManagement` 保留版本号 |
 
@@ -956,7 +956,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 ### 13.4 Schema 子集校验器
 
-- §9.7.1 表内每个关键字的通过、失败和边界用例通过；表外关键字、不符合形状的取值和超过 32 层的子 Schema 只丢弃、不阻塞调用，丢弃项写 WARN；含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组 `if`/`then`/`else` 丢弃；只有根节点不是对象时判定义无效；
+- §9.7.1 表内每个关键字的通过、失败和边界用例通过；表外关键字、不符合形状的取值和超过 32 层的子 Schema 只丢弃、不阻塞调用，运行时不写日志；含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组 `if`/`then`/`else` 丢弃；只有根节点不是对象时判定义无效；
 - 框架工具全量编译测试从工具清单枚举、不依赖手写名单，全部框架工具定义编译后没有丢弃项；Cron 的 `oneOf` 在缺字段时报出所缺字段，在命中多个分支时报汇总错误；
 - 与 networknt 1.5.2 的差分对照中，有效、无效判定全部一致，单错误用例的字段路径一致；含表外关键字的语料中，networknt 判有效的参数本实现全部判有效；
 - 错误文案与 JVM 默认 Locale 无关；模型结果不含参数值和定义诊断信息；
