@@ -49,5 +49,3 @@ html[data-fidelity=low] :is(.review-sidebar,.conversation,.command-palette,.pale
 html[data-fidelity=low]{--radius-sm:2px;--radius-md:2px;--radius-lg:2px;--surface-selected:#ddd;--text-primary:#222;--text-secondary:#555;--text-tertiary:#666;--border-default:#aaa;--action-primary:#333;--action-primary-hover:#444;--accent-soft:#eee;--success-soft:#eee;--danger-soft:#eee;--warning-soft:#eee;--shadow:none;--shadow-soft:none}
 html[data-fidelity=low] img{visibility:hidden!important}
 html[data-fidelity=low] :is(.app-window,.command-popover,.app-topbar,.review-sidebar){border-radius:2px!important;box-shadow:none!important;outline:1px dashed #999;outline-offset:-1px}
-html[data-fidelity=low] .command-value::before{content:"○ ";font-family:ui-monospace,monospace}
-html[data-fidelity=low] .command-value[aria-checked=true]::before{content:"● "}

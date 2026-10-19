@@ -187,7 +187,7 @@ window.frontendScenes = [
       },
       {
         "id": "options",
-        "label": "选项单选",
+        "label": "选项选择",
         "frame": "slash-command-review.html",
         "view": "slash"
       },

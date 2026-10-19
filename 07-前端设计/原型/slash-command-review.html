@@ -341,12 +341,17 @@
     .command-chip button:hover { background: var(--surface-selected); }
     #selected-command-name { min-width: 44px; padding: 0 10px; overflow-wrap: anywhere; text-align: left; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
     #remove-command { flex: 0 0 44px; width: 44px; font-size: 20px; color: var(--text-secondary); }
-    .command-values { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 6px; padding: 4px 2px 6px; }
-    .command-value { min-height: 44px; padding: 6px 14px; color: var(--text-primary); border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-raised); font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; cursor: pointer; }
-    .command-value[aria-checked="true"] { border-color: var(--action-primary); background: var(--surface-selected); }
-    .command-value small { margin-left: 6px; color: var(--text-secondary); font-family: inherit; }
-    .command-value:disabled { opacity: .6; cursor: default; }
-    .command-value:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .values-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 12px 18px 2px; color: var(--text-secondary); font-size: 13px; }
+    .values-title kbd { padding: 2px 8px; border-radius: 8px; background: var(--surface-secondary); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+    #command-values .command-option { display: flex; gap: 12px; }
+    #command-values .command-description { margin-left: auto; }
+    .value-index { display: inline-grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border-radius: 50%; background: var(--surface-secondary); color: var(--text-secondary); font-size: 12px; }
+    #command-values .command-name { font-family: inherit; font-size: 14px; font-weight: 500; }
+    /* 列表获得焦点时只描出高亮行；没有高亮行（执行即查询）时描出整个列表 */
+    #command-values:focus-visible { outline: none; }
+    #command-values:focus-visible .command-option.active { box-shadow: inset 0 0 0 1px var(--focus); }
+    #command-values:focus-visible:not(:has(.active)) { outline: 1px solid var(--focus); outline-offset: -4px; border-radius: var(--radius-md); }
+    .command-option[aria-disabled="true"] { color: var(--text-secondary); cursor: default; }
     .composer textarea {
       flex: 1 1 180px; min-width: 0; width: 100%; min-height: 54px; max-height: 160px; padding: 10px 7px;
       resize: none; color: var(--text-primary); line-height: 1.5; border: 0; background: transparent;
@@ -464,7 +469,7 @@
       <div class="state-tabs" role="tablist" aria-label="切换 Slash Command 状态">
         <button class="state-tab" role="tab" aria-selected="true" data-state="catalog"><span>命令清单</span><small>输入 / 后的默认浏览状态</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="argument"><span>参数编辑</span><small>选择后仍需明确运行</small></button>
-        <button class="state-tab" role="tab" aria-selected="false" data-state="options"><span>选项单选</span><small>默认勾选当前值，回车执行</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="options"><span>选项选择</span><small>弹出可选值，回车即执行</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="running"><span>运行中清单</span><small>完全服从服务端 Descriptor</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="help"><span>Help 结果</span><small>非对话、仅当前页面</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="unmatched"><span>未匹配</span><small>保留草稿、禁止自动回退</small></button>
@@ -530,6 +535,11 @@
             <div class="composer-stack">
               <div class="running-banner" id="running-banner"><i class="running-spinner"></i>任务执行中</div>
 
+              <div class="command-palette" id="values-palette" hidden>
+                <p class="values-title" id="values-title"></p>
+                <div class="command-list" id="command-values" role="listbox" tabindex="0" aria-describedby="parameter-hint"></div>
+              </div>
+
               <div class="command-palette" id="command-palette" hidden>
                 <div class="command-list" id="command-list" role="listbox" aria-label="可用命令"></div>
                 <p class="palette-empty" id="palette-empty" hidden>没有匹配命令</p>
@@ -541,7 +551,6 @@
                     <button id="selected-command-name" type="button" aria-label="更换命令"></button>
                     <button id="remove-command" type="button" aria-label="移除命令">×</button>
                   </div>
-                  <div class="command-values" id="command-values" role="radiogroup" tabindex="-1" aria-describedby="parameter-hint" hidden></div>
                   <textarea id="composer-input" rows="2" spellcheck="false" aria-label="输入消息"></textarea>
                 </div>
                 <button id="command-run" type="button" hidden>执行命令</button>
@@ -607,16 +616,18 @@
       if (values.includes(text)) return text;
       return values.includes(currentValue) ? currentValue : "";
     }
+    // 选项型命令选中后，可选值在命令清单的位置弹出（参考 Codex 的 /model），清单打开时让位
+    function valuesOpen() { return mode && isOptions(selected) && !paletteOpen; }
     function argumentHint(command) {
-      if (isOptions(command)) return running ? "任务运行中只能查看当前值，回车执行查询" : "用方向键或点击选择可选值，回车执行";
+      if (isOptions(command)) return running ? "任务运行中只能查看当前值，回车执行查询" : "用上下键选择，回车、数字键或点击即执行";
       if (command?.argumentType === "text") return command.type === "skill" ? "补充要求（可选）" : "输入新值，留空则查看当前值";
       return "";
     }
     const states = {
       catalog: { title: "命令清单", description: "输入 / 后继续输入可过滤，选择后收起为命令标签。" },
       argument: { title: "参数编辑", description: "命令名称与参数分开编辑，点击名称可更换，× 可退出。" },
-      options: { title: "选项单选", description: "选项型命令不显示文本框，默认勾选当前值；方向键或点击切换，回车执行。" },
-      running: { title: "运行中清单", description: "按命令规则与会话状态展示；选项型命令运行中不勾选可选值，回车只查询当前值。" },
+      options: { title: "选项选择", description: "选项型命令在清单位置弹出可选值，默认高亮当前值；上下键切换，回车或点击即执行，Esc 取消。" },
+      running: { title: "运行中清单", description: "按命令规则与会话状态展示；选项型命令运行中不高亮可选值，回车只查询当前值。" },
       help: { title: "Help 临时结果", description: "内置命令结果独立呈现，取消或完成后恢复普通消息草稿。" },
       unmatched: { title: "未匹配命令", description: "保留原文，继续修改或按 Esc 退出。" }
     };
@@ -648,40 +659,48 @@
     }
     function announce(text) { $("#composer-announcement").textContent = text; }
     function focusEditor() {
-      // 选项型命令聚焦已勾选项，无勾选时聚焦第一项；运行中可选值不可点，焦点落在执行按钮
-      const radio = $('#command-values [aria-checked="true"]') || $('#command-values [role="radio"]');
-      if (isOptions(selected) && !running && radio) { radio.focus(); return; }
+      // 选项型命令聚焦可选值列表，用 aria-activedescendant 指向高亮项；运行中可选值不可点，焦点落在执行按钮
+      if (isOptions(selected) && !running) { $("#command-values").focus(); return; }
       (selected && (isOptions(selected) || !selected.argumentType) ? (running ? $("#command-run") : submitButton) : input).focus();
     }
     function renderValues() {
-      const group = $("#command-values");
-      group.hidden = !isOptions(selected);
-      group.replaceChildren();
+      const listbox = $("#command-values");
+      $("#values-palette").hidden = !valuesOpen();
+      listbox.replaceChildren();
+      listbox.removeAttribute("aria-activedescendant");
       if (!isOptions(selected)) return;
       const { currentValue, values } = commandValues[selected.name];
-      group.setAttribute("aria-label", selected.name + " 的可选值");
+      const keys = document.createElement("kbd");
+      keys.setAttribute("aria-hidden", "true");
+      keys.textContent = running ? "回车查询" : "↑↓ · 1–9 · 回车";
+      $("#values-title").replaceChildren(selected.name + " 的可选值", keys);
+      listbox.setAttribute("aria-label", selected.name + " 的可选值");
       values.forEach((value, index) => {
-        const radio = document.createElement("button");
-        const checked = value === argumentsText;
-        radio.type = "button"; radio.className = "command-value"; radio.dataset.value = value;
-        radio.setAttribute("role", "radio");
-        radio.setAttribute("aria-checked", String(checked));
-        // 漫游 tabindex：已勾选项可 Tab 聚焦，无勾选时第一项可聚焦
-        radio.tabIndex = checked || (!values.includes(argumentsText) && index === 0) ? 0 : -1;
-        radio.disabled = executing || running;
-        radio.textContent = value;
-        if (value === currentValue) {
-          const mark = document.createElement("small");
-          mark.textContent = "当前";
-          radio.append(mark);
-        }
-        radio.addEventListener("click", () => chooseValue(value));
-        group.append(radio);
+        // 高亮项就是待提交的参数；当前值不可选或运行中没有高亮项，执行即查询
+        const option = document.createElement("div");
+        const active = value === argumentsText;
+        option.className = "command-option" + (active ? " active" : "");
+        option.id = "value-option-" + index; option.dataset.value = value;
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(active));
+        if (executing || running) option.setAttribute("aria-disabled", "true");
+        const number = document.createElement("span");
+        number.className = "value-index"; number.setAttribute("aria-hidden", "true"); number.textContent = String(index + 1);
+        const name = document.createElement("span");
+        name.className = "command-name"; name.textContent = value;
+        const mark = document.createElement("span");
+        mark.className = "command-description"; mark.textContent = value === currentValue ? "当前" : "";
+        option.append(number, name, mark);
+        if (active) listbox.setAttribute("aria-activedescendant", option.id);
+        option.addEventListener("mousedown", (event) => event.preventDefault());
+        option.addEventListener("click", () => runValue(value));
+        listbox.append(option);
       });
     }
     function render() {
-      if (paletteOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
-      else if (!paletteOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
+      const popupOpen = paletteOpen || valuesOpen();
+      if (popupOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
+      else if (!popupOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
       const options = matches();
       // 选项型草稿在任务开始运行后回到查询，与运行中不勾选可选值一致
       if (running && isOptions(selected)) argumentsText = "";
@@ -782,12 +801,18 @@
       argumentsText = value; error = "";
       render(); focusEditor();
     }
-    // 方向键与 Home/End 在可选值间移动并勾选，首尾循环；无勾选时向下从第一项开始，向上从最后一项开始
+    // 点选可选值即执行，与回车一致；运行中只能查询，点选无效
+    function runValue(value) {
+      if (executing || running) return;
+      chooseValue(value);
+      void submit();
+    }
+    // 上下键与 Home/End 在可选值间移动高亮，首尾循环；无高亮时向下从第一项开始，向上从最后一项开始
     function moveValue(key) {
       const { values } = commandValues[selected.name];
       if (executing || running || !values.length) return;
       const index = values.indexOf(argumentsText), last = values.length - 1;
-      const forward = key === "ArrowDown" || key === "ArrowRight";
+      const forward = key === "ArrowDown";
       const next = key === "Home" ? 0 : key === "End" ? last
         : forward ? (index < 0 || index === last ? 0 : index + 1) : (index <= 0 ? last : index - 1);
       chooseValue(values[next]);
@@ -880,8 +905,14 @@
       if (event.key === "Escape") { event.preventDefault(); escape(); return; }
       const onValues = $("#command-values").contains(event.target);
       if (![input, submitButton, $("#command-run")].includes(event.target) && !onValues) return;
-      if (onValues && ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      if (onValues && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         event.preventDefault(); moveValue(event.key); return;
+      }
+      // 数字键直接执行对应序号的可选值，与列表左侧的序号一致
+      if (onValues && /^[1-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const value = commandValues[selected.name].values[Number(event.key) - 1];
+        if (value !== undefined) { event.preventDefault(); runValue(value); }
+        return;
       }
       if (event.target === submitButton && running && event.key === "Enter") {
         event.preventDefault(); stop(); return;
@@ -928,6 +959,9 @@
       if (event.target.closest(".state-tab")) return;
       if (moreOpen && !$(".tool-actions").contains(event.target)) { moreOpen = false; render(); }
       if (paletteOpen && !$(".composer-stack").contains(event.target)) { escape(); }
+      // 与 Codex 一致：可选值弹层打开时点到外面即取消命令
+      // 用派发时的路径判断：点选命令后清单行已被重绘移除，contains 会误判为外部
+      else if (valuesOpen() && !executing && !event.composedPath().includes($(".composer-stack"))) { exitCommand(); }
     });
     function setState(name) {
       const state = states[name] || states.catalog;
