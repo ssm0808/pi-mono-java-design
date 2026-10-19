@@ -124,6 +124,32 @@ pi 固定基线 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 的 `packages/coding-
 
 前端 `frontend/src/runtime/commands.ts` 的 decodeCatalog/freezeCommandArguments 在该提交仍据 kind 分派、据 input 判断参数能力。
 
+<a id="command-patterns-evidence"></a>
+
+## 8. 设计模式与转换命名（2026-10-19）
+
+CampusClaw 核对实现 PR #364 的 `pi-mono-java@78b304994ff0372a5f54386de7b779db27ef14bf`（待合并），路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+
+| 源码 / 符号 | 已观察行为 |
+|---|---|
+| `command/builtin/BuiltinCommandContributor.java` · definition；`service/command/BuiltinCommandSource.java` · 构造器 | 各 Builtin 以 Spring 组件贡献 Definition，Source 注入全部 Contributor 并查重 |
+| `service/command/CompositeCommandRegistry.java` · resolve | 遍历 `List<CommandDefinitionSource>`，按类别过滤后平铺合并，重名抛出 IllegalStateException；没有嵌套来源 |
+| `command/builtin/BuiltinCommandDefinition.java` · 构造器 | 组合 `CommandAdmissionPolicy`、`CommandHandler` 与可选 `CommandValuesProvider`，校验 options 命令与取值逻辑一一对应 |
+| `service/command/CommandExecutionService.java` · executeBuiltin；`service/command/CommandValuesService.java` · listValues | 按名称取 Definition 后只调用接口，不按命令名分支 |
+| `service/command/CommandDiscoveryResponseAssembler.java` · assemble / toBuiltinDescriptor | 按 `BUILTIN_ORDER` 排序，用 `COMMAND_BUILTIN_<NAME>_DESCRIPTION` 读取本地化描述 |
+
+实现仓 `AGENTS.md`（同一提交）“文件、注释与命名”一节把 `Assembler` 列为约定类名后缀，转换方法用 `toXxx`，并规定 Mapper 使用 DTO（MyBatis 持久化）。
+
+外部基线于 2026-10-19 确认默认分支并隔离浅克隆：
+
+| 基线 | 提交 | 源码 / 符号 | 已观察行为 |
+|---|---|---|---|
+| pi | `badlogic/pi-mono` main `1402973a9dbe8c627341e04c9744c54953e285ca` | `packages/coding-agent/src/modes/rpc/rpc-mode.ts:680-711` · `get_commands`；`rpc-types.ts:81` · `RpcSlashCommand` | 在 RPC 分支内依次遍历扩展命令、提示模板和 Skill，直接拼出响应对象，没有单独的转换类 |
+| OpenCode | `anomalyco/opencode` dev `fede5ddda5e389bb072cb68fd380ec31f41f9929` | `packages/server/src/handlers/command.ts:7` · `command.list` | 处理器直接返回 `Command.Service.list()` 的结果，没有独立投影层 |
+| Codex | `openai/codex` main `89461ea6833832b0551ce24ee32205824d5c108d` | `codex-rs/app-server-protocol/src/protocol/mappers.rs` · `impl From<v1::ExecOneOffCommandParams> for v2::CommandExecParams`；`event_mapping.rs:30` · `item_event_to_server_notification`；`item_builders.rs:70-117` · `build_*_item`；`codex-rs/tui/src/slash_command.rs:93` · `SlashCommand::description` | 内外模型转换用 `From` 实现、`xxx_to_yyy` 函数和 `build_xxx` 函数，按模块命名为 mappers / mapping / builders |
+
+这些是默认分支快照，不代表稳定发布；本节只用于命名与结构对照，不改变 M05 的架构比较结论。
+
 ## 7. 交付规则
 
 `pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 的 `.github/workflows/ci.yml:17-24` 调用 `scripts/check-commit-additions.sh`，`MAX_ADDED_LINES` / `check_pull_request` 限制 PR 非文档新增行 2000；取消额度后实现仓需删除相应 CI 步骤、脚本和专用测试。
