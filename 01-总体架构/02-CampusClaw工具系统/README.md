@@ -628,14 +628,17 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | 组合 | `allOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，全部分支通过才算通过 |
 | 组合 | `anyOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，至少一个分支通过才算通过 |
 | 组合 | `if`、`then`、`else` | 扩展：Mate 工具（2026-10-19 确认） | `if` 通过时按 `then` 校验，不通过时按 `else` 校验；`if` 自身的错误不报告。没有 `if` 时 `then`、`else` 不起作用，记为丢弃项 |
+| 注解 | `title`、`description`、`default`、`examples` | DSH | 只读取，不参与校验 |
+| 注解 | `$schema` | 扩展：`AskUserQuestionTool` | 只读取，不限取值 |
+| 注解 | `$comment`、`deprecated`、`readOnly`、`writeOnly` | 扩展：2020-12 元数据词表 | 只读取，不参与校验 |
 
-注解不在子集内。`title`、`description`、`default`、`examples`、`$schema` 只是说明，编译时直接跳过，不校验，也不记丢弃项，`$schema` 不论取值都按 2020-12 解释。这几个不按表外关键字处理，是因为框架工具几乎每个字段都带 `description`，记成丢弃项会让 §9.7.5 的全量编译测试失败，每次调用也都要写 WARN。其他注解（`$comment`、`deprecated`、`readOnly`、`writeOnly`、`format` 等）按表外关键字丢弃。
+注解只读取，不参与校验，也不记丢弃项。`$schema` 不论取值都按 2020-12 解释；`default` 不会自动填进参数；`readOnly` 不拦截模型传入该字段，这些都与现状一致。`format` 不列为注解，按表外关键字丢弃。
 
 DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字段必须在同级 `properties` 中声明。这两条不是 2020-12 的要求，`CronTool` 正是“外层声明字段、分支按 `action` 区分必填项”的写法，所以不采用。
 
 关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items` 和数量限制只检查数组，长度和 `pattern` 只检查字符串，`minimum`、`maximum` 只检查数值。`additionalProperties` 只认同级 `properties` 里的字段，看不到 `allOf` 或 `then` 分支里声明的字段。这些都与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
 
-表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`format`、`$comment`、`deprecated`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如类型数组、对象形式的 `additionalProperties`、数组形式的 `items`、无法编译的 `pattern`、负数 `minLength`。布尔子 Schema（`true`/`false`）也丢弃，等同空 Schema。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
+表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`format`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如类型数组、对象形式的 `additionalProperties`、数组形式的 `items`、无法编译的 `pattern`、负数 `minLength`。布尔子 Schema（`true`/`false`）也丢弃，等同空 Schema。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
 
 丢弃只能放宽校验，不能收紧。表内有两处会因此出问题，分别处理：
 
@@ -650,7 +653,6 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 | 档位 | 候选关键字 | 实现要点 | 建议 |
 |---|---|---|---|
-| 跳过名单 | `$comment`、`deprecated`、`readOnly`、`writeOnly` | 与上文注解一样直接跳过，不校验；加入后只是少写 WARN | 可随时加入 |
 | 单节点校验 | `exclusiveMinimum`、`exclusiveMaximum`、`multipleOf` | 只看当前数值，按数学值比较，`multipleOf` 用十进制精确计算；每个几十行 | 按 Mate 用量 |
 | 单节点校验 | `minProperties`、`maxProperties`、`dependentRequired`、`propertyNames`；类型数组；对象形式的 `additionalProperties` | 只看当前对象或类型；每个几十行 | 按 Mate 用量 |
 | 跨关键字协同 | `patternProperties`、`prefixItems`、`contains`、`minContains`、`maxContains` | `patternProperties` 会改变 `additionalProperties` 的“额外字段”判定，`prefixItems` 会改变 `items` 的作用范围，要一起实现 | 按 Mate 用量 |
