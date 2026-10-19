@@ -11,6 +11,8 @@ SESSION_CASES = {
     "200-mode-query", "200-mode-plan", "200-mode-build", "200-mode-unchanged",
 }
 MODEL_CASES = {"200-model-query", "200-model-query-empty"}
+# /model without arguments: the Session's current model and its selectable models.
+MODEL_QUERY_SHAPE = {"currentModelId": "model", "models": ["model"]}
 BUSINESS_SHAPES = {
     "200-help": {"displayName": "Agent", "description": ["text"], "useCases": ["text"]},
     "200-help-empty": {"displayName": "Agent", "description": ["text"], "useCases": ["text"]},
@@ -55,7 +57,6 @@ def validate_response_reuse(models):
         validate_no_client_tokens(operation)
     validate_mode_examples(operations["ExecuteSessionCommand"])
     session = success(operations["GetSession"])
-    model_list = success(operations["ListSessionModels"])
     require(session.get("mode") in {"plan", "build"}, "Session response must include mode")
     for response in operations["UpdateSession"]["responses"]:
         if response["status"] == "200":
@@ -72,7 +73,7 @@ def validate_response_reuse(models):
             "Command query, mutation, unchanged and empty response cases differ")
     for identity, response in cases.items():
         expected = session if identity in SESSION_CASES else (
-            model_list if identity in MODEL_CASES else BUSINESS_SHAPES[identity])
+            MODEL_QUERY_SHAPE if identity in MODEL_CASES else BUSINESS_SHAPES[identity])
         headers = response["headers"]
         required = {"Content-Type", "Cache-Control", "Content-Language"}
         require(set(headers) == required,

@@ -16,7 +16,8 @@ from typing import Any
 from render_chat_command_v1 import build_html, load_contract, RUNTIME_ROOT
 
 sys.path.insert(0, str(RUNTIME_ROOT))
-from command_catalog_contract import validate_catalog_examples, validate_projection_pair
+from command_catalog_contract import (OPTION_COMMANDS, VALUE_EXAMPLE_IDS, validate_catalog_examples,
+                                      validate_projection_pair, value_examples)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -26,7 +27,9 @@ DESIGN_PATH = ROOT / "README.md"
 LOWER_CAMEL = re.compile(r"^[a-z][A-Za-z0-9]*$")
 EXPECTED_OPERATIONS = {
     ("GET", "/chats/{chatId}/commands"),
+    ("GET", "/chats/{chatId}/commands/{commandName}/options"),
 }
+OPERATION_KEYS = {"ListChatCommands", "ListChatCommandOptions"}
 
 
 class ReviewHtmlParser(HTMLParser):
@@ -108,7 +111,7 @@ def values_for_key(value: Any, key: str):
 
 
 def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> None:
-    require(common["api"]["version"] == "1.7.0", "Unexpected public contract version")
+    require(common["api"]["version"] == "1.9.0", "Unexpected public contract version")
     require(common["api"]["basePath"] == "/mate-service/v1", "Unexpected public base path")
     require("GET 字段已确认" in common["api"]["visibility"] and "公共边界待评审" in common["api"]["visibility"],
             "GET confirmation must not approve the public boundary")
@@ -122,7 +125,9 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
     require(headers == {"Authorization"}, "Public auth must not expose internal Header names")
     operations = {(model["operation"]["method"], model["operation"]["path"]) for model in models}
     require(operations == EXPECTED_OPERATIONS, "Public operation inventory differs")
-    require(len(models) == 1, "Expected only the retained public GET projection")
+    require(len(models) == 2, "Expected the public GET catalog and command options")
+    require({model["operation"]["operationKey"] for model in models} == OPERATION_KEYS,
+            "Operation keys must use PascalCase")
     for model in models:
         operation = model["operation"]
         business_view = model["review"].get("businessView")
@@ -133,7 +138,6 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 "Human review flow is required")
         require("待评审、待实现" in business_view["summary"] and "不得作为已发布接口的依据" in business_view["summary"],
                 "Operation must state the pending 待实现 public boundary")
-        require(operation["operationKey"] == "ListChatCommands", "Operation key must use PascalCase")
         require(not re.search(r"已确认|已评审|待实现|待评审", operation["description"]),
                 "Purpose must describe behavior rather than review status")
         placeholders = re.findall(r"{([^}]+)}", operation["path"])
@@ -143,10 +147,11 @@ def validate_contract(common: dict[str, Any], models: list[dict[str, Any]]) -> N
                 if isinstance(body, (dict, list)):
                     validate_keys(body, operation["operationKey"])
     validate_catalog(models)
+    validate_command_options(models)
 
 
 def validate_catalog(models: list[dict[str, Any]]) -> None:
-    operation = next(model["operation"] for model in models if model["operation"]["operationKey"] == "ListChatCommands")
+    operation = operation_by_key(models, "ListChatCommands")
     validate_catalog_examples(operation)
     runtime = json.loads((RUNTIME_ROOT / "接口契约/操作/12-list-agent-commands.json").read_text(encoding="utf-8"))
     validate_projection_pair(runtime["operation"], operation)
@@ -155,14 +160,77 @@ def validate_catalog(models: list[dict[str, Any]]) -> None:
             "Catalog public errors are incomplete")
 
 
+def validate_command_options(models: list[dict[str, Any]]) -> None:
+    operation = operation_by_key(models, "ListChatCommandOptions")
+    command_name = next(item for item in operation["parameters"] if item["name"] == "commandName")
+    require(command_name["in"] == "path" and command_name["schema"] == " | ".join(OPTION_COMMANDS),
+            "commandName must list exactly the commands whose argumentType is options")
+    examples = {response["id"]: response for response in operation["responses"] if response["status"] == "200"}
+    # Each Mate example is the Runtime ListSessionCommandValues example of the same id, with labels added.
+    runtime_values = runtime_command_values()
+    require(set(examples) == set(VALUE_EXAMPLE_IDS),
+            "Options require model, empty model, thinking (supported and unsupported) and mode examples")
+    for example_id, response in examples.items():
+        chinese, english = localized_option_results(response)
+        runtime = runtime_values[example_id]
+        require([option["value"] for option in chinese["options"]] == runtime["values"]
+                and chinese["currentValue"] == runtime["currentValue"],
+                f"{example_id} must mirror the Runtime command values, current value included")
+        if example_id.startswith("200-model"):
+            require(chinese["options"] == english["options"],
+                    "Model names are business data and do not follow Accept-Language")
+        else:
+            require(all(zh["label"] != en["label"] for zh, en in zip(chinese["options"], english["options"])),
+                    f"{example_id} labels follow Accept-Language")
+    codes = set(values_for_key(operation["responses"], "resCode"))
+    require({"INVALID_CHAT_ID", "UNAUTHENTICATED", "CHAT_ACCESS_DENIED", "CHAT_NOT_FOUND",
+             "COMMAND_OPTIONS_NOT_FOUND", "COMMAND_OPTIONS_UNAVAILABLE"} <= codes,
+            "Options public errors are incomplete")
+
+
+def operation_by_key(models: list[dict[str, Any]], operation_key: str) -> dict[str, Any]:
+    return next(model["operation"] for model in models if model["operation"]["operationKey"] == operation_key)
+
+
+def runtime_command_values() -> dict[str, dict[str, Any]]:
+    source = RUNTIME_ROOT / "接口契约/操作/09-list-session-command-values.json"
+    return value_examples(json.loads(source.read_text(encoding="utf-8"))["operation"])
+
+
+def localized_option_results(response: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Check one success example and return its zh-CN and en-US results."""
+    require(response["headers"].get("Cache-Control") == "no-store", "Options must not be cached")
+    require(set(response["bodies"]) == {"zh-CN", "en-US"}, "Options examples must cover zh-CN and en-US")
+    for body in response["bodies"].values():
+        require(set(body) == {"resCode", "resMsg", "result"} and body["resCode"] == "0", "Options ResultBean differs")
+        validate_option_result(body["result"])
+    chinese, english = response["bodies"]["zh-CN"]["result"], response["bodies"]["en-US"]["result"]
+    require(chinese["currentValue"] == english["currentValue"]
+            and [option["value"] for option in chinese["options"]] == [option["value"] for option in english["options"]],
+            "Submit values and the current value are language-neutral")
+    return chinese, english
+
+
+def validate_option_result(result: dict[str, Any]) -> None:
+    require(set(result) == {"currentValue", "options"} and nonblank(result["currentValue"]),
+            "Options carry the current value and the candidates only")
+    for option in result["options"]:
+        require(set(option) == {"value", "label"} and nonblank(option["value"]) and nonblank(option["label"]),
+                "Each option has a submit value and a display label")
+
+
+def nonblank(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def validate_html(models: list[dict[str, Any]]) -> None:
     source = HTML_PATH.read_text(encoding="utf-8")
     require(source == build_html(), "Generated public review HTML is stale")
     parser = ReviewHtmlParser()
     parser.feed(source)
-    require(parser.static_count == 1, "No-script operation count is wrong")
-    require(parser.business_count == 1, "Business review operation count is wrong")
-    require(parser.exact_contract_count == 1, "Exact contract fold count is wrong")
+    require(parser.static_count == 2, "No-script operation count is wrong")
+    require(parser.business_count == 2, "Business review operation count is wrong")
+    require(parser.exact_contract_count == 2, "Exact contract fold count is wrong")
     require(parser.open_exact_contract_count == 0, "Raw protocol must be folded by default")
     require(len(parser.styles) == 1, "Expected one shared style block")
     model_scripts = [json.loads(script) for attrs, script in parser.scripts
@@ -198,7 +266,8 @@ def validate_retirement(root: Path = ROOT) -> None:
     for path in retired:
         require(not (root / path).exists(), f"Retired Command artifact returned: {path}")
     sources = {path.name for path in (root / "接口契约/操作").glob("*.json")}
-    require(sources == {"01-list-chat-commands.json"}, "Only the retained GET model may remain")
+    require(sources == {"01-list-chat-commands.json", "02-list-chat-command-options.json"},
+            "Only the GET catalog and options models may remain")
 
 
 def validate_markdown() -> None:
@@ -227,7 +296,7 @@ def main() -> int:
     validate_retirement()
     validate_markdown()
     run(["git", "diff", "--check"], REPOSITORY_ROOT)
-    print("mate-service Chat Command contract validation passed: 1 GET projection; public boundary pending; retired POST and diagrams absent")
+    print("mate-service Chat Command contract validation passed: GET projection and command options; public boundary pending; retired POST and diagrams absent")
     return 0
 
 

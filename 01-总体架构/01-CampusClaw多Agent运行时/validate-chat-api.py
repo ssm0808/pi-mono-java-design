@@ -54,7 +54,7 @@ def validate_catalog():
         validate_request_headers(model["operation"])
     require({model["operation"]["operationKey"] for model in models} == {
         "CreateSession", "GetSession", "DeleteSession", "SubmitSessionEvent", "ListSessionEvents",
-        "ListSessionModels", "UpdateSession",
+        "ListSessionCommandValues", "UpdateSession",
         "ListAgentCommands", "ExecuteSessionCommand",
         "QuerySkillLoadStatistics", "ListAgentEvents", "ListTurnEvents",
     }, "Current catalog identities differ")
@@ -85,7 +85,7 @@ def validate_catalog():
     require("traceparent" not in source, "Forbidden header in current page")
     # Plan and question contracts include complete SSE/history examples and static fallbacks.
     # Keep bounded headroom for the twelve-operation catalog.
-    require(len(source.encode()) < 720_000, "Unexpected catalog growth")
+    require(len(source.encode()) < 760_000, "Unexpected catalog growth")
     return models
 
 

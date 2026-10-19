@@ -4,7 +4,7 @@
 |---|---|
 | 文档版本 | 2.28.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线、前端可恢复展示及 [§9.7](#tool-schema-subset) 自写 Schema 子集校验器待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-17 |
+| 更新日期 | 2026-10-19 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -638,7 +638,21 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 不扩到完整 2020-12：完整对齐要实现 `$ref` 解析、动态引用、`unevaluated*` 求值追踪和二十多种 `format`，主代码估计 3000～5000 行，还要接入官方测试集，成本接近重写一个库。**子集必须覆盖全部框架工具。** 新增或修改框架工具时，输入 Schema 只能使用上表关键字。工具 Schema 本身合理、只是用到表外关键字时，以工具需要为准扩展子集，不为迁就子集改写工具 Schema：先在本节扩展关键字表（写明来源工具），再改校验器和测试，最后才合入该工具。这条由 §9.7.5 的“框架工具全量编译”测试兜底：测试从三入口的框架工具清单枚举工具，不维护手写名单，新工具只要有丢弃项，构建就会失败。运行时的丢弃是给 Mate 工具兜底的，框架工具不依赖它。
 
-扩展只按实际用量做：框架工具或 Mate 工具确需某个表外关键字在确认前参与校验时，先改本节再实现。扩展后这个关键字从丢弃变为校验，已上线的 Mate 工具可能开始拒绝原本放行的参数，所以扩展前要先对照 T2 的普查结果。`minimum`、`maximum`、`format` 都属于这类候选，目前没有框架工具用到。
+扩展只按实际用量做：框架工具或 Mate 工具确需某个表外关键字在确认前参与校验时，先改本节再实现。扩展后这个关键字从丢弃变为校验，已上线的 Mate 工具可能开始拒绝原本放行的参数，所以扩展前要先对照 T2 的普查结果。候选关键字按实现成本分档如下，目前都没有框架工具用到：
+
+| 档位 | 候选关键字 | 实现要点 | 建议 |
+|---|---|---|---|
+| 注解 | `$comment`、`deprecated`、`readOnly`、`writeOnly` | 只读取，不校验；加入后只是少写 WARN | 可随时加入 |
+| 单节点校验 | `minimum`、`maximum`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf` | 只看当前数值，按数学值比较，`multipleOf` 用十进制精确计算；每个几十行 | 首批 |
+| 单节点校验 | `uniqueItems` | 复用 `enum` 的 JSON 值相等比较 | 首批 |
+| 单节点校验 | `minProperties`、`maxProperties`、`dependentRequired`、`propertyNames`；类型数组；对象形式的 `additionalProperties` | 只看当前对象或类型；每个几十行 | 按 Mate 用量 |
+| 跨关键字协同 | `patternProperties`、`prefixItems`、`contains`、`minContains`、`maxContains` | `patternProperties` 会改变 `additionalProperties` 的“额外字段”判定，`prefixItems` 会改变 `items` 的作用范围，要一起实现 | 按 Mate 用量 |
+| 组合 | `allOf`、`anyOf` | `allOf` 全部通过，错误合并；`anyOf` 至少一个通过，报错沿用 `oneOf` 的最接近分支 | 首批 |
+| 组合 | `not`、`if`/`then`/`else` | `not` 或 `if` 内有丢弃项时结果可能收紧，这种情况整块丢弃 | 按 Mate 用量 |
+| 不建议 | `$ref`、`$defs`、`$id`、`$anchor`、`$dynamicRef`、`unevaluatedProperties`、`unevaluatedItems` | 引用要处理循环和解析范围，`unevaluated*` 要追踪哪些字段已求值，复杂度成倍增加 | 不加入；只支持文档内 `$ref` 时可另行评估 |
+| 不建议 | `format` | networknt 现在也只当注解，校验反而会收紧现网行为 | 保持丢弃 |
+
+首批合计主代码约多 200～300 行。
 
 #### 9.7.2 校验流程
 
@@ -961,7 +975,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.28.0 | 2026-10-17 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，json-schema-validator 降为测试对照依赖（待实现）。 |
+| 2.28.0 | 2026-10-19 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，列出候选关键字分档，json-schema-validator 降为测试对照依赖（待实现）。 |
 | 2.27.2 | 2026-10-15 | 框架工具中文 label 已实现。 |
 | 2.27.1 | 2026-10-15 | Skill 与 Agent 工具展示名改用界面术语“技能”“子智能体”（待实现）。 |
 | 2.27.0 | 2026-10-15 | 框架工具 label 由工具自身定义为固定中文展示名（待实现）。 |

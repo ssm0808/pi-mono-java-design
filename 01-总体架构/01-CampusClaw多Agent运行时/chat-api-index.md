@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.24.0 |
-| 更新日期 | 2026-10-17 |
+| 文档版本 | 1.26.0 |
+| 更新日期 | 2026-10-18 |
 | 变更性质 | HTTP 1.63.0 统一取消条件与请求去重 Header 及配套 ETag；内部事务与业务准入保留 |
 | 唯一当前入口 | [当前十二项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
@@ -127,6 +127,8 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.26.0 | 2026-10-18 | 同步 HTTP 1.74.0：ListSessionModels、ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues，当前接口为十二项。 |
+| 1.25.0 | 2026-10-17 | 同步 HTTP 1.73.0：新增 ListSessionThinkingValues 与 ListSessionModes，当前接口为十四项；命令描述符的 hints 改为 argumentType。 |
 | 1.24.0 | 2026-10-17 | 同步 HTTP 1.72.0：Session 更新取消 ETag 已实现，证据见 §8.4。 |
 | 1.23.0 | 2026-10-16 | 同步 HTTP 1.68.0：命令清单改为 ListAgentCommands，语言专项证据链接迁至 source-evidence。 |
 | 1.22.0 | 2026-10-04 | 同步 HTTP 1.63.0 的无条件 Header 契约、最新行更新和实现迁移证据。 |

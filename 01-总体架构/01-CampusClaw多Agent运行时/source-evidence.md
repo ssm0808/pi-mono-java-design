@@ -99,7 +99,7 @@
 | 观察到的行为 | pi-mono `packages/coding-agent/src/core/session-manager.ts` 基线 46-156、1057-1149、1260-1303：Session Entry 使用 `id/parentId` 组成 append-only tree，`getBranch()` 返回当前 leaf 路径，`getEntries()` 返回全部 Entry；Entry 类型还包含模型、thinking、compaction、branch summary 和扩展状态 |
 | 观察到的行为 | pi-mono-java `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/SessionEntry.java` 基线 18-38 与 `SessionManager.java` 基线 188-296：JSONL Entry 保留 `id/parentId/type/message`，当前恢复主要线性提取 Message；没有 HTTP 分页、`entry_seq` 或不透明 page |
 | 观察到的行为 | Anthropic [List Events API](https://platform.claude.com/docs/en/api/beta/sessions/events/list)：`GET /v1/sessions/{session_id}/events` 通过不透明 `page/next_page` 分页，并按 `processed_at` 排序；公开响应没有固定快照水位 |
-| 已实现行为 | GET Session Models 以 `string[]` 实时返回 Agent allowlist 与当前可用模型交集中的 `modelId` 值，不分页；目标字段 `currentModelId` 允许因管理面后续停用而不在 `models` 中 |
+| 已实现行为 | GET Session Models 以 `string[]` 实时返回 Agent allowlist 与当前可用模型交集中的 `modelId` 值，不分页；目标字段 `currentModelId` 允许因管理面后续停用而不在 `models` 中。目标设计已删除这一独立接口（HTTP 1.74.0），可选模型改由 ListSessionCommandValues 提供，实现下线待实施 |
 | 已实现行为 | PR 167 基线的 PUT Model 和 PUT Thinking 只允许 idle Session 并要求强 `If-Match`；成功返回完整 SessionResource 和 ETag，相同值按无变化成功返回 |
 | 基线 Java 行为 | `pi-mono-java@510d882ca45541e0086586dab89c429c5a18cf20` 的 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/SessionNamingService.java`规范化并校验名称，`service/command/contributor/NameCommandContributor.java`将 `/name` 声明为 idle/running 均可用；`persistence/RuntimeSessionRepository.java#updateName` 和 `persistence/MyBatisRuntimeSessionRepository.java#updateName` 在行锁内更新名称与版本 |
 | 基线实现差距 | Java 09b32d8e 的 RuntimeSessionController 仅 create/get/delete；ConfigurationController 仍提供独立模型与思考 PUT。统一 POST、组合事务和 mode 尚待实现，详见下表专项证据。 |

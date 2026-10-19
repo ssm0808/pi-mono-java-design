@@ -473,7 +473,7 @@
         "status": "200",
         "tabLabel": "200 · model 查询",
         "label": "OK",
-        "summary": "空参数与 GET Session Models 完全相同，idle/running 均可查询；models 实时过滤并保持 Agent 绑定顺序，名称展示使用既有模型信息来源。",
+        "summary": "空参数返回 currentModelId 与 models，与 ListSessionCommandValues 的 model 取值相同，idle/running 均可查询；models 实时过滤并保持 Agent 绑定顺序，名称展示使用既有模型信息来源。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -498,7 +498,7 @@
         "status": "200",
         "tabLabel": "200 · model 无可选项",
         "label": "OK",
-        "summary": "复用 GET Models 的空清单语义：models=[]，currentModelId 仍保留当前值且可以不在候选中。",
+        "summary": "没有可选模型时 models=[]，currentModelId 仍保留当前值且可以不在候选中。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -1405,7 +1405,7 @@
           ],
           [
             "响应与权威快照",
-            "status/name/thinking/mode 查询及 name/model/thinking/mode 修改统一返回 GET Session 的完整资源；model 查询返回 GET Models 的 currentModelId/models。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry。"
+            "status/name/thinking/mode 查询及 name/model/thinking/mode 修改统一返回 GET Session 的完整资源；model 查询返回 currentModelId/models（与 ListSessionCommandValues 的 model 取值相同，独立 GET Models 接口已删除）。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry。"
           ],
           [
             "Skill 执行",

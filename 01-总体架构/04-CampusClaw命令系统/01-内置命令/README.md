@@ -7,8 +7,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.15.0 |
-| 更新日期 | 2026-10-16 |
+| 文档版本 | 2.17.0 |
+| 更新日期 | 2026-10-18 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 查询、useCases 缓存往返、Agent 级锁、响应投影与 Command POST 已实现 |
@@ -114,7 +114,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
 Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
-GET 的 Help 描述符只有 name/type/description，不返回 hints，不允许执行参数；Agent 命令清单按[轻量契约](../README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
+GET 的 Help 描述符只有 name/type/description，不返回 argumentType，不允许执行参数；Agent 命令清单按[轻量契约](../README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
 displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
 清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE；不改变上述 POST Help 的 422。
@@ -209,7 +209,7 @@ Builtin 请求拒绝 fileIds 与未知字段；共享入口已按 Builtin/Skill 
 | help | displayName、description[]、useCases[] / AgentHelpResponseVO（已实现） | 无独立 API，保留最小业务结果 |
 | status；name/thinking/mode 空参查询 | 完整 Session / GetSessionResponseVO | [GET Session](../../01-CampusClaw多Agent运行时/接口契约/操作/02-get-session.json) |
 | name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)；同形完整响应 |
-| model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | [GET Models](../../01-CampusClaw多Agent运行时/接口契约/操作/06-list-session-models.json) |
+| model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | 无独立 API（原 GET Models 已删除）；取值与 [ListSessionCommandValues](../../01-CampusClaw多Agent运行时/接口契约/操作/09-list-session-command-values.json) 的 model 相同 |
 | model 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json) |
 | thinking 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json) |
 | mode 修改（包括同值；待实现） | 完整 Session / GetSessionResponseVO | Session POST 同形完整响应 |
@@ -218,7 +218,7 @@ Builtin 请求拒绝 fileIds 与未知字段；共享入口已按 Builtin/Skill 
 
 完整 Session 的字段、空值和类型只由 GET Session 维护，不能裁剪成 Status/Name/Thinking/Mode 的子集；
 这包含既有目标 lifetimeUsage，而非新增上下文用量估算。模型修改只返回 Session，不再重复带候选模型；
-`/model` 空参仍提供选择器所需的实时 models，顺序、空列表与 currentModelId 不在候选中的规则沿用 GET Models。
+`/model` 空参仍提供选择器所需的实时 models，顺序、空列表与 currentModelId 不在候选中的规则见 [HTTP §2.4.1](../../01-CampusClaw多Agent运行时/chat-http-v1-design.md#241-get-session-models)。
 调用方依据自己提交的 name 与参数区分查询/修改，不要求服务端回显命令或增加类型判别字段。
 
 所有成功 result 禁止 command、changed、sourceEventSeq，不用新包装、commandId 或 eventId 替代。
@@ -311,6 +311,8 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.17.0 | 2026-10-18 | 独立的 GET Models 接口已删除：`/model` 空参查询仍返回 currentModelId、models，取值与 ListSessionCommandValues 的 model 相同。 |
+| 2.16.0 | 2026-10-16 | Help 描述符不返回 argumentType，表示不带参数；原 hints 已移除。 |
 | 2.15.0 | 2026-10-16 | 命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，不再按 Session 状态过滤；缓存缺失时准备 Agent，错误改为 404/422；同步全局类图锚点与证据链接。 |
 | 2.14.0 | 2026-10-04 | 命令与直接配置统一取消客户端条件令牌及 ETag，以数据库锁内合并维护更新一致性。 |
 | 2.13.0 | 2026-09-22 | 增加 mode 查询及 plan/build 切换，共享 Session 模式校验、原子更新与领域事件。 |
