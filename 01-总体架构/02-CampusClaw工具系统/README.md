@@ -611,7 +611,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 #### 9.7.1 允许的关键字
 
-关键字范围以 DeepSeek Harness 的自写子集为起点（见 [A20](../07-Agent架构对比/README.md#a20)），再按框架工具的实际用量和 Mate 工具需要扩展；语义仍按 JSON Schema 2020-12，不采用 DSH 额外的写法限制。`$schema` 只作注解，取值不同也按 2020-12 解释。只校验下表关键字，取值须符合表中形状：
+关键字范围以 DeepSeek Harness 的自写子集为起点（见 [A20](../07-Agent架构对比/README.md#a20)），再按框架工具的实际用量和 Mate 工具需要扩展；语义仍按 JSON Schema 2020-12，不采用 DSH 额外的写法限制。只校验下表关键字，取值须符合表中形状：
 
 | 类别 | 关键字 | 来源 | 取值约束与语义 |
 |---|---|---|---|
@@ -628,8 +628,8 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | 组合 | `allOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，全部分支通过才算通过 |
 | 组合 | `anyOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，至少一个分支通过才算通过 |
 | 组合 | `if`、`then`、`else` | 扩展：Mate 工具（2026-10-19 确认） | `if` 通过时按 `then` 校验，不通过时按 `else` 校验；`if` 自身的错误不报告。没有 `if` 时 `then`、`else` 不起作用，记为丢弃项 |
-| 注解 | `title`、`description`、`default`、`examples` | DSH | 只读取，不参与校验 |
-| 注解 | `$schema` | 扩展：`AskUserQuestionTool` | 只读取，不限取值 |
+
+注解不在子集内。`title`、`description`、`default`、`examples`、`$schema` 只是说明，编译时直接跳过，不校验，也不记丢弃项，`$schema` 不论取值都按 2020-12 解释。这几个不按表外关键字处理，是因为框架工具几乎每个字段都带 `description`，记成丢弃项会让 §9.7.5 的全量编译测试失败，每次调用也都要写 WARN。其他注解（`$comment`、`deprecated`、`readOnly`、`writeOnly`、`format` 等）按表外关键字丢弃。
 
 DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字段必须在同级 `properties` 中声明。这两条不是 2020-12 的要求，`CronTool` 正是“外层声明字段、分支按 `action` 区分必填项”的写法，所以不采用。
 
@@ -650,7 +650,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 | 档位 | 候选关键字 | 实现要点 | 建议 |
 |---|---|---|---|
-| 注解 | `$comment`、`deprecated`、`readOnly`、`writeOnly` | 只读取，不校验；加入后只是少写 WARN | 可随时加入 |
+| 跳过名单 | `$comment`、`deprecated`、`readOnly`、`writeOnly` | 与上文注解一样直接跳过，不校验；加入后只是少写 WARN | 可随时加入 |
 | 单节点校验 | `exclusiveMinimum`、`exclusiveMaximum`、`multipleOf` | 只看当前数值，按数学值比较，`multipleOf` 用十进制精确计算；每个几十行 | 按 Mate 用量 |
 | 单节点校验 | `minProperties`、`maxProperties`、`dependentRequired`、`propertyNames`；类型数组；对象形式的 `additionalProperties` | 只看当前对象或类型；每个几十行 | 按 Mate 用量 |
 | 跨关键字协同 | `patternProperties`、`prefixItems`、`contains`、`minContains`、`maxContains` | `patternProperties` 会改变 `additionalProperties` 的“额外字段”判定，`prefixItems` 会改变 `items` 的作用范围，要一起实现 | 按 Mate 用量 |
