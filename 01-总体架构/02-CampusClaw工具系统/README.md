@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.27.2 |
-| 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-15 |
+| 文档版本 | 2.28.0 |
+| 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线、前端可恢复展示及 [§9.7](#tool-schema-subset) 自写 Schema 子集校验器待实现，其余能力按源码证据分项判断 |
+| 更新日期 | 2026-10-19 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -593,13 +593,141 @@ Skill 发现与 Runtime 的 Skill 加载读取同一个 `skill-info-path-templat
 | 准备阶段校验 `CallTool` 业务 `args` | 同一个可信 `ResolvedTool` 的名称、说明、完整 `inputSchema` 及字段错误 | 尚未进入 Host hook；不触发确认，也不调用 Mate execute |
 | Agent 直接代理在 Pipeline 校验参数 | 本次已注册的代理输入定义及字段错误 | 同样保留参数失败分类，不另建远端执行链 |
 
-恢复信息进入模型可见的 `ToolResultMessage.content`，不能只放在 `details`；Pipeline 的异常归一化和 after hook 不能丢失它或将失败改记为成功。内部 `details.errorCode` 保留既有 `TOOL_ARGUMENTS_INVALID`，`isError=true`。具体模型结果格式由[工具契约 §4.3.1](built-in-tool-contracts.md#call-tool-recovery-result)维护。宿主使用既有 JSON/Schema 能力实现，不新增 Maven 依赖。
+恢复信息进入模型可见的 `ToolResultMessage.content`，不能只放在 `details`；Pipeline 的异常归一化和 after hook 不能丢失它或将失败改记为成功。内部 `details.errorCode` 保留既有 `TOOL_ARGUMENTS_INVALID`，`isError=true`。具体模型结果格式由[工具契约 §4.3.1](built-in-tool-contracts.md#call-tool-recovery-result)维护。宿主使用 [§9.7](#tool-schema-subset) 的本地子集校验器实现，不新增 Maven 依赖。
 
 定义来自本次可信解析或已注册工具，不能回显模型传入的 Schema、凭据、内部 ID、原始异常栈或不可见工具信息。正常大小的定义完整返回，保留字段说明和引用依赖；输出预算不足时明确说明定义未完整提供；仅在 SearchTools 能完整披露该 Skill 工具定义时指引按精确名称重新获取，否则说明定义不可完整提供并停止盲目重试，不能把截断 JSON 当作完整定义。仅参数校验失败适用本规则；名称不可用、权限拒绝、无效工具 Schema、远端业务错误及结果未知各自保留原分类。请求已发出后的超时不标记为未执行。
 
 Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `agent.tool_result`、`isError` 和稳定 `errorCode`；精确公共契约仍由 [M06](../01-CampusClaw多Agent运行时/事件契约/common.json)维护，不向公共错误正文复制模型恢复定义。前端仅对有明确 `TOOL_ARGUMENTS_INVALID` 分类的本地失败采用[可恢复展示](../../07-前端设计/技术设计/内容渲染.md#tool-argument-recovery-display)：同根仍在处理时弱化中间失败，详细记录可展开；根终态不继续显示“正在调整”，也不按后续同名工具成功覆盖旧调用。
 
 该架构变更以 pi 的“准备与校验先于 before hook”为主基线；DeepSeek Harness 当前 alpha 实现把 policy/ask 放在工具包装器参数校验之前，说明这不是所有 Agent 的统一固定顺序。CampusClaw 选择前置业务校验，是减少无效确认的 ToB 产品约束，同时用不可变准备快照避免确认前后目标或参数漂移。代价是 Pipeline 增加准备阶段，失败结果增加定义文本和一次模型修正调用；不能据此承诺首次调用正确、完全无等待感知或量化成功率。
+
+<a id="tool-schema-subset"></a>
+
+### 9.7 工具 Schema 子集与本地校验器
+
+**状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码不再依赖该库；库只留在测试里做行为对照。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A20](../07-Agent架构对比/README.md#a20)。
+
+框架工具 Schema 实际只用到 13 个校验关键字；Mate 工具 Schema 用到的关键字更多，本节只校验表内关键字，表外关键字静默丢弃，不阻塞调用。继续用完整校验库，要多带三个运行时 jar（约 686 KB），还带上子集用不到的能力，其中两项对外部 Schema 不利：默认加载器会在校验时按远程 `$ref` 发起网络请求；错误文案随 JVM 默认 Locale 变化，模型看到的修正依据不稳定。自写子集后，哪些关键字参与校验、错误文案和失败分类都由本节固定。
+
+#### 9.7.1 允许的关键字
+
+关键字范围以 DeepSeek Harness 的自写子集为起点（见 [A20](../07-Agent架构对比/README.md#a20)），再按框架工具的实际用量和 Mate 工具需要扩展；语义仍按 JSON Schema 2020-12，不采用 DSH 额外的写法限制。只校验下表关键字，取值须符合表中形状：
+
+| 类别 | 关键字 | 来源 | 取值约束与语义 |
+|---|---|---|---|
+| 类型 | `type` | DSH；类型数组为扩展：对齐 networknt | 单个类型名，或非空、不重复的类型名数组，命中任一即通过（例如 `["string", "null"]` 表示可空字符串）；类型名取 `object`、`array`、`string`、`number`、`integer`、`boolean`、`null`。`integer` 按数学值判断，`1.0` 也是整数；`number` 包含整数 |
+| 对象 | `properties`、`required`、`additionalProperties` | DSH | `properties` 的每个值是子 Schema；`required` 是不重复的字符串数组；`additionalProperties` 是布尔值或子 Schema：`false` 拒绝同级 `properties` 之外的字段，子 Schema 形式要求这些字段的值都满足它（子 Schema 形式为扩展：对齐 networknt） |
+| 数组 | `items` | DSH | 单个子 Schema，不接受数组形式 |
+| 数组 | `minItems`、`maxItems` | 扩展：`AskUserQuestionTool`、`TodoUpdateTool` | 非负整数 |
+| 数组 | `uniqueItems` | 扩展：Mate 工具（2026-10-19 确认） | 布尔值；`true` 时元素两两不相等，相等按 `enum` 的 JSON 值比较；`false` 不起作用 |
+| 字符串 | `minLength`、`maxLength` | 扩展：`CronTool`、`AskUserQuestionTool`、`TodoUpdateTool`、`SearchTools`、`ExitPlanModeTool` 等 | 非负整数；长度按 Unicode 码点计数，与现状一致 |
+| 字符串 | `pattern` | 扩展：`AskUserQuestionTool` 的问题 ID | 用 `java.util.regex` 编译，按部分匹配（`find`）判断，与现状一致 |
+| 数值 | `minimum`、`maximum` | 扩展：Mate 工具（2026-10-19 确认） | 闭区间，按数学值比较，`1` 与 `1.0` 相同 |
+| 取值 | `enum`、`const` | DSH | 按 JSON 值相等比较，数值按数学值比较（`1` 与 `1.0` 相等）；`enum` 非空 |
+| 组合 | `oneOf` | DSH | 非空子 Schema 数组，恰好一个分支通过才算通过 |
+| 组合 | `allOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，全部分支通过才算通过 |
+| 组合 | `anyOf` | 扩展：Mate 工具（2026-10-19 确认） | 非空子 Schema 数组，至少一个分支通过才算通过 |
+| 组合 | `if`、`then`、`else` | 扩展：Mate 工具（2026-10-19 确认） | `if` 通过时按 `then` 校验，不通过时按 `else` 校验；`if` 自身的错误不报告。没有 `if` 时 `then`、`else` 不起作用，记为丢弃项 |
+| 子 Schema | 布尔形式 `true`、`false` | 扩展：对齐 networknt | 任何允许写子 Schema 的位置都可以写布尔值：`true` 接受任意值，`false` 拒绝任意值。例如 `"properties": {"debug": false}` 表示不允许出现 `debug` 字段 |
+| 注解 | `title`、`description`、`default`、`examples` | DSH | 只读取，不参与校验 |
+| 注解 | `$schema` | 扩展：`AskUserQuestionTool` | 只读取，不限取值 |
+| 注解 | `$comment`、`deprecated`、`readOnly`、`writeOnly` | 扩展：2020-12 元数据词表 | 只读取，不参与校验 |
+
+注解只读取，不参与校验，也不记丢弃项。`$schema` 不论取值都按 2020-12 解释；`default` 不会自动填进参数；`readOnly` 不拦截模型传入该字段，这些都与现状一致。`format` 不列为注解，按表外关键字丢弃。
+
+DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字段必须在同级 `properties` 中声明。这两条不是 2020-12 的要求，`CronTool` 正是“外层声明字段、分支按 `action` 区分必填项”的写法，所以不采用。
+
+关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items`、数量限制和 `uniqueItems` 只检查数组，长度和 `pattern` 只检查字符串，`minimum`、`maximum` 只检查数值。`additionalProperties` 只认同级 `properties` 里的字段，看不到 `allOf` 或 `then` 分支里声明的字段。这些都与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
+
+表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`format`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如数组形式的 `items`、空的或含重复项的类型数组、无法编译的 `pattern`、负数 `minLength`。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
+
+丢弃只能放宽校验，不能收紧。表内有三处会因此出问题，分别处理：
+
+- `oneOf`：分支丢了关键字后，原本互斥的分支可能同时通过，“恰好一个”就会误判失败。所以只要 `oneOf` 的任一分支（含下层）有丢弃项，这个 `oneOf` 就退化为“至少一个分支通过”。
+- `if`：条件丢了关键字后会更容易通过，`then` 就会套用到原本不该套用的参数上。所以 `if` 的子 Schema（含下层）有丢弃项时，整组 `if`/`then`/`else` 一起丢弃。`then`、`else` 里的丢弃只会放宽，不受影响。
+- `properties`：整个 `properties` 因取值不合规被丢弃时，同级 `additionalProperties` 会把所有字段都当成多余字段，反而收紧。所以这种情况下同级 `additionalProperties` 一起丢弃。
+
+编译时把每个丢弃项记成 JSON Pointer 加原因（例如 `/properties/count/multipleOf: 表外关键字`），校验照常进行；清单的用途见 §9.7.2。
+
+不扩到完整 2020-12：完整对齐要实现 `$ref` 解析、动态引用、`unevaluated*` 求值追踪和二十多种 `format`，主代码估计 3000～5000 行，还要接入官方测试集，成本接近重写一个库。**子集必须覆盖全部框架工具。** 新增或修改框架工具时，输入 Schema 只能使用上表关键字。工具 Schema 本身合理、只是用到表外关键字时，以工具需要为准扩展子集，不为迁就子集改写工具 Schema：先在本节扩展关键字表（写明来源工具），再改校验器和测试，最后才合入该工具。这条由 §9.7.5 的“框架工具全量编译”测试兜底：测试从三入口的框架工具清单枚举工具，不维护手写名单，新工具只要有丢弃项，构建就会失败。运行时的丢弃是给 Mate 工具兜底的，框架工具不依赖它。
+
+扩展只按实际用量做：框架工具或 Mate 工具确需某个表外关键字在确认前参与校验时，先改本节再实现。扩展后这个关键字从丢弃变为校验，已上线的 Mate 工具可能开始拒绝原本放行的参数，所以扩展前要先对照 T2 的普查结果。候选关键字按实现成本分档如下，目前都没有框架工具用到：
+
+| 档位 | 候选关键字 | 实现要点 | 建议 |
+|---|---|---|---|
+| 单节点校验 | `exclusiveMinimum`、`exclusiveMaximum`、`multipleOf` | 只看当前数值，按数学值比较，`multipleOf` 用十进制精确计算；每个几十行 | 按 Mate 用量 |
+| 单节点校验 | `minProperties`、`maxProperties`、`dependentRequired`、`propertyNames` | 只看当前对象；每个几十行 | 按 Mate 用量 |
+| 跨关键字协同 | `patternProperties`、`prefixItems`、`contains`、`minContains`、`maxContains` | `patternProperties` 会改变 `additionalProperties` 的“额外字段”判定，`prefixItems` 会改变 `items` 的作用范围，要一起实现 | 按 Mate 用量 |
+| 组合 | `not` | 内部有丢弃项时结果会收紧，这种情况整块丢弃 | 按 Mate 用量 |
+| 不建议 | `$ref`、`$defs`、`$id`、`$anchor`、`$dynamicRef`、`unevaluatedProperties`、`unevaluatedItems` | 引用要处理循环和解析范围，`unevaluated*` 要追踪哪些字段已求值，复杂度成倍增加 | 不加入；只支持文档内 `$ref` 时可另行评估 |
+
+
+#### 9.7.2 校验流程
+
+每次校验分两步，都在 before hook 之前完成，位置与 [§9.6](#tool-argument-recovery) 相同：
+
+1. **编译定义。** 按 §9.7.1 识别关键字和取值形状，编译 `pattern`，生成不可变的 `CompiledToolSchema` 和丢弃清单。只有根节点不是 JSON 对象时才抛出 `ToolSchemaInvalidException`，因为这样的定义连参数对象都描述不了。丢弃清单只供测试和 T2 普查读取，运行时不写日志，也不进入模型结果：哪些关键字参与校验由 §9.7.1 的表唯一确定，丢弃是预期行为，不是异常。
+2. **校验参数。** 对 `mapper.valueToTree(arguments)` 逐层检查，收集全部错误，不在第一个错误处停止。错误按路径、再按文案排序，交给现有 `ToolArgumentsInvalidException` 和 §9.6 的恢复反馈。
+
+每次调用都重新编译定义，不跨调用缓存。工具 Schema 很小，编译开销可以忽略；跨调用缓存会和 [§9.2.1](#tool-definition-consistency) 的定义版本同步耦合，那部分另行设计。`validateDefinition` 只做第 1 步并返回丢弃清单，供 Mate 定义解析和 T2 普查使用。
+
+`oneOf` 没有分支通过时，先报一条汇总错误，再附上错误最少的那个分支的错误，错误数相同时取靠前的分支。Cron 这类用 `action` 区分的参数组合，模型因此能直接看到缺的是哪个字段。有两个及以上分支同时通过时，只报汇总错误。退化为“至少一个”的 `oneOf` 只在没有分支通过时报错，汇总文案相应改写。`anyOf` 没有分支通过时，与 `oneOf` 一样先报汇总错误，再附上错误最少的分支的错误。`allOf` 不报汇总错误，直接列出各分支的错误；`if`/`then`/`else` 同样直接列出 `then` 或 `else` 的错误，路径都相对参数根对象。
+
+错误路径是相对参数根对象的 JSON Pointer，根路径为空字符串，`~` 和 `/` 按 RFC 6901 转义。缺少必填字段和出现不允许字段时，路径都指向该字段本身。不允许字段的路径与现状不同：networknt 指向所在对象，本设计改为指向字段，模型更容易定位。错误文案固定为中文模板，只写字段和约束，不复制参数值：
+
+| 关键字 | 文案模板 |
+|---|---|
+| `type` | 类型应为 {类型}（类型数组用“或”连接） |
+| 布尔子 Schema `false` | 不允许出现该值 |
+| `required` | 缺少必填字段 |
+| `additionalProperties` | 不允许的字段 |
+| `enum` / `const` | 取值应为以下之一：{取值列表} / 取值应为 {取值} |
+| `minLength` / `maxLength` | 长度应至少为 {n} 个字符 / 长度应不超过 {n} 个字符 |
+| `pattern` | 格式应匹配正则 {pattern} |
+| `minItems` / `maxItems` | 元素数量应至少为 {n} / 元素数量应不超过 {n} |
+| `uniqueItems` | 元素不能重复：第 {i} 项与第 {j} 项相同（路径指向数组） |
+| `minimum` / `maximum` | 应不小于 {n} / 应不大于 {n} |
+| `oneOf` | 应恰好满足一种参数组合，当前满足 {k} 种；退化后为“应至少满足一种参数组合” |
+| `anyOf` | 应至少满足一种参数组合 |
+
+#### 9.7.3 失败处理
+
+| 编号 | 场景 | 结果 |
+|---|---|---|
+| F1 | 框架工具定义有丢弃项 | 框架工具全量编译测试失败，这种定义不会随版本发布；运行时即使出现，也只丢弃，不阻塞调用 |
+| F2 | Mate 工具定义有丢弃项 | 丢弃项不校验，调用照常进入确认和 Mate execute，不写日志。被丢弃的约束由 Mate execute 自己负责；有哪些丢弃项由 T2 普查列出 |
+| F3 | 定义根节点不是 JSON 对象 | 返回 `TOOL_DEFINITION_INVALID`，与现状路径相同；Mate 工具沿用 `MateToolExecutor.InvalidDefinitionException` 和日志 `validationReason=INVALID_TOOL_SCHEMA`；不弹确认，不请求 Mate execute。SearchTools 对这类工具按“定义无效”失败 |
+| F4 | 参数不满足表内关键字 | 返回 `TOOL_ARGUMENTS_INVALID` 和 §9.6 的恢复反馈，业务未执行 |
+| F5 | 校验器自身抛出未预期异常 | 按定义无效处理，不当作参数错误，也不放行执行 |
+
+对外行为变化在 F2：networknt 现在会校验 `not`、`exclusiveMinimum`、`$ref` 等关键字，切换后这些约束在 Claw 侧不再校验，原本被拒的参数会进入确认并请求 Mate execute。`format` 现在本来就不校验，切换后被丢弃，校验结果不变。所以切换前按 T2 普查现网定义，列出会被丢弃的约束，交给 Mate 侧确认。
+
+#### 9.7.4 代码结构与依赖
+
+| 位置 | 目标 |
+|---|---|
+| agent-core `ToolSchemaValidator` | 保留静态入口 `validate` 和 `validateDefinition`，去掉 `JsonSchemaFactory` 参数；`validateDefinition` 改为返回丢弃清单；异常类型和稳定错误码不变 |
+| agent-core `ToolSchemaCompiler`、`CompiledToolSchema` | 新增，包内可见：前者负责第 1 步，后者是编译结果并负责第 2 步；无状态或不可变，线程安全 |
+| `ToolExecutionPipeline`、`MateToolExecutor` | 删除 `JsonSchemaFactory` 字段和 networknt import，调用新入口 |
+| `modules/ai/pom.xml` | 删除未使用的依赖声明 |
+| `modules/agent-core/pom.xml`、`modules/coding-agent-cli/pom.xml`、`campusclaw/pom.xml` | 依赖改为 `test` scope，只供对照测试；根 POM 的 `dependencyManagement` 保留版本号 |
+
+运行时产物去掉 `json-schema-validator` 1.5.2、`itu` 1.10.2、`jackson-dataformat-yaml` 2.18.3 三个 jar，约 686 KB。`snakeyaml` 仍由 Spring Boot 引入，不受影响。主代码估计 650～850 行，测试约 1300 行。
+
+#### 9.7.5 测试对照
+
+- **关键字单测：** 逐个关键字覆盖通过、失败和边界值，包括按码点计数的 emoji、`1` 与 `1.0`、`integer`、深层嵌套路径、指针转义，以及 Cron 的 `oneOf` 分支；类型数组含 `null` 和 `integer` 的组合；子 Schema 形式 `additionalProperties` 的字段路径；`true`、`false` 子 Schema 出现在 `properties`、`items` 和组合分支中；`allOf` 的错误合并；`anyOf` 无分支通过时的最接近分支；`if` 通过和不通过两条路径，以及 `if` 含丢弃项时整组丢弃。
+- **定义单测：** 每个表外关键字、不符合形状的取值和超深嵌套都进入丢弃清单，且不影响同级其余关键字的校验；分支含丢弃项的 `oneOf` 按“至少一个”判断；`properties` 被丢弃时同级 `additionalProperties` 一起丢弃；只有根节点不是对象时判定义无效。
+- **框架工具全量编译：** 从 Runtime、Cron、Subagent 三入口的框架工具清单枚举全部工具（不手写名单），逐个编译输入 Schema；任何一个的丢弃清单非空都让测试失败，失败信息给出工具名和丢弃项位置。
+- **差分对照：** networknt 只在测试 scope 中使用。语料是全部框架工具定义加按关键字构造的 Schema；参数用合法样例加确定性变异生成（删必填字段、换类型、越过长度、数量和数值边界、加多余字段、改枚举值、制造重复元素）。两边的有效、无效判定必须一致；只有一个错误的用例，字段路径也要一致（比较前把 networknt 的 `required` 和 `additionalProperties` 位置换算到字段路径）。文案不比较。另加含表外关键字的语料，只做单向比较：networknt 判有效的参数，本实现也必须判有效，证明丢弃只放宽、不收紧。
+- **依赖验收：** `campusclaw-coding-agent` 的 `dependency:tree` 在 compile 和 runtime scope 下不再出现上述三个构件，镜像同步后 `campusclaw/pom.xml` 一致。
+
+#### 9.7.6 待对齐事项
+
+| 编号 | 事项 | 影响 |
+|---|---|---|
+| T1 | Mate 侧确认被丢弃的约束由 execute 自己校验；哪些表外关键字需要 Claw 在确认前就校验 | 需要的话按 §9.7.1 扩展关键字表；不扩展的关键字，Claw 只丢弃、不校验 |
+| T2 | 切换前用现网 Mate 工具定义导出跑一次 `validateDefinition` 普查 | 列出每个工具的丢弃项，交 Mate 侧按 T1 确认后再切换 |
 
 ## 10. Subagent Execution
 
@@ -824,6 +952,18 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 固定结构摘要、2000 字符截断、无工具/cache、Token 上限、瞬态重试和 Usage/Cost 合并通过测试；
 - 自动 prepare 空结果不发事件，失败回滚、取消 `aborted=true` 和完整摘要恢复通过测试。
 
+<a id="tool-schema-subset-acceptance"></a>
+
+### 13.4 Schema 子集校验器
+
+- §9.7.1 表内每个关键字的通过、失败和边界用例通过；表外关键字、不符合形状的取值和超过 32 层的子 Schema 只丢弃、不阻塞调用，运行时不写日志；含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组 `if`/`then`/`else` 丢弃；只有根节点不是对象时判定义无效；
+- 框架工具全量编译测试从工具清单枚举、不依赖手写名单，全部框架工具定义编译后没有丢弃项；Cron 的 `oneOf` 在缺字段时报出所缺字段，在命中多个分支时报汇总错误；
+- 与 networknt 1.5.2 的差分对照中，有效、无效判定全部一致，单错误用例的字段路径一致；含表外关键字的语料中，networknt 判有效的参数本实现全部判有效；
+- 错误文案与 JVM 默认 Locale 无关；模型结果不含参数值和定义诊断信息；
+- F1～F5 的错误码、日志字段，以及定义无效时“不确认、不请求 Mate execute”的行为符合 §9.7.3；
+- 运行时依赖树和公司镜像 POM 不再含 `json-schema-validator`、`itu`、`jackson-dataformat-yaml`；生产源码不再 import `com.networknt`；
+- 切换前完成 §9.7.6 T2 的现网定义普查，记录结果并由 Mate 侧确认丢弃项。
+
 ## 14. 实施顺序
 
 SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装配与宿主提示 → 发现和调用一致性验收的顺序实施；生产数据加载与同步另行设计后接入。参数恢复后端已落在 PR #323，前端仍按 Runtime 安全投影 → 分类展示的顺序补齐；模型修正继续走普通工具循环。
@@ -839,12 +979,15 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 9. 删除 Bash/Edit/Write 及专属死代码、任意动态注册、Extension、Loop、旧 delegation 和退役模型入口；
 10. 同步生成镜像并完成全量回归。
 
+[§9.7](#tool-schema-subset) 的校验器可以独立于上述步骤实施，顺序是：关键字单测和定义编译 → 替换 `ToolSchemaValidator` 内部实现并删除调用方的 `JsonSchemaFactory` → 差分对照测试 → 依赖改为测试 scope 并同步镜像 → 现网定义普查结果经 Mate 侧确认后合入。
+
 本页描述推荐目标结构；已实现部分及差距须按[源码证据](source-evidence.md)中的提交逐项判断。实现 PR 应列出实际落地范围，不能把旧差距直接延伸为最新状态。
 
 ## 15. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.28.0 | 2026-10-19 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，按 Mate 需要加入 `uniqueItems`、`minimum`、`maximum`、`allOf`、`anyOf`、`if`/`then`/`else`，列出候选关键字分档，json-schema-validator 降为测试对照依赖（待实现）。 |
 | 2.27.2 | 2026-10-15 | 框架工具中文 label 已实现。 |
 | 2.27.1 | 2026-10-15 | Skill 与 Agent 工具展示名改用界面术语“技能”“子智能体”（待实现）。 |
 | 2.27.0 | 2026-10-15 | 框架工具 label 由工具自身定义为固定中文展示名（待实现）。 |

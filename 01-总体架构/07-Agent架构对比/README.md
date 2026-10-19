@@ -4,13 +4,14 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.106.0 |
-| 更新日期 | 2026-10-18 |
+| 文档版本 | 1.107.0 |
+| 更新日期 | 2026-10-19 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
 | 设计依据 | 当前各模块主设计；M02 采用 Model 主设计 2.12.0，具体入口见各条目 |
 | 模型传输专项基线 | A18：2026-10-16 隔离 fetch pi `main@4dd2b149d155d7369de16ea4dc77c84e9f5ffb24`、Codex `main@4eb4a65407d98cebc4c83bf13be440b9fbc78a7c`、Java `main@1acbbf3f046932872af06868c600bb5d9498d8b6`；路径与符号见[Model 源码证据 §1.4](../../02-服务与接口/03-Model/source-evidence.md#http-transport-evidence)，其他条目的基线不升级 |
+| Schema 校验专项基线 | A20：2026-10-17 隔离 fetch pi `main@8efd314fa3d3232ce197d8d7a6a5660530b9d83e`、Codex `main@3b8f43a06bb3105e81406b35ff69f94977d18ae4`、OpenCode `dev@65932e870ca50d21886f9d0ee89c6603bac34a65`、DSH `master@1517a4dbca0a2789ff1d41ba439600f8547d23fa`、Java `main@1446c58564539eb320fa3c6b495be34e5f985394`；路径与符号见[工具系统源码证据 §15](../02-CampusClaw工具系统/source-evidence.md#tool-schema-validator-evidence)，其他条目的基线不升级 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
 | 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论 |
 | 历史计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
@@ -65,7 +66,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 |---|---|---|---|
 | M01 · Runtime 与多 Agent | Loop 扩展能力如何与产品准入分离；父子执行如何隔离和终止 | pi；计划审核采用 DeepSeek，预览对照 Codex | [A01](#a01)覆盖 Loop 与消息准入；[A03](#a03)覆盖模式接入、参数承载计划预览与审核、Subagent 模式传递，其他父子生命周期待补证 |
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；[A18](#a18)覆盖模型 HTTP 客户端、连接复用与 Redis 全局并发上限；Codex 事件归一化对比及完整取消链仍待专项核验 |
-| M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露 |
+| M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露；[A20](#a20)覆盖工具参数的 Schema 子集与本地校验器 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
 | M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../04-CampusClaw命令系统/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖既有 Claw/Mate 流范围；[A13](#a13)覆盖 Redis 快照与短期增量恢复；[A03](#a03)维护数据库确认交接；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件；[A16](#a16)覆盖按 Agent 跨会话查询用户事件与按事件读取轮次 |
@@ -719,6 +720,29 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | 状态与验收 | 待实现；按主设计 §6.3 的 S1～S5 验收，对外错误码与文字逐字不变 |
 
 **设计表达。** 失败的“是什么”只看错误码，“为什么”只在源头日志里。Claw 取 DSH 的“按码路由、展示文字分开”，取 Codex 的“单一类型加集中枚举”，但不派生子类，也不取两者的 cause 链。
+
+<a id="a20"></a>
+
+## 6.17 A20 · 工具参数的 Schema 子集与本地校验器
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M03；[工具系统 §9.7](../02-CampusClaw工具系统/README.md#tool-schema-subset)唯一维护关键字表、校验流程、错误文案和失败处理；参数恢复反馈仍由 [§9.6](../02-CampusClaw工具系统/README.md#tool-argument-recovery)维护 |
+| 架构问题 | 框架工具和外部提供的 Mate 业务工具都带 JSON Schema，Claw 接受哪些关键字、在本地怎样校验模型给出的参数，才能既不依赖完整校验库，又让模型拿到稳定的修正依据？ |
+| pi | TypeBox 校验全部工具（含 MCP），校验前做大量类型转换；MCP Schema 原样透传，不限关键字 |
+| Codex | 工具定义收敛到固定结构，结构外关键字静默丢弃；本地不按 Schema 校验参数，MCP 参数只要求是合法 JSON，交给服务端校验 |
+| OpenCode | MCP Schema 转成 Effect Schema 后校验；转换失败时跳过校验 |
+| DeepSeek Harness | 自有工具用自写严格子集，表外关键字直接拒绝；MCP 输入 Schema 原样透传，本地不校验 |
+| CampusClaw 已观察 | Java `1446c585` 用 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具与 Mate 工具；`format` 只作注解，错误文案随 JVM 默认 Locale 变化，默认加载器可按远程 `$ref` 发请求；框架工具只用到十几个关键字 |
+| CampusClaw 目标 | agent-core 自写子集校验器：以 DSH 的 8 个校验关键字和 4 个注解为起点，按框架工具实际用量扩展 `minLength`、`maxLength`、`pattern`、`minItems`、`maxItems` 和注解 `$schema`，补上 2020-12 元数据词表的其余注解，按 Mate 工具需要扩展 `uniqueItems`、`minimum`、`maximum`、`allOf`、`anyOf`、`if`/`then`/`else`；语义按 2020-12，不采用 DSH 对 `oneOf` 同级关键字和 `required` 声明位置的额外限制；类型数组、子 Schema 形式的 `additionalProperties` 和布尔子 Schema 与 networknt 对齐；表外关键字和不符合形状的取值静默丢弃，只放宽、不收紧，含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组丢弃；框架工具由测试保证没有丢弃项；错误路径指向字段本身，文案为固定中文模板；Mate 工具与框架工具共用同一张关键字表；networknt 降为测试依赖做差分对照 |
+| 差异分类 | 架构变更：校验从通用库改为自有子集实现，运行时少三个 jar；安全加固：外部 Schema 不能再触发远程 `$ref` 加载；产品约束：Mate 工具 Schema 关键字多，不能因 Claw 不支持某个关键字就阻塞调用，被丢弃的约束由 Mate execute 负责 |
+| 理由与代价 | 表外关键字采用 Codex 的静默丢弃，而不是 DeepSeek Harness 的“表外即拒绝”：Mate 工具 Schema 用到的关键字多，拒绝会让现网工具切换后整个不可用。和 Codex 不同，表内关键字仍在本地校验，因为 Mate 工具在 Claw 本地执行确认和参数修正。框架工具仍按 DSH 的严格做法，由全量编译测试拦住丢弃项。代价是校验语义要自己维护，靠差分测试证明与 networknt 一致或只放宽；被丢弃的约束在确认前不再拦截，模型看到的 Schema 比实际校验的严，不合规参数会进入确认并交给 Mate execute |
+| 备选与重新评估条件 | 不采用 pi 的类型转换：静默改参数会让确认弹窗里的参数和模型给的不一致。不保留库只加白名单：运行时依赖一个不少。不采用 DSH 的表外即拒绝：会阻塞现网 Mate 工具。Mate 侧要求 `$ref`、`not` 等关键字在确认前就校验时重新评估，届时保留库可能比自写更划算 |
+| 设计状态 / 实现状态 | 待评审 · 待实现；没有原型；现网 Mate 工具定义的关键字用量未核验 |
+| 验收与证据 | 主设计 §13.4；源码证据 §15 |
+
+**讲解要点。** 四个基线里只有 DeepSeek Harness 自写了严格子集，CampusClaw 借了它的关键字范围，再按框架工具用量扩展。表外关键字分两种处理：框架工具按 DSH 的严格做法，由测试拦住；Mate 工具借 Codex 的静默丢弃，不因 Claw 不认识某个关键字就阻塞调用，表内关键字照常在本地校验。这样能去掉 json-schema-validator 和它的两个传递依赖，同时用原库在测试里证明结果一致或只放宽。
+
 ## 7. 源码证据与更新边界
 
 P01/P02 使用 pi 固定 commit `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；
@@ -773,6 +797,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.107.0 | 2026-10-19 | 新增 A20：工具参数改用自写 JSON Schema 子集校验，与 pi、Codex、OpenCode、DeepSeek Harness 的校验做法对照。 |
 | 1.106.0 | 2026-10-18 | M05/M07 模型、深度思考、工作模式的可选值合并为 Runtime 一个按命令取值的接口，对应 pi 挂在命令上的补全。 |
 | 1.105.0 | 2026-10-17 | M05/M07 选项型命令的候选与显示名改由 Mate 命令选项接口提供，前端按 argumentType 统一处理；Runtime 清单去掉 hints，返回 argumentType，可选值改由 Runtime 会话查询提供。 |
 | 1.104.0 | 2026-10-17 | 新增 A19，对比单一异常类加集中错误码枚举、源头记录原始异常的基线做法。 |

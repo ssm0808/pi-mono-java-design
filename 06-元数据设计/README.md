@@ -1,6 +1,6 @@
 # CampusClaw 元数据设计
 
-版本：2.2.1；日期：2026-10-08。设计状态：当前元数据设计；实现与验收状态按所属模块分别维护。
+版本：2.3.0；日期：2026-10-17。设计状态：当前元数据设计；实现与验收状态按所属模块分别维护。
 
 [返回仓库首页](../README.md)
 
@@ -105,7 +105,7 @@ binding_skills 保留既有元数据字段，不由本样例定义递归展开�
 | permission | Tool 自身的权限配置 | string；仅 ask / allow / deny，分别表示需要确认、允许、禁止；Agent 关联未配置权限时继承 Tool 权限 |
 | metadata | Tool 的扩展配置 | object；可省略；包含下表字段 |
 | source | Tool 来源 | string；仅 builtin-toolset / mcp-toolset |
-| input_schema | Tool 输入参数的结构与约束 | object；使用 JSON Schema 描述参数，运行时在权限确认前校验业务参数 |
+| input_schema | Tool 输入参数的结构与约束 | object；使用 JSON Schema 2020-12 子集描述参数，可用关键字以[工具系统 §9.7.1](../01-总体架构/02-CampusClaw工具系统/README.md#tool-schema-subset)为准，表外关键字静默丢弃、不参与校验；运行时在权限确认前校验业务参数 |
 | output_schema | 预期成功业务结果的结构与约束 | object；使用 JSON Schema 描述结果，不据此宣称已实现统一的运行时输出校验 |
 
 | metadata 字段 | 含义 | 规则 |
@@ -175,6 +175,7 @@ input_schema 与 output_schema 内部的属性名属于具体业务 Tool。本�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.3.0 | 2026-10-17 | Tool 的 input_schema 限定为工具系统维护的 JSON Schema 子集（待实现）。 |
 | 2.2.1 | 2026-10-08 | 元数据正文统一使用 Skill 和 Tool，同步样例描述。 |
 | 2.2.0 | 2026-10-08 | 工具新增 metadata.is_confirmation_tool，区分用户确认工具与授权确认，并提供独立样例。 |
 | 2.1.5 | 2026-10-08 | 中文说明统一使用“技能”和“工具”，名称及用途描述采用直接易懂的表述。 |

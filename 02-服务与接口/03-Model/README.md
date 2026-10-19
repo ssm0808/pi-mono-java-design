@@ -1,6 +1,6 @@
 # Model
 
-版本：2.12.0 · 2026-10-16 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现；模型调用改用 JDK HttpClient、用 Redis 全局许可限制并发（[§5](#http-transport)）待实现。
+版本：2.12.1 · 2026-10-17 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现；模型调用改用 JDK HttpClient、用 Redis 全局许可限制并发（[§5](#http-transport)）待实现。
 
 | 内容 | 维护位置 |
 |---|---|
@@ -373,12 +373,13 @@ CampusMate 请求与流处理使用现有 Jackson、Spring WebFlux 的 `WebClien
 | `com.openai:openai-java:4.29.1` | 同上 | client-okhttp/core、Kotlin、OkHttp、Jackson 扩展、Swagger、Victools；与 Anthropic 路径存在仲裁 |
 | `io.projectreactor.netty:reactor-netty-http:1.2.5`（待实现） | AI 与公司镜像 POM（版本由 Spring Boot 管理） | `reactor-netty-core` 与 17 个 `io.netty` 4.1.119 构件，含 epoll 和 macOS DNS 原生包；本地合计约 5.5 MB。其中 9 个仍随 Redisson 保留（D5），实际移除的是 reactor-netty 两个构件和 8 个 Netty 构件（HTTP、HTTP/2、SOCKS 编解码、代理、epoll 与 macOS DNS 原生包，约 1.5 MB） |
 
-源码消费者和运行依赖树证据见[源码证据](source-evidence.md#dependencies)及 [§1.4](source-evidence.md#http-transport-evidence)。删除后重新核对全 Reactor 与公司镜像，确认上述依赖不再进入产物；保留仍被使用的 Jackson、Reactor Core、日志、`json-schema-validator` 和测试用 MockWebServer，不机械排除共享传递依赖。公司父 POM 的完整依赖树与删减产物尚未验证。
+源码消费者和运行依赖树证据见[源码证据](source-evidence.md#dependencies)及 [§1.4](source-evidence.md#http-transport-evidence)。删除后重新核对全 Reactor 与公司镜像，确认上述依赖不再进入产物；保留仍被使用的 Jackson、Reactor Core、日志和测试用 MockWebServer，不机械排除共享传递依赖；`json-schema-validator` 在 AI 模块中未被使用，按[工具系统 §9.7.4](../../01-总体架构/02-CampusClaw工具系统/README.md#tool-schema-subset)删除声明。公司父 POM 的完整依赖树与删减产物尚未验证。
 
 ## 7. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.12.1 | 2026-10-17 | AI 模块未使用的 json-schema-validator 声明改由工具系统 §9.7 删除。 |
 | 2.12.0 | 2026-10-16 | 模型调用改用 JDK HttpClient 并删除 Reactor Netty，用 Redis 全局许可（Redisson 客户端）把所有实例合计的模型调用限制在 100 个，Redis 故障时降级为每实例 50 个，复用连接且不预热。 |
 | 2.11.0 | 2026-10-09 | AI 提供通用只读参数预览与内部原始 JSON 诊断，保持完整解析和执行边界。 |
 | 2.10.0 | 2026-09-19 | Mate 控制全部输出额度，Claw 每个新执行读取模型窗口并在执行内复用。 |
