@@ -622,7 +622,6 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | 数组 | `uniqueItems` | 扩展：Mate 工具（2026-10-19 确认） | 布尔值；`true` 时元素两两不相等，相等按 `enum` 的 JSON 值比较；`false` 不起作用 |
 | 字符串 | `minLength`、`maxLength` | 扩展：`CronTool`、`AskUserQuestionTool`、`TodoUpdateTool`、`SearchTools`、`ExitPlanModeTool` 等 | 非负整数；长度按 Unicode 码点计数，与现状一致 |
 | 字符串 | `pattern` | 扩展：`AskUserQuestionTool` 的问题 ID | 用 `java.util.regex` 编译，按部分匹配（`find`）判断，与现状一致 |
-| 字符串 | `format` | 扩展：Mate 工具（2026-10-19 确认） | 校验 `date-time`、`date`、`time`（RFC 3339，`time` 须带时区偏移）、`email`（恰好一个 `@`，两侧非空且无空白和控制字符）、`uri`（`java.net.URI` 能解析且带 scheme）、`uuid`（8-4-4-4-12 位十六进制）、`ipv4`（四段 0～255、无前导零）、`ipv6`（按 RFC 4291 文本形式解析，不做 DNS 查询）；其他格式名按丢弃处理 |
 | 数值 | `minimum`、`maximum` | 扩展：Mate 工具（2026-10-19 确认） | 闭区间，按数学值比较，`1` 与 `1.0` 相同 |
 | 取值 | `enum`、`const` | DSH | 按 JSON 值相等比较，数值按数学值比较（`1` 与 `1.0` 相等）；`enum` 非空 |
 | 组合 | `oneOf` | DSH | 非空子 Schema 数组，恰好一个分支通过才算通过 |
@@ -630,12 +629,13 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 | 组合 | `if`、`then`、`else` | 扩展：Mate 工具（2026-10-19 确认） | `if` 通过时按 `then` 校验，不通过时按 `else` 校验；`if` 自身的错误不报告。没有 `if` 时 `then`、`else` 不起作用，记为丢弃项 |
 | 注解 | `title`、`description`、`default`、`examples` | DSH | 只读取，不参与校验 |
 | 注解 | `$schema` | 扩展：`AskUserQuestionTool` | 只读取，不限取值 |
+| 注解 | `format` | 扩展：Mate 工具（2026-10-19 确认） | 只读取，不校验，与现状一致：networknt 1.5.2 在 2020-12 默认元 Schema 下也只把它当注解 |
 
 DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字段必须在同级 `properties` 中声明。这两条不是 2020-12 的要求，`CronTool` 正是“外层声明字段、分支按 `action` 区分必填项”的写法，所以不采用。
 
-关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items` 和数量限制只检查数组，长度、`pattern` 和 `format` 只检查字符串，`minimum`、`maximum` 只检查数值。`additionalProperties` 只认同级 `properties` 里的字段，看不到 `allOf` 或 `then` 分支里声明的字段。这些都与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
+关键字只作用于对应类型的值：`properties`、`required`、`additionalProperties` 只检查对象，`items` 和数量限制只检查数组，长度和 `pattern` 只检查字符串，`minimum`、`maximum` 只检查数值。`additionalProperties` 只认同级 `properties` 里的字段，看不到 `allOf` 或 `then` 分支里声明的字段。这些都与 2020-12 一致，例如 `{"minLength": 1}` 不拒绝数字。
 
-表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`anyOf`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`$comment`、`deprecated`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如类型数组、对象形式的 `additionalProperties`、数组形式的 `items`、无法编译的 `pattern`、负数 `minLength`、不在上表中的 `format` 名称。布尔子 Schema（`true`/`false`）也丢弃，等同空 Schema。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
+表外关键字静默丢弃：编译时跳过该关键字和它下面的子 Schema，不参与校验，也不让定义无效。常见的有 `$ref`、`$defs`、`anyOf`、`not`、`patternProperties`、`propertyNames`、`dependentRequired`、`prefixItems`、`exclusiveMinimum`、`exclusiveMaximum`、`multipleOf`、`$comment`、`deprecated`，以及 `x-` 开头的扩展字段。表内关键字的取值不符合表中形状时同样丢弃，例如类型数组、对象形式的 `additionalProperties`、数组形式的 `items`、无法编译的 `pattern`、负数 `minLength`。布尔子 Schema（`true`/`false`）也丢弃，等同空 Schema。超过 32 层的子 Schema 整体丢弃。被丢弃的 `$ref` 不会解析，校验时不会发起网络请求。
 
 丢弃只能放宽校验，不能收紧。表内有两处会因此出问题，分别处理：
 
@@ -658,7 +658,6 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | 组合 | `not` | 内部有丢弃项时结果会收紧，这种情况整块丢弃 | 按 Mate 用量 |
 | 不建议 | `$ref`、`$defs`、`$id`、`$anchor`、`$dynamicRef`、`unevaluatedProperties`、`unevaluatedItems` | 引用要处理循环和解析范围，`unevaluated*` 要追踪哪些字段已求值，复杂度成倍增加 | 不加入；只支持文档内 `$ref` 时可另行评估 |
 
-上表之外的其他 `format` 名称（如 `hostname`、`uri-reference`、`duration`）也按需逐个加入，不一次补齐。
 
 #### 9.7.2 校验流程
 
@@ -683,7 +682,6 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | `pattern` | 格式应匹配正则 {pattern} |
 | `minItems` / `maxItems` | 元素数量应至少为 {n} / 元素数量应不超过 {n} |
 | `uniqueItems` | 元素不能重复：第 {i} 项与第 {j} 项相同（路径指向数组） |
-| `format` | 格式应为 {format} |
 | `minimum` / `maximum` | 应不小于 {n} / 应不大于 {n} |
 | `oneOf` | 应恰好满足一种参数组合，当前满足 {k} 种；退化后为“应至少满足一种参数组合” |
 
@@ -697,7 +695,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | F4 | 参数不满足表内关键字 | 返回 `TOOL_ARGUMENTS_INVALID` 和 §9.6 的恢复反馈，业务未执行 |
 | F5 | 校验器自身抛出未预期异常 | 按定义无效处理，不当作参数错误，也不放行执行 |
 
-对外行为变化在 F2：networknt 现在会校验 `anyOf`、`minimum`、`$ref` 等关键字，切换后这些约束在 Claw 侧不再校验，原本被拒的参数会进入确认并请求 Mate execute。`format` 方向相反：networknt 现在不校验它，切换后开始校验，原本放行的参数可能被拒。所以切换前按 T2 普查现网定义，列出会被丢弃的约束和用了 `format` 的字段，交给 Mate 侧确认。
+对外行为变化在 F2：networknt 现在会校验 `anyOf`、`exclusiveMinimum`、`$ref` 等关键字，切换后这些约束在 Claw 侧不再校验，原本被拒的参数会进入确认并请求 Mate execute。`format` 现在本来就不校验，切换后仍只作注解，不受影响。所以切换前按 T2 普查现网定义，列出会被丢弃的约束，交给 Mate 侧确认。
 
 #### 9.7.4 代码结构与依赖
 
@@ -709,14 +707,14 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | `modules/ai/pom.xml` | 删除未使用的依赖声明 |
 | `modules/agent-core/pom.xml`、`modules/coding-agent-cli/pom.xml`、`campusclaw/pom.xml` | 依赖改为 `test` scope，只供对照测试；根 POM 的 `dependencyManagement` 保留版本号 |
 
-运行时产物去掉 `json-schema-validator` 1.5.2、`itu` 1.10.2、`jackson-dataformat-yaml` 2.18.3 三个 jar，约 686 KB。`snakeyaml` 仍由 Spring Boot 引入，不受影响。主代码估计 700～900 行，测试约 1300 行。
+运行时产物去掉 `json-schema-validator` 1.5.2、`itu` 1.10.2、`jackson-dataformat-yaml` 2.18.3 三个 jar，约 686 KB。`snakeyaml` 仍由 Spring Boot 引入，不受影响。主代码估计 550～750 行，测试约 1200 行。
 
 #### 9.7.5 测试对照
 
-- **关键字单测：** 逐个关键字覆盖通过、失败和边界值，包括按码点计数的 emoji、`1` 与 `1.0`、`integer`、深层嵌套路径、指针转义，以及 Cron 的 `oneOf` 分支；每种 `format` 的合法和非法样例；`allOf` 的错误合并；`if` 通过和不通过两条路径，以及 `if` 含丢弃项时整组丢弃。
+- **关键字单测：** 逐个关键字覆盖通过、失败和边界值，包括按码点计数的 emoji、`1` 与 `1.0`、`integer`、深层嵌套路径、指针转义，以及 Cron 的 `oneOf` 分支；`allOf` 的错误合并；`if` 通过和不通过两条路径，以及 `if` 含丢弃项时整组丢弃。
 - **定义单测：** 每个表外关键字、不符合形状的取值、布尔子 Schema 和超深嵌套都进入丢弃清单，且不影响同级其余关键字的校验；分支含丢弃项的 `oneOf` 按“至少一个”判断；只有根节点不是对象时判定义无效。
 - **框架工具全量编译：** 从 Runtime、Cron、Subagent 三入口的框架工具清单枚举全部工具（不手写名单），逐个编译输入 Schema；任何一个的丢弃清单非空都让测试失败，失败信息给出工具名和丢弃项位置。
-- **差分对照：** networknt 只在测试 scope 中使用。语料是全部框架工具定义加按关键字构造的 Schema；参数用合法样例加确定性变异生成（删必填字段、换类型、越过长度、数量和数值边界、加多余字段、改枚举值、制造重复元素、改坏格式）。比较 `format` 时，networknt 显式开启格式断言；`email` 只比较典型样例，其余边界以本节规则为准。两边的有效、无效判定必须一致；只有一个错误的用例，字段路径也要一致（比较前把 networknt 的 `required` 和 `additionalProperties` 位置换算到字段路径）。文案不比较。另加含表外关键字的语料，只做单向比较：networknt 判有效的参数，本实现也必须判有效，证明丢弃只放宽、不收紧。
+- **差分对照：** networknt 只在测试 scope 中使用。语料是全部框架工具定义加按关键字构造的 Schema；参数用合法样例加确定性变异生成（删必填字段、换类型、越过长度、数量和数值边界、加多余字段、改枚举值、制造重复元素）。两边的有效、无效判定必须一致；只有一个错误的用例，字段路径也要一致（比较前把 networknt 的 `required` 和 `additionalProperties` 位置换算到字段路径）。文案不比较。另加含表外关键字的语料，只做单向比较：networknt 判有效的参数，本实现也必须判有效，证明丢弃只放宽、不收紧。
 - **依赖验收：** `campusclaw-coding-agent` 的 `dependency:tree` 在 compile 和 runtime scope 下不再出现上述三个构件，镜像同步后 `campusclaw/pom.xml` 一致。
 
 #### 9.7.6 待对齐事项
@@ -984,7 +982,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.28.0 | 2026-10-19 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，按 Mate 需要加入 `uniqueItems`、`minimum`、`maximum`、`format`、`allOf`、`if`/`then`/`else`，列出候选关键字分档，json-schema-validator 降为测试对照依赖（待实现）。 |
+| 2.28.0 | 2026-10-19 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，按 Mate 需要加入 `uniqueItems`、`minimum`、`maximum`、`allOf`、`if`/`then`/`else` 和注解 `format`，列出候选关键字分档，json-schema-validator 降为测试对照依赖（待实现）。 |
 | 2.27.2 | 2026-10-15 | 框架工具中文 label 已实现。 |
 | 2.27.1 | 2026-10-15 | Skill 与 Agent 工具展示名改用界面术语“技能”“子智能体”（待实现）。 |
 | 2.27.0 | 2026-10-15 | 框架工具 label 由工具自身定义为固定中文展示名（待实现）。 |
