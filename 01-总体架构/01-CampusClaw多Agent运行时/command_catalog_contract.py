@@ -46,8 +46,8 @@ def validate_commands(commands, scope="session"):
 
 HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
 # How each command takes its argument, so any client picks the input control without per-command logic.
-# text: free text; options: values from the Session queries (ListSessionModels, ListSessionThinkingValues,
-# ListSessionModes), shown through Mate command options. Skills take text; Builtins not listed take no argument.
+# text: free text; options: values from ListSessionCommandValues, shown through Mate command options.
+# Skills take text; Builtins not listed take no argument.
 ARGUMENT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
 
 
@@ -124,3 +124,46 @@ def validate_projection_pair(runtime, public):
     require(set(right) == SESSION_SUCCESS_IDS, "Mate maps every Chat to a Session and projects only the full catalog")
     for identity in right:
         require(left[identity]["bodies"] == right[identity]["bodies"], "Mate GET projection drifted from Runtime")
+
+
+OPTION_COMMANDS = tuple(name for name, argument_type in ARGUMENT_TYPE_BY_COMMAND.items() if argument_type == "options")
+# One example per option command and value state; Mate options examples reuse these ids.
+VALUE_EXAMPLE_IDS = ("200-model", "200-model-empty", "200-thinking", "200-thinking-unsupported", "200-mode")
+
+
+def value_examples(operation):
+    """Return {example id: {currentValue, values}} for the ListSessionCommandValues success examples."""
+    successes = [response for response in operation["responses"] if response["status"] == "200"]
+    require([response.get("id") for response in successes] == list(VALUE_EXAMPLE_IDS),
+            "Command values require model, empty model, thinking (supported and unsupported) and mode examples")
+    results = {}
+    for response in successes:
+        require(response["headers"].get("Cache-Control") == "no-store", "Command values must not be cached")
+        bodies = list(response["bodies"].values())
+        require(len(bodies) == 1 and set(bodies[0]) == {"resCode", "resMsg", "result"} and bodies[0]["resCode"] == "0",
+                "Command values ResultBean differs")
+        result = bodies[0]["result"]
+        require(set(result) == {"currentValue", "values"} and isinstance(result["currentValue"], str)
+                and isinstance(result["values"], list), "Command values carry the current value and the values only")
+        results[response["id"]] = result
+    return results
+
+
+def validate_command_values(operation, model_query):
+    """One query serves every option command; model matches the /model query result, thinking follows the model."""
+    command_name = next(item for item in operation["parameters"] if item.get("name") == "commandName")
+    require(command_name["in"] == "path" and command_name["schema"] == " | ".join(OPTION_COMMANDS),
+            "commandName must list exactly the commands whose argumentType is options")
+    results = value_examples(operation)
+    require(results["200-model"] == {"currentValue": model_query["currentModelId"], "values": model_query["models"]},
+            "Model values must be the models the /model query returns")
+    require(results["200-model-empty"] == {"currentValue": model_query["currentModelId"], "values": []},
+            "Empty model values keep the current model")
+    require(results["200-thinking"] == {"currentValue": "on", "values": ["on", "off"]}
+            and results["200-thinking-unsupported"] == {"currentValue": "off", "values": ["off"]},
+            "Thinking values are on/off, or off only when the model does not support thinking")
+    require(results["200-mode"]["values"] == ["plan", "build"]
+            and results["200-mode"]["currentValue"] in results["200-mode"]["values"], "Mode values are plan and build")
+    codes = {(response["status"], body.get("resCode")) for response in operation["responses"]
+             for body in response.get("bodies", {}).values()}
+    require(("404", "COMMAND_VALUES_NOT_FOUND") in codes, "Commands without values must return 404")

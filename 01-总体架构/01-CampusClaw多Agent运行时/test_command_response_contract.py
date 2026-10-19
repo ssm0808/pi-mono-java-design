@@ -67,13 +67,12 @@ class CommandResponseContractTest(unittest.TestCase):
         self.reject(lambda cases: self.result(cases["200-status"])["lifetimeUsage"].update({"input": True}))
 
     def test_cross_operation_source_shape_is_authoritative(self):
-        for key in ("GetSession", "ListSessionModels"):
-            with self.subTest(key=key):
-                models = copy.deepcopy(self.models)
-                response = next(item for item in self.operation(models, key)["responses"] if item["status"] == "200")
-                next(iter(response["bodies"].values()))["result"]["newResourceField"] = "example"
-                with self.assertRaises(RuntimeError):
-                    validate_response_reuse(models)
+        models = copy.deepcopy(self.models)
+        response = next(item for item in self.operation(models, "GetSession")["responses"] if item["status"] == "200")
+        next(iter(response["bodies"].values()))["result"]["newResourceField"] = "example"
+        with self.assertRaises(RuntimeError):
+            validate_response_reuse(models)
+        self.reject(lambda cases: self.result(cases["200-model-query"]).update({"newResourceField": "example"}))
 
     def test_headers_match_resource_kind(self):
         for identity in SESSION_CASES:

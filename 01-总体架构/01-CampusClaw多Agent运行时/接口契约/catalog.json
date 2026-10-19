@@ -1,5 +1,5 @@
 {
-  "version": "1.19.0",
+  "version": "1.20.0",
   "title": "CampusClaw 当前接口",
   "basePath": "/campusclaw-service/v1",
   "output": "chat-api-review.html",
@@ -45,28 +45,12 @@
       "design": "chat-events-history-design.md"
     },
     {
-      "key": "ListSessionModels",
-      "source": "接口契约/操作/06-list-session-models.json",
-      "common": "接口契约/common.json",
-      "status": "原契约已确认",
-      "note": "模型清单规则保持不变。",
-      "design": "chat-http-v1-design.md#241-get-session-models"
-    },
-    {
-      "key": "ListSessionThinkingValues",
-      "source": "接口契约/操作/09-list-session-thinking-values.json",
+      "key": "ListSessionCommandValues",
+      "source": "接口契约/操作/09-list-session-command-values.json",
       "common": "接口契约/common.json",
       "status": "已确认 · 待实现",
-      "note": "按会话当前模型返回深度思考可选值，对应 pi 的 get_available_thinking_levels；供 Mate 命令选项使用。",
-      "design": "chat-http-v1-design.md#245-get-session-thinking-values-与-modes"
-    },
-    {
-      "key": "ListSessionModes",
-      "source": "接口契约/操作/10-list-session-modes.json",
-      "common": "接口契约/common.json",
-      "status": "已确认 · 待实现",
-      "note": "返回工作模式可选值，对应 Codex 的 collaborationMode/list；供 Mate 命令选项使用。",
-      "design": "chat-http-v1-design.md#245-get-session-thinking-values-与-modes"
+      "note": "所有选项型命令（model、thinking、mode）共用的按会话取值接口，返回 {currentValue, values}；替代原 models、thinking-values 与 modes 三个专用接口，供 Mate 命令选项使用。",
+      "design": "chat-http-v1-design.md#245-get-session-command-values"
     },
     {
       "key": "UpdateSession",

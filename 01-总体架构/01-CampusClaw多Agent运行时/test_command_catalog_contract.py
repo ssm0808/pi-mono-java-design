@@ -5,7 +5,8 @@ import json
 import unittest
 from pathlib import Path
 
-from command_catalog_contract import validate_catalog_examples, validate_commands, validate_descriptor, validate_projection_pair
+from command_catalog_contract import (validate_catalog_examples, validate_command_values, validate_commands,
+                                      validate_descriptor, validate_projection_pair)
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT.parents[1] / "02-服务与接口/06-mate-service聊天命令API"
@@ -150,6 +151,23 @@ class CommandCatalogContractTest(unittest.TestCase):
         self.public["responses"][1]["bodies"]["zh-CN"]["result"]["commands"][-1]["description"] = "different"
         with self.assertRaises(RuntimeError):
             validate_projection_pair(self.runtime, self.public)
+
+    def test_one_values_query_serves_every_option_command(self):
+        operations = ROOT / "接口契约/操作"
+        values = json.loads((operations / "09-list-session-command-values.json").read_text())["operation"]
+        execute = json.loads((operations / "13-execute-session-command.json").read_text())["operation"]
+        model_query = next(item for item in execute["responses"] if item.get("id") == "200-model-query")
+        model_query = next(iter(model_query["bodies"].values()))["result"]
+        validate_command_values(values, model_query)
+        for mutate in (lambda op: op["parameters"][1].update(schema="model | thinking"),
+                       lambda op: op["responses"].pop(4),
+                       lambda op: op["responses"][0]["bodies"]["en-US"]["result"]["values"].pop(),
+                       lambda op: op["responses"][3]["bodies"]["en-US"]["result"]["values"].append("on"),
+                       lambda op: op["responses"][2]["bodies"]["en-US"]["result"].update(label="On")):
+            broken = copy.deepcopy(values)
+            mutate(broken)
+            with self.subTest(mutate=mutate), self.assertRaises(RuntimeError):
+                validate_command_values(broken, model_query)
 
 
 if __name__ == "__main__":

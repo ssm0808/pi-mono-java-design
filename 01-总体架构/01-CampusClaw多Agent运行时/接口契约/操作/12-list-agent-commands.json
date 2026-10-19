@@ -458,7 +458,7 @@
     "argumentType": {
       "status": "已确认",
       "confirmedAt": "2026-10-17",
-      "decision": "清单返回 argumentType（text、options 或省略），不返回 hints 或 argumentHint：参数形态是命令自身属性，Runtime 定义命令时就知道；占位文字与 description 重复，选项型命令直接展示选项列表。可选值不放在命令清单，按会话由 ListSessionModels、ListSessionThinkingValues、ListSessionModes 提供，对应 pi 的 get_available_models 与 get_available_thinking_levels。"
+      "decision": "清单返回 argumentType（text、options 或省略），不返回 hints 或 argumentHint：参数形态是命令自身属性，Runtime 定义命令时就知道；占位文字与 description 重复，选项型命令直接展示选项列表。可选值不放在命令清单，按会话由 ListSessionCommandValues 一个接口提供（2026-10-18 由 models、thinking-values、modes 三个查询合并），对应 pi 挂在命令上的 getArgumentCompletions。"
     }
   }
 }
