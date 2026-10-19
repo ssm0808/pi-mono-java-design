@@ -341,6 +341,12 @@
     .command-chip button:hover { background: var(--surface-selected); }
     #selected-command-name { min-width: 44px; padding: 0 10px; overflow-wrap: anywhere; text-align: left; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
     #remove-command { flex: 0 0 44px; width: 44px; font-size: 20px; color: var(--text-secondary); }
+    .command-values { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 6px; padding: 4px 2px 6px; }
+    .command-value { min-height: 44px; padding: 6px 14px; color: var(--text-primary); border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-raised); font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; cursor: pointer; }
+    .command-value[aria-checked="true"] { border-color: var(--action-primary); background: var(--surface-selected); }
+    .command-value small { margin-left: 6px; color: var(--text-secondary); font-family: inherit; }
+    .command-value:disabled { opacity: .6; cursor: default; }
+    .command-value:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     .composer textarea {
       flex: 1 1 180px; min-width: 0; width: 100%; min-height: 54px; max-height: 160px; padding: 10px 7px;
       resize: none; color: var(--text-primary); line-height: 1.5; border: 0; background: transparent;
@@ -445,7 +451,7 @@
     .running-banner { border: 0; padding: 3px 0; color: var(--text-secondary); background: transparent; }
     @media(max-width:920px) { .review-shell { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); } .review-main { padding: 14px; } }
   </style>
-<link rel="stylesheet" href="fidelity.css?v=1.0.0">
+<link rel="stylesheet" href="fidelity.css?v=1.0.1">
 </head>
 <body>
   <div class="review-shell">
@@ -458,6 +464,7 @@
       <div class="state-tabs" role="tablist" aria-label="切换 Slash Command 状态">
         <button class="state-tab" role="tab" aria-selected="true" data-state="catalog"><span>命令清单</span><small>输入 / 后的默认浏览状态</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="argument"><span>参数编辑</span><small>选择后仍需明确运行</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="options"><span>选项单选</span><small>默认勾选当前值，回车执行</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="running"><span>运行中清单</span><small>完全服从服务端 Descriptor</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="help"><span>Help 结果</span><small>非对话、仅当前页面</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="unmatched"><span>未匹配</span><small>保留草稿、禁止自动回退</small></button>
@@ -534,7 +541,7 @@
                     <button id="selected-command-name" type="button" aria-label="更换命令"></button>
                     <button id="remove-command" type="button" aria-label="移除命令">×</button>
                   </div>
-                  <select id="mode-choice" aria-label="工作模式" hidden><option value="">查询当前模式</option><option value="plan">计划（plan）</option><option value="build">实施（build）</option></select>
+                  <div class="command-values" id="command-values" role="radiogroup" tabindex="-1" aria-describedby="parameter-hint" hidden></div>
                   <textarea id="composer-input" rows="2" spellcheck="false" aria-label="输入消息"></textarea>
                 </div>
                 <button id="command-run" type="button" hidden>执行命令</button>
@@ -564,28 +571,52 @@
   <script>
 
     // Local review fixtures only. No HTTP calls are made.
-    // Descriptor hints are display text, never an input-capability flag.
+    // argumentType 决定参数输入方式：text 用文本框，options 只能从可选值中单选，缺省表示不接收参数。
     const idleCatalog = [
-      { name: "help", type: "builtin", description: "了解助手的用途与使用场景", hints: [] },
-      { name: "status", type: "builtin", description: "查看当前会话状态", hints: [] },
-      { name: "name", type: "builtin", description: "查看或设置会话名称", hints: ["displayName"] },
-      { name: "model", type: "builtin", description: "查看或切换模型", hints: ["modelId"] },
-      { name: "thinking", type: "builtin", description: "查看或切换思考模式", hints: ["on|off"] },
-      { name: "mode", type: "builtin", description: "查看或切换 plan/build 工作模式", hints: ["plan|build"] },
-      { name: "compact", type: "builtin", description: "压缩当前会话上下文", hints: [] },
-      { name: "skills", type: "builtin", description: "查看可用技能", hints: [] },
-      { name: "skill:inspection-plan", type: "skill", description: "整理园区巡检计划", hints: ["request"] }
+      { name: "help", type: "builtin", description: "了解助手的用途与使用场景" },
+      { name: "status", type: "builtin", description: "查看当前会话状态" },
+      { name: "name", type: "builtin", description: "查看或设置会话名称", argumentType: "text" },
+      { name: "model", type: "builtin", description: "查看或切换模型", argumentType: "options" },
+      { name: "thinking", type: "builtin", description: "查看或切换思考模式", argumentType: "options" },
+      { name: "mode", type: "builtin", description: "查看或切换 plan/build 工作模式", argumentType: "options" },
+      { name: "compact", type: "builtin", description: "压缩当前会话上下文" },
+      { name: "skills", type: "builtin", description: "查看可用技能" },
+      { name: "skill:inspection-plan", type: "skill", description: "整理园区巡检计划", argumentType: "text" }
     ];
     const runningCatalog = idleCatalog.filter((command) => command.type === "builtin" && command.name !== "compact");
-    // Central UI adaptation of the shared command-state contract, not server authorization.
-    function canEditArguments(command) {
-      return !!command && (command.name === "name" || (!running &&
-        (command.type === "skill" || ["model", "thinking", "mode"].includes(command.name))));
+    // 选项型命令的可选值，对应 GET /commands/{name}/values 返回的 {currentValue, values}。
+    // model 的当前值不在可选值中，用来演示“当前值不可选时不勾选”。
+    const initialValues = {
+      model: { currentValue: "默认模型", values: ["标准模型", "长上下文模型"] },
+      thinking: { currentValue: "off", values: ["on", "off"] },
+      mode: { currentValue: "build", values: ["plan", "build"] }
+    };
+    let commandValues = JSON.parse(JSON.stringify(initialValues));
+    function isOptions(command) { return command?.argumentType === "options"; }
+    // 草稿能否执行：无参数命令不能带参数；选项型参数必须是可选值之一，任务运行中只能查询（参数为空）
+    function invalidArguments(command, text) {
+      if (!command.argumentType) return !!text;
+      if (isOptions(command)) return !!text && (running || !commandValues[command.name].values.includes(text));
+      return false;
+    }
+    // 默认勾选当前值；手输的参数不在可选值中时同样回到当前值。当前值不可选（如 model）或任务运行中
+    // 不勾选，执行即查询：运行中带参数的修改会被服务端拒绝
+    function defaultValue(command, text) {
+      const { currentValue, values } = commandValues[command.name];
+      if (running) return "";
+      if (values.includes(text)) return text;
+      return values.includes(currentValue) ? currentValue : "";
+    }
+    function argumentHint(command) {
+      if (isOptions(command)) return running ? "任务运行中只能查看当前值，回车执行查询" : "用方向键或点击选择可选值，回车执行";
+      if (command?.argumentType === "text") return command.type === "skill" ? "补充要求（可选）" : "输入新值，留空则查看当前值";
+      return "";
     }
     const states = {
       catalog: { title: "命令清单", description: "输入 / 后继续输入可过滤，选择后收起为命令标签。" },
       argument: { title: "参数编辑", description: "命令名称与参数分开编辑，点击名称可更换，× 可退出。" },
-      running: { title: "运行中清单", description: "按命令规则与会话状态展示；model 的 hints 不变，运行中只允许查询。" },
+      options: { title: "选项单选", description: "选项型命令不显示文本框，默认勾选当前值；方向键或点击切换，回车执行。" },
+      running: { title: "运行中清单", description: "按命令规则与会话状态展示；选项型命令运行中不勾选可选值，回车只查询当前值。" },
       help: { title: "Help 临时结果", description: "内置命令结果独立呈现，取消或完成后恢复普通消息草稿。" },
       unmatched: { title: "未匹配命令", description: "保留原文，继续修改或按 Esc 退出。" }
     };
@@ -605,7 +636,7 @@
     let selected = null, replacement = null;
     let mode = false, paletteOpen = false, moreOpen = false, composing = false, executing = false;
     let activeIndex = 0, running = false, stopping = false, generation = 0, error = "";
-    let resultFold = null, sessionMode = "build";
+    let resultFold = null;
 
     function parse(raw) {
       const match = /^\/([^\t\n\v\f\r ]*)(?:[\t\n\v\f\r ]+([\s\S]*))?$/u.exec(raw);
@@ -616,33 +647,58 @@
       return parsed ? catalog.filter((item) => item.name.startsWith(parsed.nameToken)) : [];
     }
     function announce(text) { $("#composer-announcement").textContent = text; }
-    function focusEditor() { (selected?.name === "mode" ? $("#mode-choice") : selected && !canEditArguments(selected) ? (running ? $("#command-run") : submitButton) : input).focus(); }
+    function focusEditor() {
+      // 选项型命令聚焦已勾选项，无勾选时聚焦第一项；运行中可选值不可点，焦点落在执行按钮
+      const radio = $('#command-values [aria-checked="true"]') || $('#command-values [role="radio"]');
+      if (isOptions(selected) && !running && radio) { radio.focus(); return; }
+      (selected && (isOptions(selected) || !selected.argumentType) ? (running ? $("#command-run") : submitButton) : input).focus();
+    }
+    function renderValues() {
+      const group = $("#command-values");
+      group.hidden = !isOptions(selected);
+      group.replaceChildren();
+      if (!isOptions(selected)) return;
+      const { currentValue, values } = commandValues[selected.name];
+      group.setAttribute("aria-label", selected.name + " 的可选值");
+      values.forEach((value, index) => {
+        const radio = document.createElement("button");
+        const checked = value === argumentsText;
+        radio.type = "button"; radio.className = "command-value"; radio.dataset.value = value;
+        radio.setAttribute("role", "radio");
+        radio.setAttribute("aria-checked", String(checked));
+        // 漫游 tabindex：已勾选项可 Tab 聚焦，无勾选时第一项可聚焦
+        radio.tabIndex = checked || (!values.includes(argumentsText) && index === 0) ? 0 : -1;
+        radio.disabled = executing || running;
+        radio.textContent = value;
+        if (value === currentValue) {
+          const mark = document.createElement("small");
+          mark.textContent = "当前";
+          radio.append(mark);
+        }
+        radio.addEventListener("click", () => chooseValue(value));
+        group.append(radio);
+      });
+    }
     function render() {
       if (paletteOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
       else if (!paletteOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
       const options = matches();
-      const invalidDraft = !!selected && ((!canEditArguments(selected) && !!argumentsText) || !catalog.some((c) => c.name === selected.name) || (selected.name === "mode" && !["", "plan", "build"].includes(argumentsText)));
+      // 选项型草稿在任务开始运行后回到查询，与运行中不勾选可选值一致
+      if (running && isOptions(selected)) argumentsText = "";
+      const invalidDraft = !!selected && (invalidArguments(selected, argumentsText) || !catalog.some((c) => c.name === selected.name));
       if (invalidDraft) error = "当前调用不可执行，草稿已保留；请清除参数或重新选择命令。";
       activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
       palette.hidden = !paletteOpen;
       chip.hidden = !selected;
-      input.hidden = !!selected && !canEditArguments(selected) && !argumentsText;
-      const modeChoice = $("#mode-choice");
-      modeChoice.hidden = selected?.name !== "mode";
-      modeChoice.disabled = executing;
-      modeChoice.value = argumentsText;
-      [...modeChoice.options].forEach(option => {
-        option.disabled = running && !!option.value;
-        const labels = { "": "查询当前模式", plan: "计划（plan）", build: "实施（build）" };
-        option.textContent = labels[option.value] + (option.value === sessionMode ? " ✓ 当前" : "");
-      });
-      if (selected?.name === "mode" && ["", "plan", "build"].includes(argumentsText)) input.hidden = true;
+      // 选项型命令只显示可选值；无参数命令仅在误带参数时显示文本框，便于清除
+      input.hidden = !!selected && (isOptions(selected) || (!selected.argumentType && !argumentsText));
+      renderValues();
       input.disabled = executing;
       $("#more-button").disabled = executing;
       chipName.disabled = executing;
       $("#remove-command").disabled = executing;
       input.value = selected ? argumentsText : mode ? query : message;
-      input.placeholder = selected ? (selected.hints || []).join("、") : running && !mode ? "任务结束后可发送，草稿可继续编辑" : "输入消息，或输入 / 选择命令";
+      input.placeholder = selected ? argumentHint(selected) : running && !mode ? "任务结束后可发送，草稿可继续编辑" : "输入消息，或输入 / 选择命令";
       input.setAttribute("aria-label", selected ? "编辑 " + selected.name + " 的参数" : mode ? "查找命令" : "输入消息");
       ["role", "aria-autocomplete", "aria-expanded", "aria-controls", "aria-activedescendant", "aria-describedby"].forEach((key) => input.removeAttribute(key));
       if (mode && !selected) {
@@ -656,10 +712,8 @@
         chipName.textContent = selected.name;
         chipName.setAttribute("aria-label", "更换命令 " + selected.name);
         $("#remove-command").setAttribute("aria-label", "移除命令 " + selected.name);
-        if (selected.hints?.length) {
-          $("#parameter-hint").textContent = selected.hints.join("、");
-          input.setAttribute("aria-describedby", "parameter-hint");
-        }
+        $("#parameter-hint").textContent = argumentHint(selected);
+        if (selected.argumentType === "text") input.setAttribute("aria-describedby", "parameter-hint");
       }
       list.replaceChildren();
       options.forEach((command, index) => {
@@ -714,13 +768,29 @@
     function choose(command) {
       if (!paletteOpen || executing || composing) return;
       const parsedArguments = parse(query)?.argumentsText || "";
-      if (!canEditArguments(command) && parsedArguments) {
+      if (!command.argumentType && parsedArguments) {
         error = "此命令不接收参数"; render(); input.focus(); return;
       }
       argumentsText = replacement?.selected.name === command.name && !parsedArguments
         ? replacement.argumentsText : parsedArguments;
+      if (isOptions(command)) argumentsText = defaultValue(command, argumentsText);
       selected = command; replacement = null; paletteOpen = false; error = "";
       render(); announce("已选择 " + command.name); focusEditor();
+    }
+    function chooseValue(value) {
+      if (executing || running || !commandValues[selected.name].values.includes(value)) return;
+      argumentsText = value; error = "";
+      render(); focusEditor();
+    }
+    // 方向键与 Home/End 在可选值间移动并勾选，首尾循环；无勾选时向下从第一项开始，向上从最后一项开始
+    function moveValue(key) {
+      const { values } = commandValues[selected.name];
+      if (executing || running || !values.length) return;
+      const index = values.indexOf(argumentsText), last = values.length - 1;
+      const forward = key === "ArrowDown" || key === "ArrowRight";
+      const next = key === "Home" ? 0 : key === "End" ? last
+        : forward ? (index < 0 || index === last ? 0 : index + 1) : (index <= 0 ? last : index - 1);
+      chooseValue(values[next]);
     }
     function escape() {
       if (moreOpen) { moreOpen = false; render(); $("#more-button").focus(); return; }
@@ -744,7 +814,8 @@
       render();
     }
     function showBuiltin(invocation) {
-      if (invocation.name === "mode" && invocation.arguments) sessionMode = invocation.arguments;
+      // 执行成功后才更新当前值；勾选本身只是草稿
+      if (commandValues[invocation.name] && invocation.arguments) commandValues[invocation.name].currentValue = invocation.arguments;
       result.classList.add("visible");
       result.open = true; resultFold = null;
       $(".result-subtitle").textContent = invocation.name + " · 演示结果";
@@ -756,9 +827,9 @@
         const text = {
           status: running ? "当前会话正在执行。" : "当前会话空闲，暂无待确认操作。",
           name: invocation.arguments ? "会话名称：" + invocation.arguments : "会话名称：园区巡检",
-          model: invocation.arguments ? "当前模型：" + invocation.arguments : "当前模型：默认模型",
-          thinking: invocation.arguments ? "思考模式：" + invocation.arguments : "思考模式：关闭",
-          mode: "当前工作模式：" + sessionMode,
+          model: "当前模型：" + commandValues.model.currentValue,
+          thinking: "思考模式：" + commandValues.thinking.currentValue,
+          mode: "当前工作模式：" + commandValues.mode.currentValue,
           compact: "本次无需压缩上下文。",
           skills: "inspection-plan：整理园区巡检计划"
         };
@@ -779,7 +850,7 @@
         message = ""; running = true; catalog = runningCatalog; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
       }
       if (!selected) return;
-      if ((!canEditArguments(selected) && argumentsText) || !catalog.some((c) => c.name === selected.name) || (selected.name === "mode" && !["", "plan", "build"].includes(argumentsText))) {
+      if (invalidArguments(selected, argumentsText) || !catalog.some((c) => c.name === selected.name)) {
         error = "当前调用不可执行，草稿已保留"; render(); return;
       }
       if (Array.from(argumentsText).length > 2048) {
@@ -800,7 +871,6 @@
       exitCommand();
       announce(invocation.name + " 演示完成");
     }
-    $("#mode-choice").addEventListener("change", () => { argumentsText = $("#mode-choice").value; error = ""; render(); });
     $("#composer-input").addEventListener("input", updateInput);
     input.addEventListener("compositionstart", () => { composing = true; });
     input.addEventListener("compositionend", () => { composing = false; updateInput(); });
@@ -808,7 +878,11 @@
       if (event.repeat && event.key === "Enter") { event.preventDefault(); return; }
       if (composing || event.isComposing || event.keyCode === 229 || executing) return;
       if (event.key === "Escape") { event.preventDefault(); escape(); return; }
-      if (![input, submitButton, $("#command-run")].includes(event.target)) return;
+      const onValues = $("#command-values").contains(event.target);
+      if (![input, submitButton, $("#command-run")].includes(event.target) && !onValues) return;
+      if (onValues && ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        event.preventDefault(); moveValue(event.key); return;
+      }
       if (event.target === submitButton && running && event.key === "Enter") {
         event.preventDefault(); stop(); return;
       }
@@ -861,9 +935,13 @@
       running = name === "running"; catalog = running ? runningCatalog : idleCatalog;
       mode = name !== "help"; paletteOpen = ["catalog", "running", "unmatched"].includes(name);
       moreOpen = false; message = ""; savedMessage = ""; argumentsText = ""; selected = null; replacement = null;
+      commandValues = JSON.parse(JSON.stringify(initialValues));
       query = name === "unmatched" ? "/deploy tomorrow" : "/"; activeIndex = 0; error = "";
       if (name === "argument") {
         selected = idleCatalog.find((item) => item.name === "name"); argumentsText = "夜间巡检会话";
+      }
+      if (name === "options") {
+        selected = idleCatalog.find((item) => item.name === "thinking"); argumentsText = defaultValue(selected, "");
       }
       $("#state-title").textContent = state.title;
       $("#state-description").textContent = state.description;
@@ -885,6 +963,6 @@
     window.addEventListener("hashchange", loadState);
 
   </script>
-<script src="preview.js?v=1.0.0"></script>
+<script src="preview.js?v=1.0.1"></script>
 </body>
 </html>
