@@ -424,7 +424,7 @@ CampusClaw 采用 `Skill → SearchTools → CallTool`：Skill 正文引用唯�
 
 | 源码路径 · 符号 | 观察 | 对设计的影响 |
 |---|---|---|
-| `com/networknt/schema/format/BaseFormatJsonValidator.java` · `isFormatAssertionVocabularyEnabled`；`FormatValidator.java` · `validate` | 2020-12 下只有元 Schema 声明 `format-assertion` 词表或显式开启时才断言 `format`；默认元 Schema 下 `format` 只是注解 | 子集把 `format` 列为注解，行为与现状一致 |
+| `com/networknt/schema/format/BaseFormatJsonValidator.java` · `isFormatAssertionVocabularyEnabled`；`FormatValidator.java` · `validate` | 2020-12 下只有元 Schema 声明 `format-assertion` 词表或显式开启时才断言 `format`；默认元 Schema 下 `format` 只是注解 | 子集校验 `format` 的固定几种格式，比现状严格，见主设计 §9.7.1 |
 | `com/networknt/schema/resource/DefaultSchemaLoader.java`；`resource/UriSchemaLoader.java` · `load` | 默认加载器链包含按 URL `openConnection` 的加载器 | 外部定义里的远程 `$ref` 可能在校验时触发网络请求；未做联网复现。子集丢弃 `$ref`，不解析也不加载 |
 | `com/networknt/schema/SchemaValidatorsConfig.java` · `getLocale` | 未配置时返回 `Locale.getDefault()` | 现状错误文案随部署环境语言变化；目标改为固定模板 |
 | `com/networknt/schema/regex/JDKRegularExpression.java` · `matches` | 默认用 `java.util.regex` 的 `find()` | 子集沿用相同正则引擎与部分匹配语义 |
