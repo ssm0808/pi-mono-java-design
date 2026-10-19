@@ -188,7 +188,7 @@ R1 中技能命令归入智能体级命令（它们由 Agent 绑定，执行时�
 | 注册表（插件式注册） | 每个 Builtin 一个 `XxxCommandContributor`；`BuiltinCommandSource` 注入 `List<BuiltinCommandContributor>` 并在启动期查重；`CompositeCommandRegistry` 再聚合 Builtin 与 Skill 两个 `CommandDefinitionSource` | 新增命令或命令来源只加类，不改中央 switch | 重名在 Spring 启动期失败。`CompositeCommandRegistry` 只把来源平铺合并成一张清单，没有树形嵌套，不是 GoF 组合模式，名称沿用 main |
 | 策略 | `BuiltinCommandDefinition` 持有 `CommandAdmissionPolicy`（当前状态能否执行）、`CommandHandler`（执行）与可选的 `CommandValuesProvider`（选项型命令的当前值与可选值） | `CommandExecutionService`、`CommandValuesService` 只按接口调用，不按命令名分支 | argumentType 为 options 的命令必须登记取值逻辑，其他命令不得登记，构造 Definition 时校验 |
 | 命令模式（轻量） | Definition 封装“做什么”，`CommandExecutionService` 按名称查找、检查准入后调用 Handler | 执行入口统一，最终准入仍在各业务服务的锁内完成 | 不支持撤销与排队，也不保存通用命令记录（见 D5） |
-| Assembler | `CommandDiscoveryResponseAssembler` 把 Builtin 元数据与 Skill 转成清单描述符，负责排序和描述本地化；`CommandResponseAssembler` 组装执行结果 | 业务服务不依赖 VO，Controller 不依赖内部 DTO | 转换方法用 `toXxx`，校验用 `requireXxx` |
+| Assembler | `CommandListResponseAssembler` 把 Builtin 元数据与 Skill 转成清单描述符，负责排序和描述本地化；`CommandResponseAssembler` 组装执行结果 | 业务服务不依赖 VO，Controller 不依赖内部 DTO | 转换方法用 `toXxx`，校验用 `requireXxx` |
 
 命名约定沿用实现仓 AGENTS.md：`Assembler` 是约定后缀之一，`Mapper` 在实现仓专指 MyBatis 持久化接口，不用于响应转换。Builtin 命令名集中在 `ClawConstants.RuntimeApi.Command`（如 `COMPACT_COMMAND`），Contributor、展示顺序和不带 sessionId 时返回的命令都引用这些常量。Builtin 描述只在 i18n 资源文件中维护，key 为 `COMMAND_BUILTIN_<NAME>_DESCRIPTION`，与错误码一样用大写下划线；每个 Builtin 在中英文资源中都必须有描述，由单元测试检查。
 
@@ -454,7 +454,7 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 | 能力 | 状态 | 核验提交与证据 |
 |---|---|---|
 | 按 Agent 与可选 sessionId 查询清单 | 已实现，待合并 | PR #364 `78b30499`：`RuntimeCommandCatalogController.listCommands` → `CommandCatalogService.listCommands`；main `fd431002` 仍为 `/sessions/{sessionId}/commands`，见 [源码证据 §1.1](source-evidence.md#agent-catalog-evidence) |
-| type/argumentType 描述符与可选值接口 | 已实现，待合并 | PR #364 `78b30499`：`CommandDiscoveryResponseAssembler`、`CommandValuesService.listValues`；main `fd431002` 仍输出 input{hint, acceptsFiles} |
+| type/argumentType 描述符与可选值接口 | 已实现，待合并 | PR #364 `22310e66`：`CommandListResponseAssembler`、`CommandValuesService.listValues`；main `fd431002` 仍输出 input{hint, acceptsFiles} |
 | Builtin 描述国际化 | 已实现，待合并 | PR #364 `78b30499`：描述只在 i18n 资源中维护（`COMMAND_BUILTIN_<NAME>_DESCRIPTION`）；main `53eff85c` 描述固定为英文，见 [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
 | 七个 Builtin 与业务响应 | 已实现 | `53eff85c`，路径见 [内置命令 §8.3](01-内置命令/README.md#83-当前-runtime-实现与验收边界) |
 | mode Builtin | 已实现，待合并 | PR #364 `78b30499`：`ModeCommandContributor`、`SessionModeConfigurationService`；main `fd431002` 仍只有七个 Contributor |

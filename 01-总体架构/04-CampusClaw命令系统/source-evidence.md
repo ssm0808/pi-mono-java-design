@@ -128,7 +128,7 @@ pi 固定基线 `5cd93f688aaab89dbb6dfa4aca535f21796ae185` 的 `packages/coding-
 
 ## 8. 设计模式与转换命名（2026-10-19）
 
-CampusClaw 核对实现 PR #364 的 `pi-mono-java@78b304994ff0372a5f54386de7b779db27ef14bf`（待合并），路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
+CampusClaw 核对实现 PR #364 的 `pi-mono-java@22310e66e93b2cd3f7bcacf91958231b8bbe7816`（待合并），路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
 
 | 源码 / 符号 | 已观察行为 |
 |---|---|
@@ -136,7 +136,7 @@ CampusClaw 核对实现 PR #364 的 `pi-mono-java@78b304994ff0372a5f54386de7b779
 | `service/command/CompositeCommandRegistry.java` · resolve | 遍历 `List<CommandDefinitionSource>`，按类别过滤后平铺合并，重名抛出 IllegalStateException；没有嵌套来源 |
 | `command/builtin/BuiltinCommandDefinition.java` · 构造器 | 组合 `CommandAdmissionPolicy`、`CommandHandler` 与可选 `CommandValuesProvider`，校验 options 命令与取值逻辑一一对应 |
 | `service/command/CommandExecutionService.java` · executeBuiltin；`service/command/CommandValuesService.java` · listValues | 按名称取 Definition 后只调用接口，不按命令名分支 |
-| `service/command/CommandDiscoveryResponseAssembler.java` · assemble / toBuiltinDescriptor | 按 `BUILTIN_ORDER` 排序，用 `COMMAND_BUILTIN_<NAME>_DESCRIPTION` 读取本地化描述 |
+| `service/command/CommandListResponseAssembler.java` · assemble / toBuiltinDescriptor | 按 `BUILTIN_ORDER` 排序，用 `COMMAND_BUILTIN_<NAME>_DESCRIPTION` 读取本地化描述 |
 
 实现仓 `AGENTS.md`（同一提交）“文件、注释与命名”一节把 `Assembler` 列为约定类名后缀，转换方法用 `toXxx`，并规定 Mapper 使用 DTO（MyBatis 持久化）。
 
