@@ -182,21 +182,26 @@ package "规则（待实现）" as RulePkg {
 
 package "持久化（待实现，物理表由 Mate 决定）" as StorePkg {
   interface ScheduleOwnershipStore <<待实现>> {
-    + 任务归属：按用户串行计数与插入、补全、删除
-    + 定时会话登记：写入、按 sessionId 读取、删除
+    + 任务归属与配额：条件占用、生效、删除
+    + 定时会话登记：写入、确认、删除
   }
-  class ScheduleOwnership <<记录>> {
+
+  class ScheduleOwnership <<t_mate_schedule_owner>> {
     scheduleId : String（创建成功前为空）
     userId : String
     state : pending / active
     createdAt : Instant
   }
-  class ScheduledSessionRegistration <<记录>> {
+  class ScheduleQuota <<t_mate_schedule_quota>> {
+    userId : String
+    ownedCount : int
+  }
+  class ScheduledSessionRegistration <<t_mate_scheduled_session>> {
     sessionId : String
     scheduleId, runId, agentId : String
     userId : String
     chatId : String
-    createdAt : Instant
+    status : registered / confirmed
   }
 }
 
@@ -235,6 +240,7 @@ ScheduledAccessTokenService --> UnifiedAccountTokenSource
 ScheduleOwnershipReconciler --> ScheduleOwnershipStore
 ScheduleOwnershipReconciler --> ClawScheduleClient
 ScheduleOwnershipStore "1" o-- "*" ScheduleOwnership
+ScheduleOwnershipStore "1" o-- "*" ScheduleQuota
 ScheduleOwnershipStore "1" o-- "*" ScheduledSessionRegistration
 ScheduleOwnership "1" -- "*" ScheduledSessionRegistration : scheduleId
 WebPkg -[hidden]down- AppPkg
