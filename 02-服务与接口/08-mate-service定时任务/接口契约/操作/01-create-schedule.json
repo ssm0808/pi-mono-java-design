@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service 定时任务管理 API",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -9,59 +9,7 @@
     "method": "POST",
     "path": "/schedules",
     "summary": "创建定时任务",
-    "description": "当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体原样转发给 Claw 创建，再记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。",
-    "authModes": [
-      {
-        "id": "jwt",
-        "label": "JWT 首选",
-        "preferred": true,
-        "headers": [
-          {
-            "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
-            "required": true,
-            "description": "公司调用方身份，非空"
-          },
-          {
-            "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
-            "required": true,
-            "description": "当前用户的访问令牌，非空；只供 Mate 框架检查权限，不转发给 Claw，定时运行也不使用"
-          },
-          {
-            "name": "Authorization",
-            "value": "Bearer <JWT>",
-            "required": true,
-            "description": "首选公司 JWT；与 APPKEY 同时存在时使用 JWT，JWT 无效不回退"
-          }
-        ]
-      },
-      {
-        "id": "appkey",
-        "label": "APPKEY 兼容",
-        "preferred": false,
-        "headers": [
-          {
-            "name": "X-HW-ID",
-            "value": "<CALLER_ID>",
-            "required": true,
-            "description": "公司调用方身份，非空"
-          },
-          {
-            "name": "access-token",
-            "value": "<ACCESS_TOKEN>",
-            "required": true,
-            "description": "当前用户的访问令牌，非空；只供 Mate 框架检查权限，不转发给 Claw，定时运行也不使用"
-          },
-          {
-            "name": "X-HW-APPKEY",
-            "value": "<APPKEY>",
-            "required": true,
-            "description": "未提供 Authorization 时使用的公司 AppKey"
-          }
-        ]
-      }
-    ],
+    "description": "当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体原样转发给 Claw 创建，再记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
     "parameters": [],
     "requestBody": {
       "required": true,
@@ -261,43 +209,6 @@
             "resCode": "SCHEDULE_REQUEST_INVALID",
             "resMsg": "Invalid schedule request."
           }
-        }
-      },
-      {
-        "id": "401-unauthenticated",
-        "status": "401",
-        "tabLabel": "401 · UNAUTHENTICATED",
-        "label": "Unauthorized",
-        "summary": "必要认证字段缺失或凭据无效；JWT 无效时不得回退 APPKEY。复用公司认证组件。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "UNAUTHENTICATED",
-            "resMsg": "调用方身份认证失败。"
-          },
-          "en-US": {
-            "resCode": "UNAUTHENTICATED",
-            "resMsg": "Caller authentication failed."
-          }
-        }
-      },
-      {
-        "id": "403-framework-forbidden",
-        "status": "403",
-        "tabLabel": "403 · Mate 框架",
-        "label": "Forbidden",
-        "summary": "Mate 框架按 access-token 检查权限不通过。resCode 与文案沿用框架，本接口不另定义。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "default": "Mate 框架的权限错误响应，resCode 与 resMsg 以框架为准。"
         }
       },
       {
