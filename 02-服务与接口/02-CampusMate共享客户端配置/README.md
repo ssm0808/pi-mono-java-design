@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.13.0 |
+| 文档版本 | 2.13.1 |
 | 状态 | 原有统一连接配置已实现；模型能力查询、定时执行增量与模型调用并发上限待实现，具体范围见 §2 |
 | 更新日期 | 2026-10-20 |
 | pi-mono-java 源码基线 | 历史 `320d790726a70aada6100052952d5494d2a378ac`；本次局部核验 `553dcd5e2ff682f9684810a043b442b37a02e54a` |
@@ -201,7 +201,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 6. 同步 canonical YAML、镜像 properties、README、DTO 注释和配置/客户端测试；
 7. 实现 Mate 信息查询、自主输出与执行快照后，同步删除 modules YAML、镜像 properties 及 Java 中两个 token 默认值；部署先提供查询端，再更新消费者，Agent 目录不增加能力字段；Chat 字段退役按 Model 专题协同发布；
 8. 补充原有客户端端到端断言：origin相同、Skill endpoint只解析一次且两种消费均成功；
-9. Mate定时access-token接口上线后启用定时取Token（Claw适配器与`campusmate.endpoints.scheduled-access-token-path`已实现；服务认证暂缓，风险与补回条件见[Claw T2](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t2)）；普通Session Header快照契约不随之改写。
+9. Mate定时access-token接口上线后启用定时取Token（Claw适配器与`campusmate.endpoints.scheduled-access-token-path`已实现；调用方由证书校验保证，不另附服务认证）；普通Session Header快照契约不随之改写。
 
 ## 10. 验收标准
 
@@ -233,6 +233,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.13.1 | 2026-10-20 | 定时取 access-token 的调用方由证书校验保证，不再是暂缓的服务认证风险。 |
 | 2.13.0 | 2026-10-20 | 调用 Mate 的路径集中到 `campusmate.endpoints`：定时 access-token 路径改为 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`），目标路径目录共8项。 |
 | 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [mate-service 定时任务设计](../08-mate-service定时任务/README.md)，本专题改为链接。 |
 | 2.12.0 | 2026-10-16 | `campusmate.model` 新增 Redis 全局许可开关、模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
