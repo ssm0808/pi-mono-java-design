@@ -6,12 +6,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.5.0 |
+| 文档版本 | 1.5.1 |
 | 更新日期 | 2026-10-20 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
 | 源码基线 | Claw：pi-mono-java main `ead67eba`（见 [§8.1](#source-evidence)）；mate-service 源码未核验，本文不指定物理表名和既有组件的真实类名 |
-| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.67.1；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
+| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.69.0；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
 
 ## 评审记录
 
@@ -260,7 +260,7 @@ Claw 首版不按用户过滤（Claw [D9](../../01-总体架构/08-CampusClaw定
 
 1. 把 name、agentId、status 筛选原样转给 Claw，以 `limit=200` 从 page 1 拉到 `nextPage` 为 null。
 2. 按 id 去重，按 [§4.2.4](#visibility) 保留当前用户可见的任务。Claw 的顺序（updatedAt DESC、id ASC）在过滤后保持不变，不重新排序。
-3. 按请求的 page/limit（与 Claw 相同：page 默认 1，limit 默认 50、范围 1～200）切页，返回 `{schedules, nextPage}`。
+3. 按请求的 page/limit（与 Claw 相同：page 默认 1，limit 默认 50、范围 1～200）切页，返回 `{schedules, total, nextPage}`；total 是过滤后当前用户可见的匹配任务数，不使用 Claw 返回的 total（那是全部用户的总数）。
 
 Run 查询：
 
@@ -462,13 +462,14 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 | agentId | Claw | 可选；按 Agent 精确匹配，合法但无匹配时返回空页 |
 | status | Claw | 可选；`active` 或 `paused`，省略时两种都返回 |
 
-**成功响应**：HTTP 200，`Cache-Control: no-store`，result 为 `{schedules, nextPage}`。
+**成功响应**：HTTP 200，`Cache-Control: no-store`，result 为 `{schedules, total, nextPage}`。
 
 | 字段 | 规定 |
 |---|---|
 | schedules | 当前页任务，每项与创建、详情相同，是 [§4.2.3](#resource-projection) 投影后的完整任务：接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat；顺序沿用 Claw 的 updatedAt 从新到旧、id 升序 |
-| nextPage | 有下一页时为 page+1，否则为 null；不返回 total、page 或 limit |
-| 空结果 | 无匹配或超出末页时 `schedules:[]`、`nextPage:null`，不返回 404 或 204 |
+| total | 当前用户可见、且与筛选条件匹配的任务总数，不受 page/limit 影响；由 Mate 过滤后统计，不使用 Claw 返回的 total |
+| nextPage | 有下一页时为 page+1，否则为 null；不返回 page 或 limit |
+| 空结果 | 无匹配或超出末页时 `schedules:[]`、`nextPage:null`，total 照常返回（无匹配为 0），不返回 404 或 204 |
 
 翻页期间任务被修改、删除或新建，后续页可能重复或遗漏；页面修改筛选条件或 limit 后从第 1 页重读。
 
@@ -705,6 +706,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.1 | 2026-10-20 | 列表 result 增加 total：当前用户可见且匹配筛选的任务总数，由 Mate 过滤后统计；Claw 列表同步增加 total（Claw 主设计 0.69.0）。 |
 | 1.5.0 | 2026-10-20 | 新增 §4.2.7 列表接口的完整定义：query 与校验方、200 响应与空结果、双语错误表，示例由接口 HTML 展示。 |
 | 1.4.1 | 2026-10-20 | 管理接口不定义请求头：access-token 由 Mate 框架在进入接口前校验，§4.2.1、§4.2.5、§4.2.6 与接口 HTML 删除请求头、401 和 403。 |
 | 1.4.0 | 2026-10-20 | 新增 §4.2.6 创建接口的完整定义：请求头、字段规则、201 响应与双语错误表，示例由接口 HTML 展示；§4.2.1 改为接收 access-token 供 Mate 框架检查权限、不转发给 Claw；§4.4.2 删除与证书校验矛盾的 401。 |

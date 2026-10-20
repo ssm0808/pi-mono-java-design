@@ -6,8 +6,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.68.0 |
-| 更新日期 | 2026-10-19 |
+| 文档版本 | 0.69.0 |
+| 更新日期 | 2026-10-20 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
 | 设计状态 | 目标设计，待实现。Java PR #332 已实现调度表、Mapper 与同库受理，尚未合并，与目标的差异见 [§3.2.5](#schedule-pr-diff)；Mate 归属登记、调度扫描及其余能力待实现；main 上已观察实现仅为进程内 Cron |
@@ -1089,7 +1089,7 @@ Accept-Language: zh-CN
 
 无请求体；认证、读取功能资格和语言与详情一致，不要求写入控制 Header。筛选条件以 AND 组合，不提供客户端 owner/scope、任意排序、metadata 查询或按凭据查询。重复标量、未知查询项及非法格式以 400 `SCHEDULE_REQUEST_INVALID` 拒绝。查询始终排除已删除记录；删除过滤与业务筛选均先于分页；Claw 不做用户权限过滤（D9）。没有 includeArchived/includeDeleted 查询入口。
 
-成功 HTTP 200，普通响应 Header 与详情一致。以下例子请求 page=1、limit=1，当前查询还有后续记录，因此 nextPage=2：
+成功 HTTP 200，普通响应 Header 与详情一致。以下例子请求 page=1、limit=1，当前查询共匹配 2 个任务，因此 total=2、nextPage=2：
 
 ```json
 {
@@ -1125,23 +1125,24 @@ Accept-Language: zh-CN
         "updatedAt": "2026-10-04T02:00:00Z"
       }
     ],
+    "total": 2,
     "nextPage": 2
   }
 }
 ```
 
-列表每项直接采用详情资源，不增加 agentName、nextRunAt、lastRunStatus 或执行结果。完整元素便于直接消费同一响应模型，也避免调用方为读取每条消息另发详情请求；代价是列表传输全部任务内容，需要限制页大小。result 仅包含 schedules/nextPage，不返回 total、page、limit 或额外 hasMore。读取完整元素不提供凭据或文件字节；列表中的配置是当次读取快照；编辑可重新读取详情确认内容，写入由数据库当前状态决定。
+列表每项直接采用详情资源，不增加 agentName、nextRunAt、lastRunStatus 或执行结果。完整元素便于直接消费同一响应模型，也避免调用方为读取每条消息另发详情请求；代价是列表传输全部任务内容，需要限制页大小。result 包含 schedules、total 与 nextPage，不返回 page、limit 或额外 hasMore。total 是与本次筛选条件匹配的任务总数，不受 page/limit 影响，供页面显示总数和页数；它与当前页来自同一读取快照，翻页期间任务增删时不同页的 total 可能不同。读取完整元素不提供凭据或文件字节；列表中的配置是当次读取快照；编辑可重新读取详情确认内容，写入由数据库当前状态决定。
 
-首版 Claw 不做用户权限过滤，业务筛选先于分页；用户可见范围由 Mate 拉取全部页后自行过滤，见 §4.2 身份与权限边界。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null，不为此接口执行 total 的 COUNT 查询。整页配置及下一页判断来自单次一致读取边界，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
+首版 Claw 不做用户权限过滤，业务筛选先于分页；用户可见范围由 Mate 拉取全部页后自行过滤，见 §4.2 身份与权限边界。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null。total 按同一筛选条件另做一次 COUNT，与整页配置及下一页判断在同一个可重复读事务内完成，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
 
 排序为 updatedAt DESC、id ASC，而 ListEvents 按已提交事件顺序从旧到新读取；只复用分页协议，不照搬事件顺序。运行摘要变化不更新 updatedAt，因此不会仅因一次自动启动改变任务排序。但任务配置可被编辑、删除，新任务会进入列表前部，不能借用事件只在尾部追加的稳定位置前提；并发翻页仍可能重复或遗漏，按 id 去重不能补回漏项。同一轮保持 limit 与筛选不变；修改它们或已知列表发生变更时从 page=1 重读，不将此接口作为可靠增量同步协议。
 
-无匹配或合法超末页均返回 HTTP 200、schedules:[]、nextPage:null，不返回 404、204 或 null 数组；nextPage:null 仅说明本次查询无下一页，不表示不会再有任务或任务已执行完成。无读取功能资格返回 403，认证失败为 401；权限/存储暂不可用为 503，记录损坏或投影失败为 500，不伪装成空列表。具体错误格式、语言与详情一致。
+无匹配或合法超末页均返回 HTTP 200、schedules:[]、nextPage:null，total 照常返回匹配总数（无匹配为 0），不返回 404、204 或 null 数组；nextPage:null 仅说明本次查询无下一页，不表示不会再有任务或任务已执行完成。无读取功能资格返回 403，认证失败为 401；权限/存储暂不可用为 503，记录损坏或投影失败为 500，不伪装成空列表。具体错误格式、语言与详情一致。
 
 | 对比项 | Claude Deployment 列表 | Claw 当前目标及取舍 |
 |---|---|---|
 | 元素 | 完整 Deployment，包含 initial_events、metadata、vault_ids | 完整 Schedule，与详情同形；复用响应模型，代价是传输每条任务内容 |
-| 分页 | limit 默认 20、最多 100；page 为不透明游标，响应 data/next_page，末页 next_page:null | 参考 ListEvents 的整数 page/nextPage，limit 默认50、最多200；result 为 schedules/nextPage，无 total。保持 Claw 客户端风格，代价是深页 OFFSET 和并发翻页移动 |
+| 分页 | limit 默认 20、最多 100；page 为不透明游标，响应 data/next_page，末页 next_page:null | 参考 ListEvents 的整数 page/nextPage，limit 默认50、最多200；result 为 schedules/total/nextPage。保持 Claw 客户端风格，total 便于页面显示总数；代价是深页 OFFSET、每次多一次 COUNT 和并发翻页移动 |
 | 过滤 | agent_id、创建时间 gte/lte、status、include_archived；status 与 include_archived 不能组合 | 增加名称搜索，保留 agentId/status；暂不提供创建时间区间；已删除任务始终排除，不提供 includeArchived |
 | 顺序 | 本次公开页未声明默认排序、稳定快照或游标失效规则 | 显式 updatedAt DESC、id ASC，便于最近修改的任务靠前；仍有并发翻页限制 |
 | 身份 | Anthropic API 身份/workspace 边界 | 公司可信调用范围；Agent ID 与 metadata 不代替租户/园区授权 |
@@ -1793,7 +1794,7 @@ Accept-Language: zh-CN
 
 时区另须验收：创建或整体替换 Cron 时省略 timezone 均保存为 Asia/Shanghai，显式其他合法 IANA 时区按输入生效；响应回显保存值，节点时区变化不改变规则，更新省略整个 schedule 不重置时区。绝对时刻响应统一为 Z 结尾的 UTC，秒级且无小数；Cron 的 timezone 仍保留有效值。显式null、空白、裸偏移量与自定义缩写拒绝，合法IANA名称按输入保存回显。旧 At/Every 不得经新 HTTP 绕过仅 Cron 校验，旧 Job 迁移不得静默改变时间语义。
 
-读取验收须覆盖：列表元素与详情字段和类型一致，包括 prompt/description；401/403/资源不存在404、读取损坏500与暂不可用503区分；删除过滤与业务筛选先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 仅 schedules/nextPage、无 total/COUNT；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要不成为客户端更新条件；错误禁用缓存。读取必须验证删除后404、列表排除已删除记录和拒绝归档筛选；验证updatedAt DESC/id ASC稳定同秒顺序和并发翻页局限，目标不等于已通过实现测试。
+读取验收须覆盖：列表元素与详情字段和类型一致，包括 prompt/description；401/403/资源不存在404、读取损坏500与暂不可用503区分；删除过滤与业务筛选先于分页；page/limit 默认与边界、偏移溢出、limit+1 判断；空页与超末页为 schedules:[]/nextPage:null；result 为 schedules/total/nextPage，total 与筛选一致且不受分页影响；同次读取与排序；列表共用计划计算时刻；GET 不改 updatedAt、不推进调度、不换取凭据、不创建 Session；Agent 停用或引用凭据失效时仍可按读取资格查看；动态摘要不成为客户端更新条件；错误禁用缓存。读取必须验证删除后404、列表排除已删除记录和拒绝归档筛选；验证updatedAt DESC/id ASC稳定同秒顺序和并发翻页局限，目标不等于已通过实现测试。
 
 资源类型与暂停原因验收须覆盖：创建、详情、列表元素和更新响应均含 type:schedule 与 pausedReason；有无 Cron 的新建资源均为 active/null；人工暂停为manual；任何运行失败都不改 status/pausedReason；恢复清空原因但保留历史，配置修改不隐含恢复；status/pausedReason 原子一致；拒绝顶层只读字段写入而保留嵌套消息/规则 type；GET 返回当前状态与原因快照，配置修改不改变暂停原因。不按旧连续三次失败规则验收；删除后的读取不返回 status 或 pausedReason。
 
@@ -2104,6 +2105,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.69.0 | 2026-10-20 | 任务列表 result 增加 total：与筛选条件匹配的任务总数，与当前页在同一个可重复读事务内 COUNT；Run 列表不变。 |
 | 0.68.0 | 2026-10-20 | Claw 与 Mate 互相调用由证书校验保证调用方：删除入站 `MateServiceAuthenticator` 与 `ScheduleAccessResolver`，Claw 不再接收操作范围；取 access-token 不附加服务认证不再是风险，T2 只剩统一账号配置与 Token 有效期。 |
 | 0.67.1 | 2026-10-20 | §4.8.1 的 access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`，与其他调用 Mate 的路径集中配置。 |
 | 0.67.0 | 2026-10-20 | 为先跑通端到端，Claw 取统一账号 access-token 时暂不附加服务认证，出站凭据端口移除（pi-mono-java PR #372）；T2 记录该风险与补回条件，§4.8.1 与首版开发前提同步。 |

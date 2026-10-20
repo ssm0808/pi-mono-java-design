@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service 定时任务管理 API",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -58,13 +58,13 @@
         "status": "200",
         "tabLabel": "200 · 列表",
         "label": "OK",
-        "summary": "每项与创建、详情相同，是把 sessionId 换成 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。不返回 total。",
+        "summary": "每项与创建、详情相同，是把 sessionId 换成 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。total 是当前用户可见且匹配筛选的任务总数，不受分页影响。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
         },
         "bodies": {
-          "第 1 页（page=1&limit=2&status=active，还有下一页）": {
+          "第 1 页（page=1&limit=2&status=active，共 3 个）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
@@ -127,14 +127,16 @@
                   "metadata": {}
                 }
               ],
+              "total": 3,
               "nextPage": 2
             }
           },
-          "无匹配或超出末页（page=3&limit=2）": {
+          "超出末页（page=3&limit=2，共 3 个）": {
             "resCode": "0",
             "resMsg": "success",
             "result": {
               "schedules": [],
+              "total": 3,
               "nextPage": null
             }
           }
