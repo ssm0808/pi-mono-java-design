@@ -6,12 +6,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.1.0 |
+| 文档版本 | 1.1.1 |
 | 更新日期 | 2026-10-19 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
 | 源码基线 | Claw：pi-mono-java main `ead67eba`（见 [§8.1](#source-evidence)）；mate-service 源码未核验，本文不指定物理表名和既有组件的真实类名 |
-| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.67.0；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
+| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.67.1；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
 
 ## 评审记录
 
@@ -440,7 +440,7 @@ Accept-Language: zh-CN
 
 | 项 | 规定 |
 |---|---|
-| 路径 | 草案路径；Claw 用 `campusclaw.schedule.access-token-path` 配置，服务地址沿用[共享连接目录](../02-CampusMate共享客户端配置/README.md)的 `campusmate.base-url` |
+| 路径 | 草案路径；Claw 用[共享连接目录](../02-CampusMate共享客户端配置/README.md)的 `campusmate.endpoints.scheduled-access-token-path` 配置，与其他调用 Mate 的路径放在一起，服务地址沿用 `campusmate.base-url` |
 | 请求体与参数 | 无请求体，无 query 参数；不传用户、任务、Session 或 Agent 标识 |
 | 调用方认证 | 首版与其他 Mate 调用一致，Claw 不附加服务认证，Mate 也不校验调用方，只靠网络或网关限制谁能访问。**TODO（已知风险）**：本接口返回所有定时任务共用的统一账号 Token，权限高于单个用户；服务认证（[M5](#m5)、Claw T2）确定后，Claw 补回出站认证，Mate 只允许 Claw 调用 |
 
@@ -613,7 +613,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 ## 7. 基建规范
 
 - mate-service 源码未核验：物理表、模块位置、既有权限与 Chat 映射组件的真实接口在实现时核对，再更新 [§3.2](#data-model) 的类图映射。
-- Claw 侧 access-token 路径用 `campusclaw.schedule.access-token-path`（环境变量 `CAMPUSCLAW_SCHEDULE_ACCESS_TOKEN_PATH`）配置，服务地址沿用 `campusmate.base-url`。
+- Claw 侧 access-token 路径用 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`）配置，与其他调用 Mate 的路径放在一起，服务地址沿用 `campusmate.base-url`。
 - Claw 侧登记的 HTTP 适配在 M3 确认后实现，替换默认的 `MateScheduleSessionRegistry`。
 - 对账周期与每用户配额作为部署配置，默认值分别为 10 分钟与 20。
 - 两张表的 DDL 随 mate-service 的数据库变更流程发布；物理表名前缀按 Mate 既有约定调整时，同步更新 [§3.2](#data-model)。
@@ -635,5 +635,6 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.1 | 2026-10-20 | access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`；主基线 0.67.1。 |
 | 1.1.0 | 2026-10-20 | 为先跑通端到端，access-token 接口首版暂不认证调用方；M5、§4.4、§4.4.1、§5.1 与测试验收记录该风险与补回条件；`t_schedule.user_id` 按 Mate 既有表改为 VARCHAR(512)。 |
 | 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、两张表的结构与事务（2026-10-20 按评审精简为 `t_schedule` 3 列、`t_schedule_session` 5 列）、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |

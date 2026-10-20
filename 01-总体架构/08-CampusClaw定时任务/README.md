@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.67.0 |
+| 文档版本 | 0.67.1 |
 | 更新日期 | 2026-10-19 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
@@ -1826,7 +1826,7 @@ Accept-Language: zh-CN
 
 | 项 | 内容 |
 |---|---|
-| 请求 | `POST /mate-service/v1/runtime/scheduled-access-token`（默认路径，可用 `campusclaw.schedule.access-token-path` 或环境变量 `CAMPUSCLAW_SCHEDULE_ACCESS_TOKEN_PATH` 配置），无请求体；与其他 Mate 调用一致，暂不附加服务认证（风险与补回条件见 [T2](#todo-t2)） |
+| 请求 | `POST /mate-service/v1/runtime/scheduled-access-token`（默认路径，与其他调用 Mate 的路径一起用 `campusmate.endpoints.scheduled-access-token-path` 或环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH` 配置），无请求体；与其他 Mate 调用一致，暂不附加服务认证（风险与补回条件见 [T2](#todo-t2)） |
 | 成功响应 | HTTP 200，ResultBean 的 resCode 为 0，result 为 `{"accessToken": "..."}`；accessToken 为空视为失败 |
 | 调用时机 | 定时触发的根执行及其 Child 中，模型一次返回的工具调用里至少一个需要凭据的工具通过参数校验和权限判断后，执行前取一次；同一批共用，下一批重新取，不缓存 |
 | 使用方式 | 只作为 `access-token` Header 透传给 Mate 业务工具；不落库，不写日志，不进入模型、事件或工具结果 |
@@ -2104,6 +2104,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.67.1 | 2026-10-20 | §4.8.1 的 access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`，与其他调用 Mate 的路径集中配置。 |
 | 0.67.0 | 2026-10-20 | 为先跑通端到端，Claw 取统一账号 access-token 时暂不附加服务认证，出站凭据端口移除（pi-mono-java PR #372）；T2 记录该风险与补回条件，§4.8.1 与首版开发前提同步。 |
 | 0.66.0 | 2026-10-19 | Mate 侧设计集中到 [mate-service 定时任务设计](../../02-服务与接口/08-mate-service定时任务/README.md)（新增管理接口、调用 Claw 前后的处理、配额与对账，原 Mate 定时执行草案并入）；T2、T7、T8 与 §4.8 改为引用该文档；删除 §2.2 中已不存在的“Agent 启用校验”。 |
 | 0.65.0 | 2026-10-16 | 新增 §4.8，集中说明 Claw 调用 Mate 的两个接口及各自的调用时机、失败处理和实现状态。 |

@@ -2,18 +2,18 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.12.1 |
+| 文档版本 | 2.13.0 |
 | 状态 | 原有统一连接配置已实现；模型能力查询、定时执行增量与模型调用并发上限待实现，具体范围见 §2 |
-| 更新日期 | 2026-10-19 |
+| 更新日期 | 2026-10-20 |
 | pi-mono-java 源码基线 | 历史 `320d790726a70aada6100052952d5494d2a378ac`；本次局部核验 `553dcd5e2ff682f9684810a043b442b37a02e54a` |
 | mate-service 历史源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa`；新增执行接口未实现，不由旧基线外推 |
 | 适用边界 | CampusClaw -> CampusMate Model、受管 Runtime、Tool 与定时执行凭据接口 |
 
 ## 1. 职责与目标配置
 
-本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。定时运行时 Claw 无入参向 Mate 获取统一账号 `access-token`，该接口与 Mate 侧其余定时任务设计统一在 [mate-service 定时任务设计](../08-mate-service定时任务/README.md#scheduled-access-token)维护；本专题只记录 Claw 侧路径配置 `campusclaw.schedule.access-token-path`。
+本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。定时运行时 Claw 无入参向 Mate 获取统一账号 `access-token`，该接口与 Mate 侧其余定时任务设计统一在 [mate-service 定时任务设计](../08-mate-service定时任务/README.md#scheduled-access-token)维护；本专题只记录 Claw 侧路径配置 `campusmate.endpoints.scheduled-access-token-path`。
 
-Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 目标配置树。目标路径共7项；当前源码已实现其中6项配置绑定，模型能力查询尚待实现，不能把目标目录等同于已发布服务。定时任务获取 access-token 的路径不放在本目录，与定时任务其他配置一起放在 `campusclaw.schedule.access-token-path`（默认 `/mate-service/v1/runtime/scheduled-access-token`），仍使用本目录的 `campusmate.base-url`。
+Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 目标配置树。目标路径共8项，调用 Mate 的路径全部集中在 `campusmate.endpoints`，定时任务获取 access-token 的路径也在其中；当前源码已实现其中7项配置绑定，模型能力查询尚待实现，不能把目标目录等同于已发布服务。
 
 ```yaml
 campusmate:
@@ -26,6 +26,7 @@ campusmate:
     skill-info-path-template: ${CAMPUSMATE_SKILL_INFO_PATH_TEMPLATE:/mate-service/v1/skill/query/%s}
     tool-metadata-query-path: ${CAMPUSMATE_TOOL_METADATA_QUERY_PATH:/mate-service/v1/runtime/tools/query}
     tool-execute-path-template: ${CAMPUSMATE_TOOL_EXECUTE_PATH_TEMPLATE:/mate-service/v1/runtime/tools/%s/execute}
+    scheduled-access-token-path: ${CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH:/mate-service/v1/runtime/scheduled-access-token}
   model:
     api: ${CAMPUSMATE_MODEL_API:openai-completions}
     connect-timeout: ${CAMPUSMATE_MODEL_CONNECT_TIMEOUT:PT10S}
@@ -49,7 +50,7 @@ campusmate:
 配置有四项约束：
 
 1. `campusmate.base-url` 是唯一 origin 权威；
-2. `campusmate.endpoints` 是唯一出站路径目录，定时任务的 access-token 路径例外，见上文；
+2. `campusmate.endpoints` 是唯一出站路径目录，包括定时任务的 access-token 路径；
 3. 模型协议、传输、模型调用并发上限与尚未迁移的 reasoning 配置放在 `campusmate.model`；窗口信息按新执行查询 Mate 并固定到执行快照，输出额度仅由 Mate 控制；
 4. 目标配置中不存在顶层 `mate`、`mate.endpoints`、`mate.tool` 或
    `campusmate.model-manager`。
@@ -73,7 +74,7 @@ Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个
 |---|---|---|
 | Model Chat、Agent info/runtime、Skill info、Tool metadata/execute共6项 | Claw配置绑定和消费者已实现；Mate服务端能力按各操作证据分别验收 | 保持共享origin和唯一路径目录 |
 | model-capability-path-template | 待实现；原有第7项目标路径 | 按Model能力专题实施，不因本次定时增量宣称已完成 |
-| schedule-context-query-path、credential-resolve-path | 待实现；路径与字段为草案 | 采用同一共享origin，形成9项目标目录；实施真实Mate/Claw联调 |
+| scheduled-access-token-path | Claw配置绑定与`MateAccessTokenClient`已实现（2026-10-20 移入本目录）；Mate服务端待实现 | 与其他调用 Mate 的路径集中维护，形成8项目标目录；实施真实Mate/Claw联调 |
 
 ## 3. 配置与客户端关系
 
@@ -81,7 +82,7 @@ Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个
 
 [PlantUML 源码：`campusmate_shared_base_url_configuration`](diagram.puml#L1) · [原尺寸 SVG](campusmate_shared_base_url_configuration.svg)
 
-上图展示原有Model、Runtime和Tool三个客户端及7项目标路径的配置子图；不包含定时凭据客户端。新增Mate适配与调度接线复用[M10全局目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#class-diagram)。
+上图展示原有Model、Runtime和Tool三个客户端及原有7项目标路径的配置子图；不包含定时凭据客户端及其`scheduled-access-token-path`。新增Mate适配与调度接线复用[M10全局目标类图](../../01-总体架构/08-CampusClaw定时任务/README.md#class-diagram)。
 
 各客户端共享地址和路径定义，分别保留传输实现及DTO。Skill查询只有一个operation、一个配置键，Runtime与Tool从同一响应读取各自所需字段。Agent info与Agent runtime保持两个operation；新增上下文查询和凭据resolve也各自只有一个配置键，不另建Mate origin。
 
@@ -90,7 +91,7 @@ Java 局部复核 `f61906b9` 已证明 Chat Provider 读取统一配置。这个
 | 配置 | 责任 | 禁止事项 |
 |---|---|---|
 | `campusmate.base-url` | CampusMate scheme、host、port | 子模块覆盖 origin |
-| `campusmate.endpoints.*` | 目标7个HTTP operation path：6项已有配置绑定、1项待实现模型能力查询 | 完整URL、重复operation、客户端私有路径副本 |
+| `campusmate.endpoints.*` | 目标8个HTTP operation path：7项已有配置绑定（含定时 access-token）、1项待实现模型能力查询 | 完整URL、重复operation、客户端私有路径副本 |
 | `campusmate.model.*` | API 适配、SSE 传输、模型调用全局并发上限、降级上限、等待时间与许可租约（待实现，语义见 [Model §5.6](../03-Model/README.md#http-transport-config)；Redis 连接沿用 `spring.data.redis.*`）与既有 reasoning 参数 | 保存 URL、path 或 contextWindow/maxTokens 默认值 |
 | `campusmate.runtime.*` | 本地缓存、短请求超时、成功码与响应上限 | 保存 URL 或 path |
 | `campusmate.tool.enabled` | 是否装配 Tool 能力 | 决定 URL 或 path |
@@ -170,7 +171,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 | `MateRestUtil` | 参数和诊断术语改为 CampusMate base URL；传输行为不变 |
 | canonical YAML 与镜像 properties | 只保留一个 `campusmate` 根和一个 Skill endpoint 键 |
 | `MateScheduleSessionRegistry`与`MateAccessTokenClient` | 分别承担 Session 归属登记和统一账号 access-token 获取，不复制业务凭据到发现请求；接口见[定时任务 D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions) |
-| 配置与客户端测试 | 断言6项已有operation与1项模型能力查询共7项，各自唯一，并拒绝旧`mate.*`绑定 |
+| 配置与客户端测试 | 断言7项已有operation（含定时 access-token）与1项模型能力查询共8项，各自唯一，并拒绝旧`mate.*`绑定 |
 
 不同 Maven 模块不必为了共享一个属性对象形成反向依赖；它们可以分别注入相同的
 `campusmate.*` 属性。唯一权威是配置键与启动校验，不是某个客户端类。
@@ -182,7 +183,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 | 产品约束 | Mate 与 CampusMate 只表达一个服务身份。 | 部署中不存在第二个 Mate 服务 origin。 |
 | 架构改造 | 删除顶层 `mate`，全部配置统一到 `campusmate`。 | 避免服务命名和地址权威分裂。 |
 | 架构改造 | 模型参数从 `campusmate.model-manager` 改为 `campusmate.model`。 | 配置树描述能力域，不重复暴露 Model Manager 组件名。 |
-| 架构改造 | endpoint统一维护，6项已有operation与1项模型能力查询共7项；定时 access-token 路径放在定时任务配置中。 | path属于服务契约，不属于某个客户端；新增客户端复用同一目录。 |
+| 架构改造 | endpoint统一维护，7项已有operation（含定时 access-token）与1项模型能力查询共8项；调用 Mate 的路径全部集中在此。 | path属于服务契约，不属于某个客户端；新增客户端复用同一目录。 |
 | 架构改造 | 删除统一 token 能力默认值，每个新执行查询窗口，Mate 自主控制输出。 | 避免窗口长期陈旧及两端重复控制额度。 |
 | 架构改造 | Runtime 与 Tool client 共享一个 Skill endpoint 配置。 | 两者调用相同 method/path 与响应契约。 |
 | 安全加固 | base URL 只允许 HTTP(S) origin，path 不能携带 origin。 | 防止单客户端改道。 |
@@ -200,7 +201,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 6. 同步 canonical YAML、镜像 properties、README、DTO 注释和配置/客户端测试；
 7. 实现 Mate 信息查询、自主输出与执行快照后，同步删除 modules YAML、镜像 properties 及 Java 中两个 token 默认值；部署先提供查询端，再更新消费者，Agent 目录不增加能力字段；Chat 字段退役按 Model 专题协同发布；
 8. 补充原有客户端端到端断言：origin相同、Skill endpoint只解析一次且两种消费均成功；
-9. Mate定时access-token接口上线后，先接可信服务认证，再启用定时取Token（Claw适配器与`campusclaw.schedule.access-token-path`已实现）；普通Session Header快照契约不随之改写。
+9. Mate定时access-token接口上线后启用定时取Token（Claw适配器与`campusmate.endpoints.scheduled-access-token-path`已实现；服务认证暂缓，风险与补回条件见[Claw T2](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t2)）；普通Session Header快照契约不随之改写。
 
 ## 10. 验收标准
 
@@ -208,7 +209,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 - 模型协议、传输及既有 reasoning 配置位于 `campusmate.model.*`，窗口由执行快照维护、输出额度由 Mate 控制；目标配置和环境变量中不存在
   `campusmate.model-manager.*` 或 `CAMPUSMATE_MODEL_MANAGER_*`；
 - 只有 `campusmate.base-url` / `CAMPUSMATE_BASE_URL` 能决定 CampusMate origin；
-- 只有`campusmate.endpoints`能决定目标7个出站operation path；定时 access-token 路径由`campusclaw.schedule.access-token-path`决定，默认值须与定时接口草案一致；
+- 只有`campusmate.endpoints`能决定目标8个出站operation path，包括定时 access-token 路径`scheduled-access-token-path`，其默认值须与定时接口草案一致；
 - `GET /mate-service/v1/skill/query/{skillId}` 只有一个配置键，并由 Runtime 与 Tool client 共用；
 - `GET /agents/{agentId}` 与 `GET /agents/{agentId}/runtime` 保持两个独立 operation；
 - `mate.innerGWSerive`、`mate.endpoints.*`、`mate.tool.enabled` 及所有 `MATE_*` 应用变量删除；
@@ -232,6 +233,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.13.0 | 2026-10-20 | 调用 Mate 的路径集中到 `campusmate.endpoints`：定时 access-token 路径改为 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`），目标路径目录共8项。 |
 | 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [mate-service 定时任务设计](../08-mate-service定时任务/README.md)，本专题改为链接。 |
 | 2.12.0 | 2026-10-16 | `campusmate.model` 新增 Redis 全局许可开关、模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
 | 2.11.0 | 2026-10-16 | 定时 access-token 路径改用代码中的 `campusclaw.schedule.access-token-path`，目标路径目录回到7项。 |
