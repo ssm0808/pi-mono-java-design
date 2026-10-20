@@ -1,0 +1,241 @@
+@startuml mate_schedule_overview
+' 目标：待实现；Mate 侧业务总览，从创建定时任务、一次自动运行到查看运行结果。
+' Claw 基线：pi-mono-java main ead67eba；Claw 侧规则以 01-总体架构/08-CampusClaw定时任务/README.md 0.66.0 为准。
+' mate-service 源码未核验；Mate 存储为逻辑记录，物理表由 Mate 实现决定。
+' 粒度：参与者为服务级；Mate 内部组件的协作见详细时序 mate_schedule_create 与 mate_session_registration。
+' 表达方式：只画正常流程；失败与恢复见 README.md 第 5.2.1 节。
+title Mate 管理定时任务：业务总览
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+== 创建定时任务 ==
+Operator -> Mate ++ : 创建定时任务（Agent、时间规则、任务内容）
+activate Operator
+Mate -> MateStore ++ : 统计该用户的任务数
+return 未达上限
+Mate -> Claw ++ : 创建定时任务（可信服务调用）
+return 定时任务（scheduleId）
+Mate -> MateStore ++ : 写入任务归属（scheduleId、用户）
+return 已写入
+return 定时任务及下次运行时间
+deactivate Operator
+== 自动运行 ==
+[-> Claw ++ : 到达计划时间
+Claw -> Mate ++ : 登记新会话归属（sessionId、scheduleId、runId、agentId）
+Mate -> MateStore ++ : 写定时会话登记与 Chat 映射
+return chatId
+return 登记结果
+Claw -> Claw : 受理并运行 Agent
+Claw -> Mate ++ : 获取统一账号 access-token
+return access-token
+Claw -> Claw : 运行结束，记录 Run
+deactivate Claw
+== 查看运行结果 ==
+Operator -> Mate ++ : 查看运行记录
+activate Operator
+Mate -> Claw ++ : 查询 Run
+return Run（含 sessionId）
+Mate -> MateStore ++ : 过滤不可见任务，sessionId 换成 chatId
+return chatId
+return Run（含 chatId，不含 sessionId）
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_create
+' 目标：待实现；UC1 创建接口配置的任务。
+' Claw 接口：POST /campusclaw-service/v1/schedules，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4 节。
+' mate-service 源码未核验；“权限”代表公司功能权限与 Mate 既有 Agent 使用权限两个检查。
+' 表达方式：画正常创建与 Claw 结果三种去向；配额统计不加锁；补偿删除失败后的对账见 README.md 第 3.7 节。
+title 创建定时任务（UC1）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+participant "权限" as Perm
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : POST /schedules
+activate Operator
+Mate -> Perm ++ : 检查管理权限与 Agent 使用权限
+return 允许
+Mate -> MateStore ++ : 统计 t_schedule 中该用户的任务数（不加锁）
+return 未达上限（达到上限返回 422）
+Mate -> Claw ++ : POST /schedules（原样转发请求体）
+alt Claw 返回 201
+  Claw --> Mate : 定时任务（scheduleId）
+  Mate -> MateStore ++ : 插入 t_schedule（id、user_id）
+  return 已写入
+  opt 写入失败
+    Mate -> Claw : DELETE /schedules/{scheduleId}（补偿删除）
+  end
+  Mate --> Operator : 201 定时任务（sessionId 换为 chatId）
+else Claw 明确失败（带错误码）
+  Claw --> Mate : 4xx / 5xx 错误码
+  Mate --> Operator : 原错误码（Mate 未写入）
+else 结果未知（超时、断连）
+  Mate --> Operator : 503 SCHEDULE_SERVICE_UNAVAILABLE，提示刷新列表核对
+end
+deactivate Claw
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_session_registration
+' 目标：待实现；UC6 接口配置的任务每次运行前，Claw 请求 Mate 登记新 Session 的归属。
+' Claw 基线：pi-mono-java main ead67eba，schedule/session/ScheduledSessionStarter.prepare、confirmRegistration；schedule/mate/MateScheduleSessionRegistry 默认返回服务不可用。
+' 接口路径为草案（README.md 评审 Todo M3）；mate-service 源码未核验。
+' 表达方式：画登记成功与被拒绝；结果未知时 Claw 改用只读核对，见 README.md 第 3.6 节。
+title 登记定时会话归属（UC6）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "Claw 受理" as Claw
+participant "Mate 运行时接口" as Mate
+database "Mate 存储" as MateStore
+database "Claw 数据库" as ClawStore
+autonumber
+[-> Claw ++ : 到达计划时间或立即运行
+Claw -> Claw : 固定本次 Run 的 sessionId
+Claw -> Mate ++ : POST /runtime/scheduled-sessions（数据库事务外）
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 任务归属
+alt t_schedule 有该任务，且 sessionId 未登记或 scheduleId、runId 相同
+  Mate -> MateStore ++ : 同一事务写定时会话登记与 Chat 映射（已存在则复用）
+  return chatId
+  Mate --> Claw : 200 四个字段与 chatId
+  Claw -> ClawStore ++ : 同库事务受理 Session、首条消息、根执行与 Run
+  return 已受理
+else t_schedule 没有该任务，或 sessionId 已用不同的 scheduleId 或 runId 登记
+  Mate --> Claw : 409 SCHEDULED_SESSION_REJECTED
+  Claw -> ClawStore ++ : 记录 Run 失败 session_creation_rejected_error
+  return 已记录
+end
+deactivate Mate
+deactivate Claw
+@enduml
+
+@startuml mate_schedule_architecture
+' 目标：待实现；Mate 侧定时任务的全局目标类图。
+' mate-service 源码未核验：类名为目标命名，公司权限、Chat 映射与统一账号认证为 Mate 既有能力的抽象，接入方式待实现时核对。
+' Claw 侧契约：01-总体架构/08-CampusClaw定时任务/README.md 0.66.0 第 4 章与第 4.8 节。
+title Mate 定时任务：全局目标类图
+skinparam backgroundColor white
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 50
+
+package "Web 边界（待实现）" as WebPkg {
+  class ScheduleManagementController <<浏览器入口：待实现>> {
+    + 10 个操作，/mate-service/v1/schedules…、/schedule-runs…
+  }
+  class ScheduleRuntimeController <<Claw 入口：待实现>> {
+    + scheduledAccessToken()
+    + registerSession(request)
+    + findSession(sessionId)
+  }
+}
+
+package "应用服务（待实现）" as AppPkg {
+  class ScheduleManagementService <<待实现>> {
+    + create(user, request)
+    + list(user, query)
+    + get / update / delete / run / pause / unpause(user, scheduleId)
+    + listRuns(user, query) / getRun(user, runId)
+  }
+  class ScheduledSessionRegistrationService <<待实现>> {
+    + register(sessionId, scheduleId, runId, agentId)
+    + find(sessionId)
+  }
+  class ScheduledAccessTokenService <<待实现>> {
+    + currentToken() : String
+  }
+  class ScheduleOwnershipReconciler <<定时运行：待实现>> {
+    + reconcile()
+  }
+}
+
+package "规则（待实现）" as RulePkg {
+  class ScheduleVisibilityPolicy <<待实现>> {
+    + visible(user, schedule) : boolean
+  }
+  class ScheduleQuotaGuard <<待实现>> {
+    + checkQuota(user)
+  }
+  class ScheduleProjector <<待实现>> {
+    + toView(clawSchedule) : ScheduleView
+    + toView(clawRun) : ScheduleRunView
+  }
+}
+
+package "持久化（待实现，物理表由 Mate 决定）" as StorePkg {
+  interface ScheduleOwnershipStore <<待实现>> {
+    + 任务归属：写入、按 id 读取、按用户统计、删除
+    + 定时会话登记：写入、确认、删除
+  }
+
+  class ScheduleOwnership <<t_schedule>> {
+    id : String（Claw 任务 ID）
+    userId : String
+    createdAt : Instant
+  }
+  class ScheduledSessionRegistration <<t_schedule_session>> {
+    sessionId : String
+    scheduleId, runId : String
+    status : registered / confirmed
+    createdAt : Instant
+  }
+}
+
+package "外部边界" as ExtPkg {
+  interface ClawScheduleClient <<待实现>> {
+    + 10 个 Claw 定时任务接口
+  }
+  interface PermissionChecker <<Mate 既有：未核验>> {
+    + 功能权限、Agent 使用权限
+  }
+  interface ChatMappingService <<Mate 既有：未核验>> {
+    + bind(userId, sessionId) : chatId
+    + chatOf(sessionId) / ownerOf(chatId)
+  }
+  interface UnifiedAccountTokenSource <<Mate 既有：未核验>> {
+    + accessToken()
+  }
+}
+
+ScheduleManagementController --> ScheduleManagementService
+ScheduleRuntimeController --> ScheduledSessionRegistrationService
+ScheduleRuntimeController --> ScheduledAccessTokenService
+ScheduleManagementService --> PermissionChecker
+ScheduleManagementService --> ScheduleVisibilityPolicy
+ScheduleManagementService --> ScheduleQuotaGuard
+ScheduleManagementService --> ScheduleProjector
+ScheduleManagementService --> ClawScheduleClient
+ScheduleManagementService --> ScheduleOwnershipStore
+ScheduleVisibilityPolicy --> ScheduleOwnershipStore
+ScheduleVisibilityPolicy --> ChatMappingService
+ScheduleQuotaGuard --> ScheduleOwnershipStore
+ScheduleProjector --> ChatMappingService
+ScheduledSessionRegistrationService --> ScheduleOwnershipStore
+ScheduledSessionRegistrationService --> ChatMappingService
+ScheduledAccessTokenService --> UnifiedAccountTokenSource
+ScheduleOwnershipReconciler --> ScheduleOwnershipStore
+ScheduleOwnershipReconciler --> ClawScheduleClient
+ScheduleOwnershipStore "1" o-- "*" ScheduleOwnership
+ScheduleOwnershipStore "1" o-- "*" ScheduledSessionRegistration
+ScheduleOwnership "1" -- "*" ScheduledSessionRegistration : schedule_id
+WebPkg -[hidden]down- AppPkg
+AppPkg -[hidden]down- RulePkg
+RulePkg -[hidden]down- StorePkg
+@enduml
