@@ -33,7 +33,7 @@
 | <a id="m4"></a>M4 | Mate 写归属失败时留下的无主任务如何处理 | 无主任务登记一律拒绝，因此不会运行业务；对账任务 10 分钟后经 Claw 删除 | [§3.7](#reconciliation) | Mate |
 | <a id="m5"></a>M5 | Claw 与 Mate 互相调用的服务认证 | 仍待定，沿用 Claw [T2](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t2)。**TODO（已知风险）**：为先跑通端到端，access-token 接口首版不认证调用方，只靠网络或网关限制（[§4.4.1](#scheduled-access-token)）；确定后 Claw 补回出站认证，Mate 只允许 Claw 调用 | [§4.3](#mate-to-claw)、[§4.4](#mate-for-claw) 全部接口 | Mate 与 Claw |
 | <a id="m6"></a>M6 | 定时运行产生的对话如何进入 Mate 自己的历史库 | 待后续对齐，本文暂不设计 | 平时 Mate 在转发 events 时写历史，定时运行不经过转发，Mate 历史库没有这些对话 | Mate |
-| <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 实现前按 mate-service 源码核对用户 ID 长度，以及 Chat 映射表能否按 sessionId 查到 chatId 与所属用户；`t_schedule_session` 不存这两项，依赖这一点 | [§3.2](#data-model) 的字段类型与登记、核对接口 | Mate |
+| <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 用户 ID 已确认与 Mate 既有表一致为 VARCHAR(512)；实现前按 mate-service 源码核对 Chat 映射表能否按 sessionId 查到 chatId 与所属用户；`t_schedule_session` 不存这两项，依赖这一点 | [§3.2](#data-model) 的字段类型与登记、核对接口 | Mate |
 
 ### 需求信息
 
@@ -146,7 +146,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 ### 3.2 数据模型
 
-目标新增两张表：`t_schedule`、`t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；mate-service 源码与既有表未核验，用户 ID 的长度先按 64 设计，实现前按 Mate 实际定义核对（[M7](#m7)）。
+目标新增两张表：`t_schedule`、`t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；用户 ID 与 Mate 既有表一致，为 VARCHAR(512)（2026-10-20 评审确认）；Chat 映射表结构仍待按 mate-service 源码核对（[M7](#m7)）。
 
 <a id="mate-tables"></a>
 
@@ -170,7 +170,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
 | id | VARCHAR(41) | 否 | — | Claw 返回的任务 ID，与 Claw `t_schedule.id` 相同 |
-| user_id | VARCHAR(64) | 否 | — | 创建者的用户 ID，创建后不修改 |
+| user_id | VARCHAR(512) | 否 | — | 创建者的用户 ID，类型与 Mate 既有表一致，创建后不修改 |
 | created_at | TIMESTAMPTZ(0) | 否 | — | 写入时刻 |
 
 主键：`id`。
@@ -635,5 +635,5 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.1.0 | 2026-10-20 | 为先跑通端到端，access-token 接口首版暂不认证调用方；M5、§4.4、§4.4.1、§5.1 与测试验收记录该风险与补回条件。 |
+| 1.1.0 | 2026-10-20 | 为先跑通端到端，access-token 接口首版暂不认证调用方；M5、§4.4、§4.4.1、§5.1 与测试验收记录该风险与补回条件；`t_schedule.user_id` 按 Mate 既有表改为 VARCHAR(512)。 |
 | 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、两张表的结构与事务（2026-10-20 按评审精简为 `t_schedule` 3 列、`t_schedule_session` 5 列）、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |
