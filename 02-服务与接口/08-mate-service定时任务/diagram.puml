@@ -50,7 +50,7 @@ deactivate Operator
 @startuml mate_schedule_create
 ' 目标：待实现；UC1 创建接口配置的任务。
 ' Claw 接口：POST /campusclaw-service/v1/schedules，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4 节。
-' mate-service 源码未核验；“权限”代表公司功能权限与 Mate 既有 Agent 使用权限两个检查。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
 ' 表达方式：画正常创建与 Claw 结果三种去向；配额统计不加锁；补偿删除失败后的对账见 README.md 第 3.7 节。
 title 创建定时任务（UC1）
 hide footbox
@@ -59,14 +59,11 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-participant "权限" as Perm
 database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : POST /schedules
 activate Operator
-Mate -> Perm ++ : 检查管理权限与 Agent 使用权限
-return 允许
 Mate -> MateStore ++ : 统计 t_schedule 中该用户的任务数（不加锁）
 return 未达上限（达到上限返回 422）
 Mate -> Claw ++ : POST /schedules（原样转发请求体）
@@ -126,7 +123,7 @@ deactivate Claw
 
 @startuml mate_schedule_architecture
 ' 目标：待实现；Mate 侧定时任务的全局目标类图。
-' mate-service 源码未核验：类名为目标命名，公司权限、Chat 映射与统一账号认证为 Mate 既有能力的抽象，接入方式待实现时核对。
+' mate-service 源码未核验：类名为目标命名，Chat 映射与统一账号认证为 Mate 既有能力的抽象；用户权限由 Mate 框架按 access-token 检查，不在图中，接入方式待实现时核对。
 ' Claw 侧契约：01-总体架构/08-CampusClaw定时任务/README.md 0.66.0 第 4 章与第 4.8 节。
 title Mate 定时任务：全局目标类图
 skinparam backgroundColor white
@@ -202,9 +199,6 @@ package "外部边界" as ExtPkg {
   interface ClawScheduleClient <<待实现>> {
     + 10 个 Claw 定时任务接口
   }
-  interface PermissionChecker <<Mate 既有：未核验>> {
-    + 功能权限、Agent 使用权限
-  }
   interface ChatMappingService <<Mate 既有：未核验>> {
     + bind(userId, sessionId) : chatId
     + chatOf(sessionId) / ownerOf(chatId)
@@ -217,7 +211,6 @@ package "外部边界" as ExtPkg {
 ScheduleManagementController --> ScheduleManagementService
 ScheduleRuntimeController --> ScheduledSessionRegistrationService
 ScheduleRuntimeController --> ScheduledAccessTokenService
-ScheduleManagementService --> PermissionChecker
 ScheduleManagementService --> ScheduleVisibilityPolicy
 ScheduleManagementService --> ScheduleQuotaGuard
 ScheduleManagementService --> ScheduleProjector
