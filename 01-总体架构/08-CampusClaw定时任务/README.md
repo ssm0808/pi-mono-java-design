@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.67.1 |
+| 文档版本 | 0.68.0 |
 | 更新日期 | 2026-10-19 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
@@ -35,7 +35,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 | 依赖 | 开发期做法 | 联调或上线前必须完成 |
 |---|---|---|
 | Mate 的 Session 归属登记与统一账号 access-token 两个接口（调用边界见 [§5.1](#security)，[Mate 侧设计 §4.4](../../02-服务与接口/08-mate-service定时任务/README.md#mate-for-claw)） | 按 `ScheduleAccessTokenProvider`、`ScheduleSessionRegistry` 编码，测试用桩实现 | Mate 实现接口，路径与 VO 定稿 |
-| Claw 与 Mate 的服务鉴权（[T2](#todo-t2)） | 入站校验保留端口，先用测试配置；出站凭据端口已移除，取 access-token 暂不附加服务认证（风险见 T2） | 确定鉴权机制，补回出站认证 |
+| Claw 与 Mate 的服务鉴权 | Claw 与 Mate 互相调用都由证书校验保证调用方，应用层不另做服务认证；入站认证与出站凭据端口均已移除 | 无 |
 | Runtime 的事务内终态扩展点（[D11](#key-decisions)）、后台准备与非交互 Host 策略 | 属于 M06 改造；2026-10-14 确定终态扩展点随定时任务 PR #332 一起实现 | 随 PR #332 合入 Runtime |
 | 实例宕机后自动恢复（[T9](#todo-t9)） | 首版不实现 | 上线前须有人工释放被占用任务的处置方式，见[应急预案](#524-应急预案)缺口 |
 
@@ -45,7 +45,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 | # | 问题 | 影响 | 首版做法 | 归属 |
 |---|---|---|---|---|
-| <a id="todo-t2"></a>T2 | Claw 与 Mate 互相调用时如何认证对方；统一账号如何配置；access-token 有效期多长 | 不定则无法联调；有效期影响是否需要缓存 Token | Mate 新增接口见 [Mate 侧设计 §4.4](../../02-服务与接口/08-mate-service定时任务/README.md#mate-for-claw)，服务认证同为 Mate 侧待确认项 [M5](../../02-服务与接口/08-mate-service定时任务/README.md#m5)；每批工具调用取一次 Token，不缓存。**TODO（已知风险）**：为先跑通端到端，2026-10-20 移除了 Claw 取统一账号 access-token 时的出站服务认证（pi-mono-java PR #372，`docs/DEFERRED.md` DEF-008）。该接口返回所有定时任务共用的统一账号 Token，权限高于单个用户，目前只靠网络或网关限制调用方；T2 确定后 Claw 补回出站认证，Mate 只允许 Claw 调用该接口 | Claw 与 Mate 共同 |
+| <a id="todo-t2"></a>T2 | 统一账号如何配置；access-token 有效期多长 | 有效期影响是否需要缓存 Token | Mate 新增接口见 [Mate 侧设计 §4.4](../../02-服务与接口/08-mate-service定时任务/README.md#mate-for-claw)；每批工具调用取一次 Token，不缓存。Claw 与 Mate 互相调用由证书校验保证调用方（2026-10-20 确认），不再是待定项 | Claw 与 Mate 共同 |
 | <a id="todo-t7"></a>T7 | Mate 任务配额准入与 Session 归属登记的内部契约 | 归属登记未定则受理流程无法联调 | 列表由 Mate 拉取全部后自行过滤，不传获准集合；归属登记保留在 Mate；对话中创建的任务按 sessionId 对应的对话判断归属（[§3.13](#chat-created-schedule)）；Mate 侧方案见 [Mate 侧设计](../../02-服务与接口/08-mate-service定时任务/README.md)，配额见 [M2](../../02-服务与接口/08-mate-service定时任务/README.md#m2)，登记接口见 [M3](../../02-服务与接口/08-mate-service定时任务/README.md#m3)，待评审确认 | Mate |
 | <a id="todo-t8"></a>T8 | Mate 管理入口在调用 Claw 前后的处理（权限、配额、任务与用户关联） | 只影响 Mate 侧；Claw 侧逻辑已定 | Claw 只接收可信服务调用；Mate 侧处理见 [Mate 侧设计 §4.2、§4.3](../../02-服务与接口/08-mate-service定时任务/README.md#management-api)，待评审确认 | Mate |
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，任务一直被占用，后续计划全部遇忙跳过 | 需人工处置才能恢复 | 不自动恢复。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件，中断终态走 D11 的同一终态提交，Run 随之结束；② 执行期写入与工具调用前检查执行未终止，防止恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | Runtime |
@@ -507,7 +507,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 [原尺寸 SVG](schedule_manual_run.svg) · [PlantUML 源码](diagram.puml#L245)
 
-**正常调用如何完成：** 核验 Mate 服务、获准操作和目标 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
+**正常调用如何完成：** 核验目标任务 → 短事务锁定任务，插入一条未结束的手动 Run 占用任务，不改自动计划 → 进入[共用受理流程](#run-admission-sequence) → 返回 200 和带 sessionId 的 Run，不等待业务完成。
 
 <a id="scheduled-run-sequence"></a>
 <a id="normal-acceptance"></a>
@@ -756,7 +756,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 <a id="mate-access-boundary"></a>
 
-**身份与权限边界（当前目标）。** 本文所有“当前调用者、管理范围、可见范围、功能权限”的判断均由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，不以本地字段比较决定用户权限；收到 Mate 可信服务请求后校验服务来源、具体操作及目标资源，再检查自己的输入、状态和事务条件。浏览器或模型提交的 ID 不能作为授权依据，缺少有效 Mate 授权结果时拒绝。
+**身份与权限边界（当前目标）。** 本文所有“当前调用者、管理范围、可见范围、功能权限”的判断均由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，不以本地字段比较决定用户权限；Mate 调用 Claw 的身份由证书校验保证，Claw 不做入站服务认证，也不接收 Mate 给出的操作范围；收到请求后只校验目标资源，再检查自己的输入、状态和事务条件。浏览器或模型提交的 ID 不能作为授权依据。
 
 **首版列表过滤由 Mate 完成（2026-10-13 评审确定，方法 A）。** Claw 的任务列表与 Run 列表不接收用户或获准 ID 集合，按自身排序与页码返回全部存续记录；Mate 拉取全部页后，按其维护的用户与任务关联过滤，再自行排序、分页返回给浏览器。查看单个任务的 Run 时 Mate 先确认该任务可见，再带 scheduleId 查询。代价：每次列表都要读取全部用户的记录，读取量随任务和 Run 总量增长，Claw 的页码只用于 Mate 分批拉取；Claw 不保存 userId。后续是否在 Claw 增加 userId 以便直接按用户查询列为待定 [T10](#todo-t10)。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
 
@@ -1043,7 +1043,7 @@ Accept-Language: zh-CN
 |---|---|
 | path.scheduleId | 必填，使用创建返回的原 ID；不通过名称查找，不自行构造 |
 | query / body | 无业务查询参数，无请求体 |
-| 认证与授权 | 复用 §4.2 的可信调用上下文：校验服务来源与获准操作后按 ID 查找任务；用户可见性由 Mate 在调用前判断（D9）；服务鉴权待定（T2） |
+| 认证与授权 | 复用 §4.2 的可信调用上下文：调用方由证书校验保证，按 ID 查找任务；用户可见性由 Mate 在调用前判断（D9） |
 | Accept-Language | 可选；支持及回退规则见 §4.2 |
 | 重试 | 读取可安全重试，不触发任务 |
 
@@ -1300,7 +1300,7 @@ en-US 使用相同 resCode，文案为 `Invalid schedule rule. Use a valid Sprin
 | path.scheduleId | 必填，使用服务端创建返回的原 ID，大小写敏感、不复用；沿配置 ID 统一格式校验，不用名称定位；精确正则随 ID 契约确定 |
 | query | 无业务查询参数，不提供 force、cascade 或恢复参数 |
 | body | 无请求体；非空正文返回400，不接受 `{}` 作为删除选项 |
-| 身份与授权 | 沿 §4.2 的可信调用上下文；用户管理资格由 Mate 在调用前判断，Claw 校验服务来源与获准操作后按 ID 删除；不接受客户端 scope/owner |
+| 身份与授权 | 沿 §4.2 的可信调用上下文；用户管理资格由 Mate 在调用前判断，Claw 按 ID 删除；不接受客户端 scope/owner |
 | Content-Type | 无请求体，不要求；不会因省略而返回415 |
 | Accept-Language | 可选，zh-CN/en-US，缺省或不支持回退 zh-CN；JSON 响应返回实际 Content-Language，错误文案按该语言选择 |
 | 条件与请求键 | 不采用 If-Match、Idempotency-Key 或配套 ETag，不通过其他字段替代；按 §4.2 处理额外 Header |
@@ -1428,7 +1428,7 @@ Accept-Language: zh-CN
 |---|---|
 | path.scheduleId | 必填，透传创建返回的服务端 ID；大小写敏感、不复用，精确正则沿统一 ID 契约 |
 | query / body | 无业务查询、无请求体；非空正文（包括 `{}`）返回400；不接收 prompt、agentId、schedule 或 target 覆盖 |
-| 身份与范围 | 沿 §4.2 可信调用上下文；用户能否运行由 Mate 在调用前判断，Claw 校验服务来源、获准操作与目标资源；运行时不查询用户执行资格，业务调用统一使用 Mate 账号的 access-token（D10） |
+| 身份与范围 | 沿 §4.2 可信调用上下文；用户能否运行由 Mate 在调用前判断，Claw 只校验目标资源；运行时不查询用户执行资格，业务调用统一使用 Mate 账号的 access-token（D10） |
 | Header | 可选 Accept-Language；无正文不要求 Content-Type；不采用 If-Match、Idempotency-Key 或 ETag，未知 Header 沿 §4.2 处理 |
 | 可运行配置 | 存在且未删除；active、paused、有 Cron、schedule:null 均允许尝试运行，不因 paused 而先恢复自动计划 |
 
@@ -1745,7 +1745,7 @@ Accept-Language: zh-CN
 
 时序图见[§3.3](#save-sequence)，以下是每一步的规则。
 
-1. Mate 验证用户身份及管理资格；Claw 验证服务来源、获准操作/资源和请求形状。创建生成新的任务 ID；更新只接受提交字段，省略与 null 分开处理，不要求客户端携带版本或请求身份。
+1. Mate 验证用户身份及管理资格；Claw 验证目标资源和请求形状，调用方由证书校验保证。创建生成新的任务 ID；更新只接受提交字段，省略与 null 分开处理，不要求客户端携带版本或请求身份。
 2. 不校验 Agent 是否存在和启停用（T11），保存不调用 Mate 或运行目录，也不持数据库锁跨远程 I/O。
 3. 创建在事务中插入新配置；更新在事务中锁定并读取最新任务，复核范围和可修改状态，仅合并本次提交字段并校验最终整体。不能直接写回旧的完整对象，不以客户端缺版本为由拒绝。
 4. 一次写入所有变化，失败整体回滚；真正变化时更新 updatedAt，同值不变。保存成功只以事务提交为依据，不沿用 jobs.json 写失败仅记日志的行为。提交后按当次已保存结果返回完整资源；状态和摘要需来自一致快照。
@@ -1805,7 +1805,7 @@ Accept-Language: zh-CN
 
 暂停/取消暂停验收须覆盖：200完整字段与创建/详情一致；暂停保留假设恢复后的Cron计划时间；schedule:null不伪造计划；manual原因转换、同值操作不更新时间；取消暂停只从未来匹配继续、不立即运行、不补跑；重复unpause不推迟现有游标；恢复校验明确失败保留原状态/原因；pause与最终自动受理两种顺序、pause→unpause后旧自动Run按受理时状态判定、在途收尾不覆盖人工状态；消息/凭据并发更新不被旧快照覆盖；本文目标不构成产品测试通过。
 
-不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。服务鉴权（T2）、Mate 的两个接口（[§4.8](#mate-calls)）及实际调度是上线依赖，实施切片见[实施切片](#implementation-slices)。当前没有产品代码、数据库或集群测试证据。
+不新增直接 Maven 依赖：复用 JDK、Spring CronExpression/Jackson、宿主 MyBatis 3.0.4 与数据库驱动。完整传递依赖图未重跑。Mate 的两个接口（[§4.8](#mate-calls)）及实际调度是上线依赖，实施切片见[实施切片](#implementation-slices)。当前没有产品代码、数据库或集群测试证据。
 
 <a id="mate-calls"></a>
 
@@ -1852,7 +1852,7 @@ Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标
 
 ### 5.1 安全性
 
-- 用户、组织、租户、资源归属与权限由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，收到 Mate 可信服务请求后只校验服务来源、具体操作和目标资源，再检查自己的输入与状态，规则见[配置 身份与权限边界](#mate-access-boundary)。
+- 用户、组织、租户、资源归属与权限由 Mate 维护并执行。Claw 不解析或保存用户、scope、owner、operator，Mate 调用 Claw 由证书校验保证调用方，Claw 只校验目标资源，再检查自己的输入与状态，规则见[配置 身份与权限边界](#mate-access-boundary)。
 - 首版列表由 Mate 拉取全部后按用户过滤、排序和分页（D9）；Claw 加 userId 见 T10。
 - 用户权限只在配置任务时由 Mate 检查；运行时所有定时任务统一使用 Mate 配置的同一个账号，不再按用户查询执行资格（D10）。
 - 接口配置的任务新建的 Session 在受理前由 Mate 独立登记归属（[§4.8.2](#mate-calls)）；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
@@ -2038,7 +2038,7 @@ coding-agent 已直接依赖 agent-core、Jackson 和测试 Starter，Spring con
 
 ### 7.2 实施校准
 
-Mate 新增接口路径/VO 为 [Mate 侧设计](../../02-服务与接口/08-mate-service定时任务/README.md) 中的草案，待评审确认（M3、M5），Claw 与 Mate 的服务认证、统一账号配置、Token 有效期与 Mate 归属登记需联调校准（T2）；DDL、原子受理、取消终态和多副本故障测试必须在实现阶段验证（T4）。完整 Maven 依赖树及 corporate NativeParent 尚未核验（T5），不把局部 POM 读取称为依赖审计完成。
+Mate 新增接口路径/VO 为 [Mate 侧设计](../../02-服务与接口/08-mate-service定时任务/README.md) 中的草案，待评审确认（M3），统一账号配置、Token 有效期与 Mate 归属登记需联调校准（T2）；DDL、原子受理、取消终态和多副本故障测试必须在实现阶段验证（T4）。完整 Maven 依赖树及 corporate NativeParent 尚未核验（T5），不把局部 POM 读取称为依赖审计完成。
 
 <a id="html-maintenance"></a>
 
@@ -2104,6 +2104,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.68.0 | 2026-10-20 | Claw 与 Mate 互相调用由证书校验保证调用方：删除入站 `MateServiceAuthenticator` 与 `ScheduleAccessResolver`，Claw 不再接收操作范围；取 access-token 不附加服务认证不再是风险，T2 只剩统一账号配置与 Token 有效期。 |
 | 0.67.1 | 2026-10-20 | §4.8.1 的 access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`，与其他调用 Mate 的路径集中配置。 |
 | 0.67.0 | 2026-10-20 | 为先跑通端到端，Claw 取统一账号 access-token 时暂不附加服务认证，出站凭据端口移除（pi-mono-java PR #372）；T2 记录该风险与补回条件，§4.8.1 与首版开发前提同步。 |
 | 0.66.0 | 2026-10-19 | Mate 侧设计集中到 [mate-service 定时任务设计](../../02-服务与接口/08-mate-service定时任务/README.md)（新增管理接口、调用 Claw 前后的处理、配额与对账，原 Mate 定时执行草案并入）；T2、T7、T8 与 §4.8 改为引用该文档；删除 §2.2 中已不存在的“Agent 启用校验”。 |

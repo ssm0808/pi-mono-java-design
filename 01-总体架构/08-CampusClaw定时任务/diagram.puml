@@ -204,7 +204,7 @@ ScheduleRunDTO "0..*" --> "1" ScheduleDTO : scheduleId
 
 
 legend bottom left
-Mate 管理入口经服务认证调用 ScheduleController；MateScheduleSessionRegistry 与 MateAccessTokenClient 调用 Mate 服务。
+Mate 管理入口经证书校验调用 ScheduleController；MateScheduleSessionRegistry 与 MateAccessTokenClient 调用 Mate 服务。
 单例不持有单次 Run 状态；PreparedScheduledSessionDTO、RuntimeActiveExecution、ExecutionSafetyContext 按 Run 创建。
 ScheduleRunService 查询 Run 同样经 ScheduleMapper；ScheduledSessionStarter 在同一事务写入 Session、首条消息与根执行，对话中创建的任务改为在关联会话追加消息与根执行。
 Runtime 删除会话时在同一事务调用 SessionDeleteHook，删除该会话关联的任务及其 Run。
@@ -231,7 +231,7 @@ database "存储" as Store
 autonumber
 activate Mate
 Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
-Schedule -> Schedule : 核验服务来源和获准目标\n校验输入和时间规则
+Schedule -> Schedule : 校验输入和时间规则
 Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
@@ -262,7 +262,7 @@ database "存储" as Store
 autonumber
 activate Mate
 Mate -> Schedule ++ : 立即运行已保存的任务
-Schedule -> Schedule : 核验 Mate 服务、获准操作和目标
+Schedule -> Schedule : 核验目标任务
 Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用任务槽位；不改自动计划
 return 已预留的 Run
 ref over Schedule, Store

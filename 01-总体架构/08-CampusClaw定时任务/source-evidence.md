@@ -732,7 +732,7 @@ PR #332 在 `bdd3af99` 把定时任务类改为可读命名，并把 `runtimeapi
 | `PreparedScheduledRuntimeDTO`、`ScheduledRuntimeRequestDTO`、`ScheduledRuntimeReceiptDTO` | `PreparedScheduledSessionDTO`、`ScheduledSessionRequestDTO`、`ScheduledSessionReceiptDTO` |
 | `ScheduleAuthorizationPort`、`MateScheduleAuthorizationAdapter` | `ScheduleSessionRegistry`、`MateScheduleSessionRegistry` |
 | `ScheduledAccessTokenPort`、`HttpScheduledAccessTokenClient` | `ScheduleAccessTokenProvider`、`MateAccessTokenClient` |
-| `TrustedScheduleAuthenticationBridge`、`ScheduleOutboundCredentialsPort` | `MateServiceAuthenticator`、`MateServiceCredentialProvider` |
+| `TrustedScheduleAuthenticationBridge`、`ScheduleOutboundCredentialsPort` | 均已删除：Mate 调 Claw 由证书校验保证；出站凭据端口随 pi-mono-java PR #372 移除 |
 
 ## 9. 文档验收
 
