@@ -1,13 +1,13 @@
 # mate-service 定时任务设计
 
-[服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [共享连接目录](../02-CampusMate共享客户端配置/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [PlantUML 源码](diagram.puml)
+[服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [共享连接目录](../02-CampusMate共享客户端配置/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
 
 本文是 Mate 侧定时任务唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织，集中维护 Mate 在定时任务中的全部职责：对浏览器提供的管理接口、调用 Claw 前后的处理、为 Claw 提供的两个接口以及归属对账。Claw 侧的调度、受理、表结构和 HTTP 契约只在 [Claw 主设计](../../01-总体架构/08-CampusClaw定时任务/README.md)维护，本文引用不复制。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.3.0 |
-| 更新日期 | 2026-10-19 |
+| 文档版本 | 1.4.0 |
+| 更新日期 | 2026-10-20 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
 | 源码基线 | Claw：pi-mono-java main `ead67eba`（见 [§8.1](#source-evidence)）；mate-service 源码未核验，本文不指定物理表名和既有组件的真实类名 |
@@ -345,7 +345,7 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | 项 | 规定 |
 |---|---|
 | 基础路径 | `/mate-service/v1` |
-| 认证与 Header | 与 [通用对话 API §3.1](../07-mate-service通用对话API/README.md#31-认证header-与-path) 相同：Authorization 与 X-HW-APPKEY 至少一个，JWT 优先；X-HW-ID 为显式请求头；不接收 access-token，定时运行不使用调用者的凭据 |
+| 认证与 Header | 与 [通用对话 API §3.1](../07-mate-service通用对话API/README.md#31-认证header-与-path) 相同：Authorization 与 X-HW-APPKEY 至少一个，JWT 优先；X-HW-ID 与 access-token 为显式请求头。access-token 只供 Mate 框架检查权限，不转发给 Claw，定时运行也不使用调用者的凭据 |
 | 报文 | ResultBean，lowerCamelCase；成功 `resCode/resMsg/result`，失败只有 `resCode/resMsg`，保留真实 HTTP 状态；`Cache-Control: no-store` |
 | 时间 | 沿用 Claw：UTC 秒级、以 Z 结尾；页面按任务时区或浏览器时区显示 |
 | 语言 | 错误文案按公司公共上下文的语言返回，`Content-Language` 标明实际语言 |
@@ -368,7 +368,9 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | Run 列表 | GET `/schedule-runs` | GET `/schedule-runs`（指定任务时单次，否则拉取全部页） | 可见性过滤 |
 | Run 详情 | GET `/schedule-runs/{runId}` | GET `/schedule-runs/{runId}` | 按所属任务检查可见性 |
 
-路径和资源名与 Claw 一致，请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
+路径和资源名与 Claw 一致。创建接口的完整定义见 [§4.2.6](#create-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
+
+<a id="resource-projection"></a>
 
 #### 4.2.3 资源投影
 
@@ -408,6 +410,52 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | 500 Mate 通用错误码 | Mate 写入 `t_schedule` 等本地失败，与 Mate 其他接口一致 |
 
 错误不回显 Claw 内部地址、原始异常或 sessionId。
+
+<a id="create-schedule-api"></a>
+
+#### 4.2.6 创建定时任务
+
+`POST /mate-service/v1/schedules`。用户在页面上配置“工作日 08:00 汇总园区设备告警”这类任务，Mate 检查配额后把请求体原样转发给 Claw，Claw 创建成功后记录归属，返回投影后的完整任务；处理顺序见 [§3.3](#create-sequence)。请求、两种成功响应和全部错误的示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [01-create-schedule.json](接口契约/操作/01-create-schedule.json)，用 `render_schedule_api.py` 生成，正文不维护第二套 JSON。
+
+**请求头**
+
+| Header | 必填 | 规定 |
+|---|---|---|
+| Content-Type | 是 | `application/json` |
+| Authorization 或 X-HW-APPKEY | 至少一个 | `Bearer <JWT>` 优先；同时提供时用 JWT，JWT 无效不回退 APPKEY |
+| X-HW-ID | 是 | 公司调用方身份 |
+| access-token | 是 | 当前用户的访问令牌，Mate 框架据此检查权限；不转发给 Claw，定时运行也不使用 |
+
+**请求体**：字段与 Claw [§4.3](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同，Mate 原样转发，不增删字段，校验由 Claw 完成。
+
+| 字段 | 必填 | 规定 |
+|---|---|---|
+| name | 是 | 去首尾空白后 1～256 个字符，允许重名 |
+| description | 否 | 最多 2048 个字符，省略为 null，不参与模型输入 |
+| agentId | 是 | 只校验格式，不校验 Agent 是否存在或启用 |
+| prompt | 是 | 纯文本，去首尾空白后非空；每次运行作为新会话的首条用户消息 |
+| schedule | 否 | 省略或 null 表示只手动运行；非空时为 `{type:"cron", expression, timezone}`，expression 为 Spring 六字段，timezone 为 IANA 名称、省略默认 Asia/Shanghai |
+| metadata | 否 | 字符串键值对，最多 16 对，键最多 64、值最多 512 个字符；不传给模型，不作为授权依据 |
+| chatId、sessionId 与只读字段 | 不得传入 | 接口创建的任务不关联会话；传入 chatId、sessionId、type、id、status、pausedReason、时间字段或其他未知字段，返回 400 `SCHEDULE_REQUEST_INVALID` |
+
+**成功响应**：HTTP 201，`Location: /mate-service/v1/schedules/{scheduleId}`（Mate 改写 Claw 返回的 Location），`Cache-Control: no-store`。result 是 [§4.2.3](#resource-projection) 投影后的完整任务：Claw 的 sessionId 换成 chatId，接口创建的任务恒为 null；status 为 active，pausedReason 为 null，schedule 非空时附 lastRunAt（null）与最多五个 upcomingRunsAt。创建不立即运行，也不创建 Chat。
+
+**错误**：只返回 resCode 与 resMsg，`Content-Language` 标明实际语言。Claw 的错误码原样返回，文案由 Mate 用同名的语言包重新给出。
+
+| HTTP / resCode | 条件 | 中 / 英 |
+|---|---|---|
+| 400 / SCHEDULE_NAME_INVALID | name 缺失、为空或超长 | 定时任务名称无效。 / Invalid schedule name. |
+| 400 / SCHEDULE_PROMPT_INVALID | prompt 缺失或为空 | 定时任务内容无效。 / Invalid schedule prompt. |
+| 400 / SCHEDULE_RULE_INVALID | schedule 不是 cron 对象或表达式非法 | 定时规则无效，请使用合法的 Spring 六字段 Cron 表达式。 / Invalid schedule rule. Use a valid Spring six-field Cron expression. |
+| 400 / SCHEDULE_TIMEZONE_INVALID | timezone 不是有效的 IANA 名称 | 定时时区无效。 / Invalid schedule timezone. |
+| 400 / SCHEDULE_REQUEST_INVALID | JSON 非法；description、agentId、metadata 不合规；传入 chatId、sessionId、只读或未知字段 | 定时任务请求无效。 / Invalid schedule request. |
+| 401 / UNAUTHENTICATED | 认证字段缺失或凭据无效，复用公司认证组件 | 调用方身份认证失败。 / Caller authentication failed. |
+| 403 / Mate 框架错误码 | 框架按 access-token 检查权限不通过 | 沿用框架 |
+| 422 / SCHEDULE_QUOTA_EXCEEDED | 当前用户接口创建的任务数已达上限（[M2](#m2)），Mate 转发前判断 | 定时任务数量已达上限，请删除不再需要的任务后再创建。 / You have reached the maximum number of schedules. Delete schedules you no longer need and try again. |
+| 422 / SCHEDULE_POLICY_REJECTED | Cron 规则超出部署频率策略，Claw 判断 | 定时任务超出部署策略。 / The schedule exceeds the deployment policy. |
+| 500 / SCHEDULE_CREATE_FAILED | Claw 内部处理失败，任务未创建 | 创建定时任务失败。 / Failed to create the schedule. |
+| 500 / Mate 通用错误码 | Claw 已创建但 Mate 写 `t_schedule` 失败；残留任务对用户不可见，由对账清理 | 沿用 Mate 通用文案 |
+| 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败，或结果未知（超时、断连）；不自动重试，不返回 Retry-After | 定时任务服务暂不可用，请刷新列表确认任务是否已创建后再试。 / The schedule service is temporarily unavailable. Refresh the list to check whether the schedule was created before trying again. |
 
 <a id="mate-to-claw"></a>
 
@@ -524,7 +572,6 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | HTTP / resCode | 含义 | Claw 处理 |
 |---|---|---|
 | 400 / SCHEDULED_SESSION_REQUEST_INVALID | 字段缺失或格式非法 | 明确拒绝，本次不受理 |
-| 401 / SCHEDULED_SESSION_AUTH_REQUIRED | 调用方不是获准的 Claw 服务 | 明确拒绝，本次不受理 |
 | 404 / SCHEDULED_SESSION_NOT_FOUND | 仅核对：未登记 | 继续核对直到准备期限 |
 | 409 / SCHEDULED_SESSION_REJECTED | `t_schedule` 中没有该任务，或 sessionId 已用不同的 scheduleId 或 runId 登记 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
 | 500 / SCHEDULED_SESSION_FAILED | 内部处理失败 | 结果未知，转只读核对 |
@@ -634,6 +681,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.0 | 2026-10-20 | 新增 §4.2.6 创建接口的完整定义：请求头、字段规则、201 响应与双语错误表，示例由接口 HTML 展示；§4.2.1 改为接收 access-token 供 Mate 框架检查权限、不转发给 Claw；§4.4.2 删除与证书校验矛盾的 401。 |
 | 1.3.0 | 2026-10-20 | Claw 与 Mate 互相调用由证书校验保证调用方：§4.3 删除服务凭据与操作范围，503 与 F8 改为证书校验失败；M5 关闭，§4.4 不再有 access-token 未认证的风险，删除 401 `SCHEDULED_TOKEN_AUTH_REQUIRED`。 |
 | 1.2.1 | 2026-10-20 | 创建时写入 `t_schedule` 失败改为直接返回 500，不再同步补偿删除 Claw 任务，残留由对账清理；创建时序图去掉补偿分支。 |
 | 1.2.0 | 2026-10-20 | 用户认证与权限由 Mate 框架按 access-token 统一检查，删除本设计中的功能权限与 Agent 使用权限检查、相关 403 错误码和类图中的权限接口；创建时序图去掉权限步骤。 |
