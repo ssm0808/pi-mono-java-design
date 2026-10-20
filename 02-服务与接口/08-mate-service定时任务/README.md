@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.2.0 |
+| 文档版本 | 1.2.1 |
 | 更新日期 | 2026-10-19 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -123,7 +123,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 |---|---|---|---|---|---|
 | D1 | 管理接口自己定义资源，还是与 Claw 一一对应？ | Claude 控制台与 API 直接操作同一个 Deployment 资源 | 页面已按 Claw 契约设计（M07 场景09）；两套字段会产生转换和不一致 | 10 个管理接口与 Claw 路径、字段一一对应，请求原样转发；Mate 只做可见性与配额检查、归属记录和资源投影 | Claw 契约变化时 Mate 要同步；页面直接受 Claw 字段约束 |
 | D2 | “任务属于谁”存在哪里？ | Claude 以 workspace 为边界，无用户归属 | Claw 不保存用户（Claw D9）；用户、组织与权限都在 Mate | Mate 保存任务归属；列表从 Claw 拉取全部页后按归属过滤 | 读取量随任务总数增长；任务量大后改为 Claw 按用户查询（Claw T10） |
-| D3 | Mate 先记录归属还是先调用 Claw 创建？ | 无可对照实现 | Mate 与 Claw 之间没有分布式事务；Claw 创建接口没有幂等键 | 先调用 Claw，拿到任务 ID 后再写 Mate `t_schedule`；配额在调用前按行数统计，不加锁；写入失败补偿删除，补偿失败留给对账 | 并发创建可能比上限多出几个；Mate 写入失败或结果未知时，Claw 会短时留下无主任务，靠登记拒绝与对账兜底 |
+| D3 | Mate 先记录归属还是先调用 Claw 创建？ | 无可对照实现 | Mate 与 Claw 之间没有分布式事务；Claw 创建接口没有幂等键 | 先调用 Claw，拿到任务 ID 后再写 Mate `t_schedule`；配额在调用前按行数统计，不加锁；写入 `t_schedule` 失败与普通接口一样返回 500，不同步补偿删除，Claw 残留交给对账 | 并发创建可能比上限多出几个；Mate 写入失败或结果未知时，Claw 会短时留下无主任务，靠登记拒绝与对账兜底 |
 | D4 | 浏览器看到的会话标识用什么？ | Claude 直接返回 session_id | Mate 对外只暴露 Chat/chatId，不暴露 Runtime 的 sessionId（[通用对话 API §1](../07-mate-service通用对话API/README.md#1-接口与权威来源)） | Mate 把 Schedule 与 Run 中的 sessionId 投影为 chatId；接口配置的任务在登记时建立 Chat 映射 | 映射暂时查不到时 chatId 为 null，页面显示“结果入口准备中” |
 | D5 | 无主任务怎样避免以统一账号运行业务？ | 无可对照实现 | 统一账号权限大；无主任务没有人能看到或管理 | 登记接口对 `t_schedule` 中没有记录的任务一律拒绝，Claw 因此不受理；对账任务 10 分钟后经 Claw 删除 | 无主任务在被删除前到点会产生一条失败 Run（`session_creation_rejected_error`），删除任务时随之删除 |
 | D6 | 任务对谁可见？ | Claude 按 workspace 范围列出 | 首版没有共享和管理员视图的需求 | 只有创建者可见、可管理（[M1](#m1)）；对话中创建的任务按关联 Chat 的所属用户判断 | 不能团队共享；创建者离职后任务仍以统一账号运行，首版没有管理员入口处理，见 [§5.2.4](#emergency-plan) |
@@ -213,7 +213,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 | 操作 | 同一事务内维持的不变量 |
 |---|---|
-| 创建 | Claw 返回 201 后插入 `t_schedule`；插入失败时调用 Claw 删除刚创建的任务作补偿。配额统计在调用 Claw 之前，不加锁 |
+| 创建 | Claw 返回 201 后插入 `t_schedule`；插入失败返回 500，不同步删除 Claw 任务。配额统计在调用 Claw 之前，不加锁 |
 | 删除任务 | Claw 删除成功或返回 404 后，按 id 删除 `t_schedule` 行；不动定时会话登记与 Chat 映射 |
 | 登记 | 以共享锁读取该 schedule_id 的 `t_schedule` 行，没有则拒绝；按 session_id 查已有登记，schedule_id 与 run_id 相同则返回原记录，不同则拒绝；否则插入 `registered` 登记与 Chat 映射。删除任务的事务持排他锁，两者先后提交，不会登记到已删除的任务 |
 | 确认登记 | 对账读到 Session 存在时，把 `registered` 改为 `confirmed` |
@@ -228,7 +228,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 ![Mate 定时任务：全局目标类图](mate_schedule_architecture.svg)
 
-[原尺寸 SVG](mate_schedule_architecture.svg) · [PlantUML 源码](diagram.puml#L124)
+[原尺寸 SVG](mate_schedule_architecture.svg) · [PlantUML 源码](diagram.puml#L121)
 
 分层理由：浏览器入口和 Claw 入口分成两个 Controller，因为它们的认证方式不同（用户认证与服务认证，[§5.1](#security)），不能共用一个过滤链。可见范围、配额和投影抽成三个规则类，由管理服务统一调用，保证 10 个操作用同一套判断，避免各接口各写一份“这个任务是不是你的”。Chat 映射和统一账号认证是 Mate 既有能力，图中只画成接口；用户权限由 Mate 框架按 access-token 检查，不在图中，接入方式待实现时按 mate-service 源码核对。实现时先落两张表与可见范围规则，再接管理接口，然后是登记接口，最后是对账。
 
@@ -246,11 +246,11 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 |---|---|
 | 2～3 | 统计当前用户在 `t_schedule` 中的任务数，达到上限（[M2](#m2)）返回 422 `SCHEDULE_QUOTA_EXCEEDED`。不加锁：同一用户同时提交多个创建时，可能比上限多出几个 |
 | 4 | 请求体原样转发给 Claw，Mate 不增删字段 |
-| 5～9 | Claw 返回 201：插入 `t_schedule`，返回投影后的资源；插入失败则调用 Claw 删除刚创建的任务作补偿，补偿也失败时留给 [§3.7](#reconciliation) 对账 |
-| 10～11 | Claw 明确失败（4xx/5xx 带错误码）：Mate 没有写入任何记录，按 [§4.2.5](#management-errors) 返回 |
-| 12 | 结果未知（超时、断连）：返回 503 `SCHEDULE_SERVICE_UNAVAILABLE`，提示用户刷新列表核对；Mate 不自动重试，Claw 也没有幂等键 |
+| 5～8 | Claw 返回 201：插入 `t_schedule`，返回投影后的资源；插入失败与普通接口一样返回 500，不同步删除 Claw 中刚建的任务 |
+| 9～10 | Claw 明确失败（4xx/5xx 带错误码）：Mate 没有写入任何记录，按 [§4.2.5](#management-errors) 返回 |
+| 11 | 结果未知（超时、断连）：返回 503 `SCHEDULE_SERVICE_UNAVAILABLE`，提示用户刷新列表核对；Mate 不自动重试，Claw 也没有幂等键 |
 
-步骤 8 的补偿失败和步骤 12 都可能在 Claw 留下无主任务。这类任务对用户不可见，到点运行时登记会被拒绝（[§3.6](#registration-sequence)），因此不会执行业务，最终由对账清理。
+写入 `t_schedule` 失败和步骤 11 都可能在 Claw 留下无主任务。这类任务对用户不可见，到点运行时登记会被拒绝（[§3.6](#registration-sequence)），因此不会执行业务，最终由对账清理。
 
 <a id="list-visibility"></a>
 
@@ -292,7 +292,7 @@ Run 查询：
 
 ![登记定时会话归属](mate_session_registration.svg)
 
-[原尺寸 SVG](mate_session_registration.svg) · [PlantUML 源码](diagram.puml#L89)
+[原尺寸 SVG](mate_session_registration.svg) · [PlantUML 源码](diagram.puml#L86)
 
 | 步骤 | 规则 |
 |---|---|
@@ -405,6 +405,7 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | 400、404、409、422 的 Claw 业务错误码 | 字段校验、激活冲突、频率策略等，resCode 原样返回，文案由 Mate 按语言重新给出 |
 | 503 `SCHEDULE_SERVICE_UNAVAILABLE` | Claw 不可达或结果未知；Claw 返回 401/403（服务认证或 Mate 传入的操作范围有误，属部署问题）也映射为 503，并记录告警 |
 | 500 `SCHEDULE_*_FAILED` | Claw 内部失败，原样返回 |
+| 500 Mate 通用错误码 | Mate 写入 `t_schedule` 等本地失败，与 Mate 其他接口一致 |
 
 错误不回显 Claw 内部地址、原始异常或 sessionId。
 
@@ -556,7 +557,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 |---|---|---|---|
 | F1 | 创建时 Claw 明确失败 | Mate 未写入任何记录，返回原错误码 | 无残留 |
 | F2 | 创建时结果未知 | 不写 `t_schedule`，返回 503，不自动重试 | Claw 可能有无主任务，由对账删除；运行前登记会被拒绝 |
-| F3 | Claw 创建成功但写入 `t_schedule` 失败 | 调用 Claw 删除作补偿 | 补偿失败时同 F2 |
+| F3 | Claw 创建成功但写入 `t_schedule` 失败 | 返回 500，不同步补偿 | 同 F2：Claw 留下无主任务，登记被拒绝，由对账删除 |
 | F4 | 写操作结果未知 | 返回 503，不重试 | 页面读取详情核对 |
 | F5 | 登记时 Mate 存储不可用 | 返回 503 | Claw 转只读核对，期限内仍未知则本次 Run 记为 `unknown_error`，不运行 |
 | F6 | Mate 已登记、Claw 受理回滚 | 对账确认 Session 不存在后删除登记 | Claw 读取结果未知时保留，不凭超时删除 |
@@ -598,7 +599,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 范围 | 验收 |
 |---|---|
 | 管理接口 | 10 个操作与 Claw 一一对应；不可见任务一律 404；列表与 Run 列表只含可见记录；sessionId 不出现在任何响应中 |
-| 创建 | 达到配额返回 422；Claw 失败时不写入；结果未知不自动重试；写入 `t_schedule` 失败触发补偿删除 |
+| 创建 | 达到配额返回 422；Claw 失败时不写入；结果未知不自动重试；写入 `t_schedule` 失败返回 500，不调用 Claw 删除 |
 | 删除 | 删除后 `t_schedule` 记录清除，已生成会话仍可从 Chat 打开 |
 | 对话中创建的任务 | 关联 Chat 的所属用户可见、可管理，不能改 agentId |
 | access-token | 首版不带服务认证可取到 Token（补回服务认证后改为只认 Claw）；统一账号停用返回 403；Token 不进日志 |
@@ -635,6 +636,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.2.1 | 2026-10-20 | 创建时写入 `t_schedule` 失败改为直接返回 500，不再同步补偿删除 Claw 任务，残留由对账清理；创建时序图去掉补偿分支。 |
 | 1.2.0 | 2026-10-20 | 用户认证与权限由 Mate 框架按 access-token 统一检查，删除本设计中的功能权限与 Agent 使用权限检查、相关 403 错误码和类图中的权限接口；创建时序图去掉权限步骤。 |
 | 1.1.1 | 2026-10-20 | access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`；主基线 0.67.1。 |
 | 1.1.0 | 2026-10-20 | 为先跑通端到端，access-token 接口首版暂不认证调用方；M5、§4.4、§4.4.1、§5.1 与测试验收记录该风险与补回条件；`t_schedule.user_id` 按 Mate 既有表改为 VARCHAR(512)。 |
