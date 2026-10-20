@@ -3,7 +3,7 @@
 | 属性 | 值 |
 |---|---|
 | 文档版本 | 2.28.3 |
-| 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线、前端可恢复展示及 [§9.7](#tool-schema-subset) 自写 Schema 子集校验器待实现，其余能力按源码证据分项判断 |
+| 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；[§9.7](#tool-schema-subset) 自写 Schema 子集校验器已在 pi-mono-java#371（`main@2b9a6ad`）实现，§9.7.6 T2 现网定义普查未完成；SearchTools、发现与校验的一致性接线、前端可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-10-20 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
@@ -605,7 +605,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 ### 9.7 工具 Schema 子集与本地校验器
 
-**状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码和测试都不再依赖该库。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A20](../07-Agent架构对比/README.md#a20)。
+**状态：已实现（pi-mono-java `main@2b9a6ad`，PR #371），§9.7.6 T2 现网定义普查未完成。** 实现前 Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数；现在 agent-core 内自写子集校验器，生产代码和测试都不再依赖该库。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A20](../07-Agent架构对比/README.md#a20)。
 
 框架工具 Schema 实际只用到 13 个校验关键字；Mate 工具 Schema 用到的关键字更多，本节只校验表内关键字，表外关键字静默丢弃，不阻塞调用。继续用完整校验库，要多带三个运行时 jar（约 686 KB），还带上子集用不到的能力，其中两项对外部 Schema 不利：默认加载器会在校验时按远程 `$ref` 发起网络请求；错误文案随 JVM 默认 Locale 变化，模型看到的修正依据不稳定。自写子集后，哪些关键字参与校验、错误文案和失败分类都由本节固定。
 
@@ -989,7 +989,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.28.3 | 2026-10-20 | 差分对照改为不依赖外部实现的性质测试：丢弃不收紧、无害丢弃不变、关键字顺序无关（待实现）。 |
+| 2.28.3 | 2026-10-20 | 差分对照改为不依赖外部实现的性质测试：丢弃不收紧、无害丢弃不变、关键字顺序无关；§9.7 校验器已实现，T2 普查未完成。 |
 | 2.28.2 | 2026-10-20 | 测试也不再依赖 json-schema-validator，删除与 networknt 的差分对照（待实现）。 |
 | 2.28.1 | 2026-10-19 | 丢弃保护补充 `patternProperties`、`prefixItems` 同级情形并把 `format`、`x-` 定为无害丢弃，数值边界限定为有限值（待实现）。 |
 | 2.28.0 | 2026-10-19 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，按 Mate 需要加入 `uniqueItems`、`minimum`、`maximum`、`allOf`、`anyOf`、`if`/`then`/`else`，列出候选关键字分档，json-schema-validator 降为测试对照依赖（待实现）。 |
