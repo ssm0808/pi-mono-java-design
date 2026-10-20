@@ -17,12 +17,12 @@ autonumber
 == 创建定时任务 ==
 Operator -> Mate ++ : 创建定时任务（Agent、时间规则、任务内容）
 activate Operator
-Mate -> MateStore ++ : 检查配额，写入待确认的任务归属
-return 待确认归属
+Mate -> MateStore ++ : 统计该用户的任务数
+return 未达上限
 Mate -> Claw ++ : 创建定时任务（可信服务调用）
 return 定时任务（scheduleId）
-Mate -> MateStore ++ : 归属补上 scheduleId 并生效
-return 已生效归属
+Mate -> MateStore ++ : 写入任务归属（scheduleId、用户）
+return 已写入
 return 定时任务及下次运行时间
 deactivate Operator
 == 自动运行 ==
@@ -51,7 +51,7 @@ deactivate Operator
 ' 目标：待实现；UC1 创建接口配置的任务。
 ' Claw 接口：POST /campusclaw-service/v1/schedules，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4 节。
 ' mate-service 源码未核验；“权限”代表公司功能权限与 Mate 既有 Agent 使用权限两个检查。
-' 表达方式：画正常创建与 Claw 结果三种去向；补偿删除失败后的对账见 README.md 第 3.7 节。
+' 表达方式：画正常创建与 Claw 结果三种去向；配额统计不加锁；补偿删除失败后的对账见 README.md 第 3.7 节。
 title 创建定时任务（UC1）
 hide footbox
 skinparam backgroundColor white
@@ -67,21 +67,20 @@ Operator -> Mate ++ : POST /schedules
 activate Operator
 Mate -> Perm ++ : 检查管理权限与 Agent 使用权限
 return 允许
-Mate -> MateStore ++ : 按用户串行：统计待确认与已生效归属，未超限则插入待确认归属
-return 待确认归属
+Mate -> MateStore ++ : 统计 t_schedule 中该用户的任务数（不加锁）
+return 未达上限（达到上限返回 422）
 Mate -> Claw ++ : POST /schedules（原样转发请求体）
 alt Claw 返回 201
   Claw --> Mate : 定时任务（scheduleId）
-  Mate -> MateStore ++ : 归属补上 scheduleId，置为已生效
-  return 已生效归属
-  opt 补全归属失败
+  Mate -> MateStore ++ : 插入 t_schedule（id、user_id）
+  return 已写入
+  opt 写入失败
     Mate -> Claw : DELETE /schedules/{scheduleId}（补偿删除）
   end
   Mate --> Operator : 201 定时任务（sessionId 换为 chatId）
 else Claw 明确失败（带错误码）
   Claw --> Mate : 4xx / 5xx 错误码
-  Mate -> MateStore : 删除待确认归属
-  Mate --> Operator : 原错误码
+  Mate --> Operator : 原错误码（Mate 未写入）
 else 结果未知（超时、断连）
   Mate --> Operator : 503 SCHEDULE_SERVICE_UNAVAILABLE，提示刷新列表核对
 end
@@ -108,15 +107,15 @@ autonumber
 [-> Claw ++ : 到达计划时间或立即运行
 Claw -> Claw : 固定本次 Run 的 sessionId
 Claw -> Mate ++ : POST /runtime/scheduled-sessions（数据库事务外）
-Mate -> MateStore ++ : 按 scheduleId 查已生效的任务归属
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
 return 任务归属
-alt 有已生效归属，且 sessionId 未登记或四个字段相同
+alt t_schedule 有该任务，且 sessionId 未登记或四个字段相同
   Mate -> MateStore ++ : 同一事务写定时会话登记与 Chat 映射（已存在则复用）
   return chatId
   Mate --> Claw : 200 四个字段与 chatId
   Claw -> ClawStore ++ : 同库事务受理 Session、首条消息、根执行与 Run
   return 已受理
-else 没有已生效归属，或 sessionId 已用不同字段登记
+else t_schedule 没有该任务，或 sessionId 已用不同字段登记
   Mate --> Claw : 409 SCHEDULED_SESSION_REJECTED
   Claw -> ClawStore ++ : 记录 Run 失败 session_creation_rejected_error
   return 已记录
@@ -172,7 +171,7 @@ package "规则（待实现）" as RulePkg {
     + visible(user, schedule) : boolean
   }
   class ScheduleQuotaGuard <<待实现>> {
-    + reservePending(user) : ScheduleOwnership
+    + checkQuota(user)
   }
   class ScheduleProjector <<待实现>> {
     + toView(clawSchedule) : ScheduleView
@@ -182,19 +181,14 @@ package "规则（待实现）" as RulePkg {
 
 package "持久化（待实现，物理表由 Mate 决定）" as StorePkg {
   interface ScheduleOwnershipStore <<待实现>> {
-    + 任务归属与配额：条件占用、生效、删除
+    + 任务归属：写入、按 id 读取、按用户统计、删除
     + 定时会话登记：写入、确认、删除
   }
 
-  class ScheduleOwnership <<t_schedule_owner>> {
-    scheduleId : String（创建成功前为空）
+  class ScheduleOwnership <<t_schedule>> {
+    id : String（Claw 任务 ID）
     userId : String
-    state : pending / active
     createdAt : Instant
-  }
-  class ScheduleQuota <<t_schedule_quota>> {
-    userId : String
-    ownedCount : int
   }
   class ScheduledSessionRegistration <<t_schedule_session>> {
     sessionId : String
@@ -240,9 +234,8 @@ ScheduledAccessTokenService --> UnifiedAccountTokenSource
 ScheduleOwnershipReconciler --> ScheduleOwnershipStore
 ScheduleOwnershipReconciler --> ClawScheduleClient
 ScheduleOwnershipStore "1" o-- "*" ScheduleOwnership
-ScheduleOwnershipStore "1" o-- "*" ScheduleQuota
 ScheduleOwnershipStore "1" o-- "*" ScheduledSessionRegistration
-ScheduleOwnership "1" -- "*" ScheduledSessionRegistration : scheduleId
+ScheduleOwnership "1" -- "*" ScheduledSessionRegistration : schedule_id
 WebPkg -[hidden]down- AppPkg
 AppPkg -[hidden]down- RulePkg
 RulePkg -[hidden]down- StorePkg

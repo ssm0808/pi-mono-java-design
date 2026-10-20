@@ -48,11 +48,11 @@
 | 接口配置的任务 | 运营人员在管理页通过 Mate 创建的定时任务（Claw `create_source = api`），每次运行新建一个 Session |
 | 对话中创建的任务 | 用户在对话中由 Cron 工具创建的任务（Claw `create_source = chat`），关联当前会话，不经 Mate 创建 |
 | 管理接口 | Mate 对浏览器提供的 10 个定时任务接口，与 Claw 的 10 个接口一一对应 |
-| 任务归属 | Mate 保存的“接口配置的任务属于哪个用户”记录，状态为待确认（`pending`）或已生效（`active`） |
+| 任务归属 | Mate `t_schedule` 中的一行，记录接口配置的任务属于哪个用户 |
 | 定时会话登记 | Mate 保存的“某次运行新建的 Session 属于哪个用户”记录，同时建立 Chat 映射 |
 | 资源投影 | Mate 把 Claw 返回的 sessionId 换成 chatId 后再返回浏览器，其余字段原样返回 |
 | 可见范围 | 当前用户能看到和管理的任务集合，规则见 [M1](#m1) |
-| 无主任务 | Claw 中存在、但 Mate 没有已生效任务归属的接口配置的任务，通常由创建结果未知或写归属失败造成 |
+| 无主任务 | Claw 中存在、但 Mate `t_schedule` 中没有记录的接口配置的任务，通常由创建结果未知或写入 `t_schedule` 失败造成 |
 | 统一账号 | Mate 配置的一个业务账号，所有定时运行都用它的 access-token 调用业务工具（Claw [D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)） |
 
 ### 1.2 需求整理
@@ -122,9 +122,9 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 |---|---|---|---|---|---|
 | D1 | 管理接口自己定义资源，还是与 Claw 一一对应？ | Claude 控制台与 API 直接操作同一个 Deployment 资源 | 页面已按 Claw 契约设计（M07 场景09）；两套字段会产生转换和不一致 | 10 个管理接口与 Claw 路径、字段一一对应，请求原样转发；Mate 只做权限检查、归属记录和资源投影 | Claw 契约变化时 Mate 要同步；页面直接受 Claw 字段约束 |
 | D2 | “任务属于谁”存在哪里？ | Claude 以 workspace 为边界，无用户归属 | Claw 不保存用户（Claw D9）；用户、组织与权限都在 Mate | Mate 保存任务归属；列表从 Claw 拉取全部页后按归属过滤 | 读取量随任务总数增长；任务量大后改为 Claw 按用户查询（Claw T10） |
-| D3 | 怎样保证配额不被并发创建突破，且任务创建后一定有归属？ | 无可对照实现 | Mate 与 Claw 之间没有分布式事务；Claw 创建接口没有幂等键 | 先在 Mate 写一条待确认归属并计入配额，再调用 Claw；成功后补上 scheduleId，失败删除；结果未知时保留到过期 | 待确认归属最多占用配额 10 分钟；结果未知时用户要刷新列表核对 |
+| D3 | Mate 先记录归属还是先调用 Claw 创建？ | 无可对照实现 | Mate 与 Claw 之间没有分布式事务；Claw 创建接口没有幂等键 | 先调用 Claw，拿到任务 ID 后再写 Mate `t_schedule`；配额在调用前按行数统计，不加锁；写入失败补偿删除，补偿失败留给对账 | 并发创建可能比上限多出几个；Mate 写入失败或结果未知时，Claw 会短时留下无主任务，靠登记拒绝与对账兜底 |
 | D4 | 浏览器看到的会话标识用什么？ | Claude 直接返回 session_id | Mate 对外只暴露 Chat/chatId，不暴露 Runtime 的 sessionId（[通用对话 API §1](../07-mate-service通用对话API/README.md#1-接口与权威来源)） | Mate 把 Schedule 与 Run 中的 sessionId 投影为 chatId；接口配置的任务在登记时建立 Chat 映射 | 映射暂时查不到时 chatId 为 null，页面显示“结果入口准备中” |
-| D5 | 无主任务怎样避免以统一账号运行业务？ | 无可对照实现 | 统一账号权限大；无主任务没有人能看到或管理 | 登记接口对没有已生效归属的任务一律拒绝，Claw 因此不受理；对账任务 10 分钟后经 Claw 删除 | 无主任务在被删除前到点会产生一条失败 Run（`session_creation_rejected_error`），删除任务时随之删除 |
+| D5 | 无主任务怎样避免以统一账号运行业务？ | 无可对照实现 | 统一账号权限大；无主任务没有人能看到或管理 | 登记接口对 `t_schedule` 中没有记录的任务一律拒绝，Claw 因此不受理；对账任务 10 分钟后经 Claw 删除 | 无主任务在被删除前到点会产生一条失败 Run（`session_creation_rejected_error`），删除任务时随之删除 |
 | D6 | 任务对谁可见？ | Claude 按 workspace 范围列出 | 首版没有共享和管理员视图的需求 | 只有创建者可见、可管理（[M1](#m1)）；对话中创建的任务按关联 Chat 的所属用户判断 | 不能团队共享；创建者离职后任务仍以统一账号运行，首版没有管理员入口处理，见 [§5.2.4](#emergency-plan) |
 
 ## 3. 详细设计
@@ -133,20 +133,20 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 | BU1、BU5 | 运营人员 | 有管理权限，能使用所选 Agent，未超配额 | 任务在 Claw 创建，Mate 归属已生效 | 配额按用户串行检查；结果未知不自动重试 |
+| UC1 | BU1、BU5 | 运营人员 | 有管理权限，能使用所选 Agent，未超配额 | 任务在 Claw 创建，Mate `t_schedule` 已写入 | 配额按行数检查，并发时可能略超；结果未知不自动重试 |
 | UC2 | BU2 | 运营人员 | 有读取权限 | 返回当前用户可见的任务列表或详情 | 不可见任务一律按不存在处理 |
 | UC3 | BU1 | 运营人员 | 有管理权限，任务可见 | 修改、暂停、恢复或删除生效 | 删除只删任务归属，已生成会话保留 |
 | UC4 | BU4 | 运营人员 | 有运行权限，任务可见 | 返回本次 Run 及会话入口 | Mate 不得持有会阻塞登记的锁 |
 | UC5 | BU2、BU3 | 运营人员 | 有读取权限 | 返回可见任务的 Run，会话标识为 chatId | 响应不含 sessionId |
-| UC6 | BU3 | Claw | 接口配置的任务到点或立即运行 | 定时会话登记与 Chat 映射已建立 | 同一 sessionId 幂等；无已生效归属则拒绝 |
+| UC6 | BU3 | Claw | 接口配置的任务到点或立即运行 | 定时会话登记与 Chat 映射已建立 | 同一 sessionId 幂等；`t_schedule` 中没有该任务则拒绝 |
 | UC7 | — | Claw | 定时运行中有需要凭据的工具调用 | 返回统一账号 access-token | Token 不落库、不进日志 |
-| UC8 | BU6 | Mate 定时任务 | 无 | 过期待确认归属、无主任务与未提交登记被清理 | 只读 Claw 公开接口；结果未知不删 |
+| UC8 | BU6 | Mate 定时任务 | 无 | 无主任务与未提交登记被清理 | 只读 Claw 公开接口；结果未知不删 |
 
 <a id="data-model"></a>
 
 ### 3.2 数据模型
 
-目标新增三张表：`t_schedule_owner`、`t_schedule_quota`、`t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。表名不加服务前缀，命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列（schedule_id、run_id、session_id、agent_id）与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；mate-service 源码与既有表未核验，用户 ID 与 chatId 的长度先按 64 设计，实现前按 Mate 实际定义核对（[M7](#m7)）。
+目标新增两张表：`t_schedule`、`t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；mate-service 源码与既有表未核验，用户 ID 与 chatId 的长度先按 64 设计，实现前按 Mate 实际定义核对（[M7](#m7)）。
 
 <a id="mate-tables"></a>
 
@@ -154,74 +154,44 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 | 表 | 权威职责 | 关联及生命周期 |
 |---|---|---|
-| `t_schedule_owner` | 接口配置的任务属于哪个用户；创建过程中的待确认占位 | `schedule_id` 逻辑引用 Claw 的 `t_schedule.id`，不设外键；删除任务时删除；对话中创建的任务不建记录 |
-| `t_schedule_quota` | 每个用户已占用的任务数，同时是配额检查的并发控制点 | 每用户一行，随任务归属的增删在同一事务内加减 |
+| `t_schedule` | 接口配置的任务属于哪个用户 | `id` 即 Claw `t_schedule.id`，不设外键；Claw 创建成功后写入，删除任务时删除；对话中创建的任务不建记录 |
 | `t_schedule_session` | 每次运行新建的 Session 属于哪个用户，以及对应的 chatId | `session_id` 逻辑引用 Claw 的 `t_sessions.id`；删除任务不删除；Session 删除时与 Chat 映射一起删除 |
-| Mate 既有 Chat 映射表 | Chat → Session 映射与所属用户 | 结构不变，未核验；登记时在同一事务内写入一行（[§3.2.5](#mate-transactions)） |
+| Mate 既有 Chat 映射表 | Chat → Session 映射与所属用户 | 结构不变，未核验；登记时在同一事务内写入一行（[§3.2.4](#mate-transactions)） |
 
-不新增任务配置副本、Run 副本或请求去重表。任务配置、计划时间和 Run 只在 Claw 保存，Mate 每次读取 Claw。
+不新增任务配置副本、Run 副本、配额计数或请求去重表。任务配置、计划时间和 Run 只在 Claw 保存，Mate 每次读取 Claw；配额按 `t_schedule` 的行数计算。
 
 <a id="t_schedule_owner"></a>
+<a id="t_schedule"></a>
 
-#### 3.2.2 t_schedule_owner：任务归属
+#### 3.2.2 t_schedule：任务归属
 
-各列没有数据库 DEFAULT，由应用赋值。
+只保存判断归属所需的列。各列没有数据库 DEFAULT，由应用赋值。
 
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
-| id | VARCHAR(38) | 否 | — | `owner-` 加 32 位 UUID 十六进制；创建时就有，scheduleId 尚未返回时用它定位记录 |
-| schedule_id | VARCHAR(41) | 是 | — | Claw 返回的任务 ID；`pending` 时为空，`active` 时非空且不再修改 |
+| id | VARCHAR(41) | 否 | — | Claw 返回的任务 ID，与 Claw `t_schedule.id` 相同 |
 | user_id | VARCHAR(64) | 否 | — | 创建者的用户 ID，创建后不修改 |
-| status | VARCHAR(16) | 否 | — | `pending` 已占配额、等待 Claw 创建结果；`active` 已生效 |
-| expires_at | TIMESTAMPTZ(0) | 是 | — | `pending` 的过期时刻，为创建时刻加 10 分钟；`active` 时为空 |
-| created_at | TIMESTAMPTZ(0) | 否 | — | 写入 `pending` 的时刻 |
-| activated_at | TIMESTAMPTZ(0) | 是 | — | 补上 schedule_id 并生效的时刻 |
+| created_at | TIMESTAMPTZ(0) | 否 | — | 写入时刻 |
 
 主键：`id`。
 
 | 索引 | 规则 | 支持的访问 |
 |---|---|---|
-| uk_schedule_owner_schedule | 唯一 `(schedule_id) WHERE schedule_id IS NOT NULL` | 按任务查归属：可见性检查、登记、删除；一个任务只能属于一个用户 |
-| idx_schedule_owner_user | `(user_id, status)` | 列表过滤时取当前用户全部 `active` 的 schedule_id；对账核对配额计数 |
-| idx_schedule_owner_expiry | `(expires_at) WHERE status = 'pending'` | 对账清理过期的待确认归属 |
+| idx_schedule_user | `(user_id)` | 列表过滤时取当前用户全部任务 ID；创建前统计该用户任务数 |
 
-数据库约束：
-
-- status 只能是 `pending` / `active`。
-- status 与相关列一致，一条 CHECK 覆盖两种组合：
-
-| status | schedule_id | expires_at | activated_at |
-|---|---|---|---|
-| `pending` | 空 | 非空 | 空 |
-| `active` | 非空 | 空 | 非空 |
-
-流转：创建时插入 `pending`；Claw 返回 201 后改为 `active`；Claw 明确失败、过期清理或删除任务时删除记录。状态只向前流转。
-
-<a id="t_schedule_quota"></a>
-
-#### 3.2.3 t_schedule_quota：配额计数
-
-| 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
-|---|---|---|---|---|
-| user_id | VARCHAR(64) | 否 | — | 用户 ID |
-| owned_count | INTEGER | 否 | — | 该用户 `pending` 与 `active` 任务归属的总数 |
-| updated_at | TIMESTAMPTZ(0) | 否 | — | 最近一次加减的时刻 |
-
-主键：`user_id`。数据库约束：owned_count ≥ 0。上限（[M2](#m2)，默认 20）是部署配置，不落库。
-
-占用配额用一条条件更新完成：`UPDATE t_schedule_quota SET owned_count = owned_count + 1 WHERE user_id = ? AND owned_count < :limit`。影响 0 行即超限，返回 422；数据库行锁保证同一用户的并发创建不会同时通过。用户第一次创建前先插入 owned_count 为 0 的行，主键冲突则忽略。计数与 `t_schedule_owner` 的增删在同一事务内，对账再按归属表重算一次作兜底。
+可见性检查、登记和删除都按主键访问。行存在即表示任务已生效，没有中间状态，不需要状态列和 CHECK。
 
 <a id="t_schedule_session"></a>
 
-#### 3.2.4 t_schedule_session：定时会话登记
+#### 3.2.3 t_schedule_session：定时会话登记
 
 | 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
 |---|---|---|---|---|
 | session_id | VARCHAR(40) | 否 | — | Claw 为本次运行固定的 Session ID |
-| schedule_id | VARCHAR(41) | 否 | — | 所属任务，登记时必须有 `active` 归属；之后任务删除不影响本行 |
+| schedule_id | VARCHAR(41) | 否 | — | 所属任务，登记时 Mate `t_schedule` 中必须有该任务；之后任务删除不影响本行 |
 | run_id | VARCHAR(36) | 否 | — | 本次 Run |
 | agent_id | VARCHAR(38) | 否 | — | 本次运行使用的 Agent |
-| user_id | VARCHAR(64) | 否 | — | 登记时从任务归属复制的所属用户；之后访问授权以 Chat 映射为准 |
+| user_id | VARCHAR(64) | 否 | — | 登记时从 `t_schedule` 复制的所属用户；之后访问授权以 Chat 映射为准 |
 | chat_id | VARCHAR(64) | 否 | — | 登记时为该用户建立的 Chat |
 | status | VARCHAR(16) | 否 | — | `registered` 已登记、Claw 是否提交未知；`confirmed` 已确认 Claw 中存在该 Session |
 | created_at | TIMESTAMPTZ(0) | 否 | — | 登记时刻 |
@@ -244,32 +214,28 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 <a id="mate-transactions"></a>
 
-#### 3.2.5 事务、删除与保留
+#### 3.2.4 事务、删除与保留
 
 | 操作 | 同一事务内维持的不变量 |
 |---|---|
-| 创建：占位 | 确保配额行存在；条件加一；插入 `pending` 归属。调用 Claw 在事务外 |
-| 创建：生效 | 按 id 把 `pending` 改为 `active`，写 schedule_id 与 activated_at、清空 expires_at，条件为仍是 `pending`；影响 0 行（已被过期清理）按补全失败处理，补偿删除 Claw 任务 |
-| 创建：Claw 明确失败 | 删除 `pending` 归属；配额减一 |
-| 删除任务 | Claw 删除成功或返回 404 后，按 schedule_id 删除 `active` 归属；配额减一；不动定时会话登记与 Chat 映射 |
-| 过期清理 | 删除 expires_at 已过的 `pending` 归属，按用户把配额减去删除条数 |
-| 登记 | 以共享锁读取该 schedule_id 的 `active` 归属，没有则拒绝；按 session_id 查已有登记，四个字段相同则返回原记录，不同则拒绝；否则插入 `registered` 登记与 Chat 映射。删除任务的事务持排他锁，两者先后提交，不会登记到已删除的任务 |
+| 创建 | Claw 返回 201 后插入 `t_schedule`；插入失败时调用 Claw 删除刚创建的任务作补偿。配额统计在调用 Claw 之前，不加锁 |
+| 删除任务 | Claw 删除成功或返回 404 后，按 id 删除 `t_schedule` 行；不动定时会话登记与 Chat 映射 |
+| 登记 | 以共享锁读取该 schedule_id 的 `t_schedule` 行，没有则拒绝；按 session_id 查已有登记，四个字段相同则返回原记录，不同则拒绝；否则插入 `registered` 登记与 Chat 映射。删除任务的事务持排他锁，两者先后提交，不会登记到已删除的任务 |
 | 确认登记 | 对账读到 Session 存在时，把 `registered` 改为 `confirmed` |
 | 删除未提交登记 | 对账确认 Claw 中不存在该 Session 后，删除登记与 Chat 映射 |
 | 删除 Session | 沿用 Mate 删除 Chat 的流程；同事务删除定时会话登记 |
-| 配额校正 | 对账按归属表重算每个用户的 owned_count，与计数表不一致时以重算值为准 |
 
 保留：任务归属随任务；定时会话登记随 Session；本设计不新增保留期清理。所有调用 Claw 的步骤都在数据库事务外，事务内不等待远端。
 
 <a id="target-class-diagram"></a>
 
-#### 3.2.6 全局目标类图
+#### 3.2.5 全局目标类图
 
 ![Mate 定时任务：全局目标类图](mate_schedule_architecture.svg)
 
-[原尺寸 SVG](mate_schedule_architecture.svg) · [PlantUML 源码](diagram.puml#L128)
+[原尺寸 SVG](mate_schedule_architecture.svg) · [PlantUML 源码](diagram.puml#L127)
 
-分层理由：浏览器入口和 Claw 入口分成两个 Controller，因为它们的认证方式不同（用户认证与服务认证，[§5.1](#security)），不能共用一个过滤链。可见范围、配额和投影抽成三个规则类，由管理服务统一调用，保证 10 个操作用同一套判断，避免各接口各写一份“这个任务是不是你的”。公司权限、Chat 映射和统一账号认证是 Mate 既有能力，图中只画成接口，接入方式待实现时按 mate-service 源码核对。实现时先落三张表与可见范围规则，再接管理接口，然后是登记接口，最后是对账。
+分层理由：浏览器入口和 Claw 入口分成两个 Controller，因为它们的认证方式不同（用户认证与服务认证，[§5.1](#security)），不能共用一个过滤链。可见范围、配额和投影抽成三个规则类，由管理服务统一调用，保证 10 个操作用同一套判断，避免各接口各写一份“这个任务是不是你的”。公司权限、Chat 映射和统一账号认证是 Mate 既有能力，图中只画成接口，接入方式待实现时按 mate-service 源码核对。实现时先落两张表与可见范围规则，再接管理接口，然后是登记接口，最后是对账。
 
 <a id="create-sequence"></a>
 
@@ -282,13 +248,13 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 | 步骤 | 规则 |
 |---|---|
 | 2～3 | 校验管理权限与 Agent 使用权限，不通过返回 403，不调用 Claw |
-| 4～5 | 同一事务内按 [§3.2.3](#t_schedule_quota) 条件加一占用配额，达到上限（[M2](#m2)）返回 422 `SCHEDULE_QUOTA_EXCEEDED`；否则插入一条 `pending` 归属。事务提交后再调用 Claw，不持锁等待远端 |
+| 4～5 | 统计当前用户在 `t_schedule` 中的任务数，达到上限（[M2](#m2)）返回 422 `SCHEDULE_QUOTA_EXCEEDED`。不加锁：同一用户同时提交多个创建时，可能比上限多出几个 |
 | 6 | 请求体原样转发给 Claw，Mate 不增删字段 |
-| 7～11 | Claw 返回 201：把 scheduleId 写入该归属并置为 `active`，返回投影后的资源；补全失败则调用 Claw 删除刚创建的任务作补偿，补偿也失败时留给 [§3.7](#reconciliation) 对账 |
-| 12～14 | Claw 明确失败（4xx/5xx 带错误码）：删除 `pending` 归属，按 [§4.2.5](#management-errors) 返回 |
-| 15 | 结果未知（超时、断连）：保留 `pending` 归属到过期，返回 503 `SCHEDULE_SERVICE_UNAVAILABLE`，提示用户刷新列表核对；Mate 不自动重试，Claw 也没有幂等键 |
+| 7～11 | Claw 返回 201：插入 `t_schedule`，返回投影后的资源；插入失败则调用 Claw 删除刚创建的任务作补偿，补偿也失败时留给 [§3.7](#reconciliation) 对账 |
+| 12～13 | Claw 明确失败（4xx/5xx 带错误码）：Mate 没有写入任何记录，按 [§4.2.5](#management-errors) 返回 |
+| 14 | 结果未知（超时、断连）：返回 503 `SCHEDULE_SERVICE_UNAVAILABLE`，提示用户刷新列表核对；Mate 不自动重试，Claw 也没有幂等键 |
 
-步骤 10 的补偿失败和步骤 15 都可能在 Claw 留下无主任务。这类任务对用户不可见，到点运行时登记会被拒绝（[§3.6](#registration-sequence)），因此不会执行业务，最终由对账清理。
+步骤 10 的补偿失败和步骤 14 都可能在 Claw 留下无主任务。这类任务对用户不可见，到点运行时登记会被拒绝（[§3.6](#registration-sequence)），因此不会执行业务，最终由对账清理。
 
 <a id="list-visibility"></a>
 
@@ -316,9 +282,9 @@ Run 查询：
 
 详情、更新、删除、立即运行、暂停、取消暂停都先做可见性检查，不可见直接返回 404，不调用 Claw。
 
-- **可见性判断**：先查任务归属；没有归属时读取 Claw 详情，sessionId 非空（对话中创建的任务）且该会话对应的 Chat 属于当前用户才可见。
+- **可见性判断**：先查 `t_schedule`，有记录且 user_id 为当前用户即可见；没有记录时读取 Claw 详情，sessionId 非空（对话中创建的任务）且该会话对应的 Chat 属于当前用户才可见。
 - **修改 agentId**：再检查当前用户能否使用新 Agent。对话中创建的任务不能改 agentId（Claw 拒绝）。
-- **删除**：Claw 返回成功后删除任务归属；Claw 返回 404 时同样删除归属并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留。
+- **删除**：Claw 返回成功后删除 `t_schedule` 中的记录；Claw 返回 404 时同样删除记录并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留。
 - **立即运行**：接口配置的任务会在这次请求中触发 Claw 回调登记，Mate 的管理请求不得持有会阻塞登记的锁。对话中创建的任务立即运行时，Claw 在关联会话追加一轮，会话正忙则 Run 记为 `session_busy_error`。
 - **结果未知**：写操作超时后返回 503，不自动重试；页面先读取详情核对，规则同 Claw [§4.5](../../01-总体架构/08-CampusClaw定时任务/README.md#reliable-write-flow)。
 
@@ -330,14 +296,14 @@ Run 查询：
 
 ![登记定时会话归属](mate_session_registration.svg)
 
-[原尺寸 SVG](mate_session_registration.svg) · [PlantUML 源码](diagram.puml#L93)
+[原尺寸 SVG](mate_session_registration.svg) · [PlantUML 源码](diagram.puml#L92)
 
 | 步骤 | 规则 |
 |---|---|
 | 2 | Claw 为同一次 Run 先固定 sessionId，之后准备和受理都复用这个 ID |
 | 3 | 在 Claw 数据库事务外请求登记 |
-| 4～5 | 按 scheduleId 查任务归属；没有 `active` 归属（任务已删除、无主或是对话中创建的任务）时拒绝 |
-| 6～7 | sessionId 已登记：四个字段完全相同则直接返回原登记（幂等）；任一字段不同则拒绝。未登记时在同一事务中写 `registered` 登记、为任务归属的 userId 建立 Chat 映射（[§3.2.5](#mate-transactions)） |
+| 4～5 | 按 scheduleId 查 `t_schedule`；没有该任务（已删除、无主或是对话中创建的任务）时拒绝 |
+| 6～7 | sessionId 已登记：四个字段完全相同则直接返回原登记（幂等）；任一字段不同则拒绝。未登记时在同一事务中写 `registered` 登记、为 `t_schedule` 中该任务的 user_id 建立 Chat 映射（[§3.2.5](#mate-transactions)） |
 | 8～10 | 登记成功后，Claw 在同库事务中创建 Session、首消息、根执行和 Run 关联；Mate 记录不加入这个事务 |
 | 11～13 | Mate 明确拒绝时 Claw 本次不受理，Run 记为 `session_creation_rejected_error` |
 
@@ -351,10 +317,8 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 
 | 对象 | 判断 | 处理 |
 |---|---|---|
-| 过期的 `pending` 任务归属 | 创建超过 10 分钟仍无 scheduleId | 删除，释放配额 |
-| 无主任务 | Claw 列表中 `sessionId` 为 null、创建超过 10 分钟、没有任务归属 | 经 Claw DELETE 删除；它运行时登记会被拒绝，不会执行业务（[M4](#m4)） |
+| 无主任务 | Claw 列表中 `sessionId` 为 null、创建超过 10 分钟、Mate `t_schedule` 中没有记录 | 经 Claw DELETE 删除；它运行时登记会被拒绝，不会执行业务（[M4](#m4)） |
 | 未确认的定时会话登记 | `registered` 且超过准备期限，读取 Claw 该 Session | 存在则改为 `confirmed`；明确不存在则删除登记与 Chat 映射；读取结果未知时保留，下轮再查 |
-| 配额计数 | 按归属表重算每个用户的 `pending` 与 `active` 条数 | 与 `t_schedule_quota` 不一致时以重算值为准 |
 
 对账只读取 Claw 公开接口，不直接访问 Claw 数据库。无主任务的删除与普通删除一样保留已生成的 Session。
 
@@ -397,11 +361,11 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 
 | 操作 | Mate 方法与路径 | 需要的功能权限 | 对应 Claw 接口 | Mate 额外处理 |
 |---|---|---|---|---|
-| 创建 | POST `/schedules` | 管理 | POST `/schedules` | Agent 使用权限、配额、写任务归属（[§3.3](#create-sequence)） |
+| 创建 | POST `/schedules` | 管理 | POST `/schedules` | Agent 使用权限、配额；Claw 创建成功后写 `t_schedule`（[§3.3](#create-sequence)） |
 | 列表 | GET `/schedules` | 读取 | GET `/schedules`（拉取全部页） | 按可见范围过滤后自行分页（[§3.4](#list-visibility)） |
 | 详情 | GET `/schedules/{scheduleId}` | 读取 | GET `/schedules/{scheduleId}` | 可见性检查 |
 | 部分更新 | POST `/schedules/{scheduleId}` | 管理 | POST `/schedules/{scheduleId}` | 可见性检查；改 agentId 时检查 Agent 使用权限 |
-| 删除 | DELETE `/schedules/{scheduleId}` | 管理 | DELETE `/schedules/{scheduleId}` | 可见性检查；成功后删除任务归属 |
+| 删除 | DELETE `/schedules/{scheduleId}` | 管理 | DELETE `/schedules/{scheduleId}` | 可见性检查；成功后删除 `t_schedule` 中的记录 |
 | 立即运行 | POST `/schedules/{scheduleId}/run` | 运行 | POST `/schedules/{scheduleId}/run` | 可见性检查；Run 投影 |
 | 暂停 | POST `/schedules/{scheduleId}/pause` | 管理 | POST `/schedules/{scheduleId}/pause` | 可见性检查 |
 | 取消暂停 | POST `/schedules/{scheduleId}/unpause` | 管理 | POST `/schedules/{scheduleId}/unpause` | 可见性检查 |
@@ -428,7 +392,7 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | 检查 | 规则 |
 |---|---|
 | 功能权限 | 读取、管理、运行三项，来自公司权限体系；缺少时返回 403，不调用 Claw |
-| 可见范围 | 接口配置的任务：任务归属 `active` 且 userId 为当前用户；对话中创建的任务：关联 Chat 属于当前用户（[M1](#m1)） |
+| 可见范围 | 接口配置的任务：`t_schedule` 中该任务的 user_id 为当前用户；对话中创建的任务：关联 Chat 属于当前用户（[M1](#m1)） |
 | 不可见 | 一律按不存在处理：详情与写操作返回 404 `SCHEDULE_NOT_FOUND`，Run 详情返回 404 `SCHEDULE_RUN_NOT_FOUND`，列表中不出现 |
 | Agent 使用权限 | 创建和修改 agentId 时，按 Mate 现有 Agent 权限检查当前用户能否使用该 Agent；不能用返回 403 `SCHEDULE_AGENT_FORBIDDEN` |
 | 用户权限变化 | 只在管理操作时检查；用户失去权限或离职后，已保存的任务仍按统一账号运行（Claw [D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)） |
@@ -568,7 +532,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 400 / SCHEDULED_SESSION_REQUEST_INVALID | 字段缺失或格式非法 | 明确拒绝，本次不受理 |
 | 401 / SCHEDULED_SESSION_AUTH_REQUIRED | 调用方不是获准的 Claw 服务 | 明确拒绝，本次不受理 |
 | 404 / SCHEDULED_SESSION_NOT_FOUND | 仅核对：未登记 | 继续核对直到准备期限 |
-| 409 / SCHEDULED_SESSION_REJECTED | 任务没有有效归属，或 sessionId 已用不同字段登记 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
+| 409 / SCHEDULED_SESSION_REJECTED | `t_schedule` 中没有该任务，或 sessionId 已用不同字段登记 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
 | 500 / SCHEDULED_SESSION_FAILED | 内部处理失败 | 结果未知，转只读核对 |
 | 503 / SCHEDULED_SESSION_UNAVAILABLE | 存储等依赖不可用 | 结果未知，转只读核对 |
 
@@ -595,9 +559,9 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | # | 失败 | 处理 | 结果 |
 |---|---|---|---|
-| F1 | 创建时 Claw 明确失败 | 删除待确认归属，返回原错误码 | 配额释放，无残留 |
-| F2 | 创建时结果未知 | 保留待确认归属到过期，返回 503 | Claw 可能有无主任务，由对账删除；运行前登记会被拒绝 |
-| F3 | Claw 创建成功但补全归属失败 | 调用 Claw 删除作补偿 | 补偿失败时同 F2 |
+| F1 | 创建时 Claw 明确失败 | Mate 未写入任何记录，返回原错误码 | 无残留 |
+| F2 | 创建时结果未知 | 不写 `t_schedule`，返回 503，不自动重试 | Claw 可能有无主任务，由对账删除；运行前登记会被拒绝 |
+| F3 | Claw 创建成功但写入 `t_schedule` 失败 | 调用 Claw 删除作补偿 | 补偿失败时同 F2 |
 | F4 | 写操作结果未知 | 返回 503，不重试 | 页面读取详情核对 |
 | F5 | 登记时 Mate 存储不可用 | 返回 503 | Claw 转只读核对，期限内仍未知则本次 Run 记为 `unknown_error`，不运行 |
 | F6 | Mate 已登记、Claw 受理回滚 | 对账确认 Session 不存在后删除登记 | Claw 读取结果未知时保留，不凭超时删除 |
@@ -610,7 +574,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 #### 5.2.3 监控告警
 
-建议记录：待确认归属过期数、对账删除的无主任务数、登记被拒绝数、登记与核对的失败率、access-token 接口失败率、Claw 返回 401/403 的次数。**【缺口】** 指标名称、阈值与告警接收人。
+建议记录：对账删除的无主任务数、登记被拒绝数、登记与核对的失败率、access-token 接口失败率、Claw 返回 401/403 的次数。**【缺口】** 指标名称、阈值与告警接收人。
 
 <a id="emergency-plan"></a>
 
@@ -639,13 +603,13 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 范围 | 验收 |
 |---|---|
 | 管理接口 | 10 个操作与 Claw 一一对应；不可见任务一律 404；列表与 Run 列表只含可见记录；sessionId 不出现在任何响应中 |
-| 创建 | 配额并发下不超限；Claw 失败删除 `pending` 归属；结果未知不自动重试；补全失败触发补偿删除 |
-| 删除 | 删除后归属清除，已生成会话仍可从 Chat 打开 |
+| 创建 | 达到配额返回 422；Claw 失败时不写入；结果未知不自动重试；写入 `t_schedule` 失败触发补偿删除 |
+| 删除 | 删除后 `t_schedule` 记录清除，已生成会话仍可从 Chat 打开 |
 | 对话中创建的任务 | 关联 Chat 的所属用户可见、可管理，不能改 agentId |
 | access-token | 只认 Claw 服务认证；统一账号停用返回 403；Token 不进日志 |
-| 登记 | 相同四字段重复登记返回同一 chatId，不新建 Chat；无归属、已删除或对话中创建的任务被拒绝；登记后只有归属用户能从 Chat 打开该会话；核对接口不创建记录 |
-| 对账 | 无主任务不会运行，并在对账后被删除；读取结果未知时不删除登记；配额计数与归属表不一致时被校正 |
-| 表约束 | 三张表的 CHECK 与唯一索引拒绝不一致数据；并发创建同一用户不超过配额 |
+| 登记 | 相同四字段重复登记返回同一 chatId，不新建 Chat；无主、已删除或对话中创建的任务被拒绝；登记后只有归属用户能从 Chat 打开该会话；核对接口不创建记录 |
+| 对账 | 无主任务不会运行，并在对账后被删除；读取结果未知时不删除登记 |
+| 表约束 | `t_schedule_session` 的 CHECK 与两张表的唯一索引拒绝不一致数据 |
 
 ### 6.4 QA 流程
 
@@ -656,8 +620,8 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 - mate-service 源码未核验：物理表、模块位置、既有权限与 Chat 映射组件的真实接口在实现时核对，再更新 [§3.2](#data-model) 的类图映射。
 - Claw 侧 access-token 路径用 `campusclaw.schedule.access-token-path`（环境变量 `CAMPUSCLAW_SCHEDULE_ACCESS_TOKEN_PATH`）配置，服务地址沿用 `campusmate.base-url`。
 - Claw 侧登记的 HTTP 适配在 M3 确认后实现，替换默认的 `MateScheduleSessionRegistry`。
-- 对账周期、待确认归属过期时间与每用户配额作为部署配置，默认值分别为 10 分钟、10 分钟与 20。
-- 三张表的 DDL 随 mate-service 的数据库变更流程发布；物理表名前缀按 Mate 既有约定调整时，同步更新 [§3.2](#data-model)。
+- 对账周期与每用户配额作为部署配置，默认值分别为 10 分钟与 20。
+- 两张表的 DDL 随 mate-service 的数据库变更流程发布；物理表名前缀按 Mate 既有约定调整时，同步更新 [§3.2](#data-model)。
 
 ## 8. 其他补充
 
@@ -676,4 +640,4 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、三张表的结构与事务、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |
+| 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、两张表的结构与事务、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |
