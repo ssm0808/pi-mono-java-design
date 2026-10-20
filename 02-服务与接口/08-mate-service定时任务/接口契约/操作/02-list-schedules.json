@@ -1,0 +1,219 @@
+{
+  "api": {
+    "title": "mate-service 定时任务管理 API",
+    "version": "1.6.0",
+    "basePath": "/mate-service/v1",
+    "visibility": "Public · 待评审 · 待实现"
+  },
+  "operation": {
+    "method": "GET",
+    "path": "/schedules",
+    "summary": "读取定时任务列表",
+    "description": "页面按名称、Agent 和状态查看当前用户能看到的定时任务，包括接口创建的任务和在自己对话中创建的任务。Mate 把筛选条件转给 Claw 拉取全部页，按可见范围过滤后自行分页。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": "integer, ≥1, default 1",
+        "description": "普通页码，不是游标；Mate 自行校验，0、负数、非整数或超出支持范围返回 400"
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": "integer, 1..200, default 50",
+        "description": "本页最多任务数，越界拒绝，不静默截断；Mate 自行校验"
+      },
+      {
+        "in": "query",
+        "name": "name",
+        "required": false,
+        "schema": "string, 1..256 after trim",
+        "description": "按名称包含匹配，大小写敏感，% 和 _ 按字面量；空值拒绝；原样转给 Claw"
+      },
+      {
+        "in": "query",
+        "name": "agentId",
+        "required": false,
+        "schema": "Agent ID",
+        "description": "按 Agent 精确匹配；合法但无匹配时返回空页；原样转给 Claw"
+      },
+      {
+        "in": "query",
+        "name": "status",
+        "required": false,
+        "schema": "active | paused",
+        "description": "单值精确匹配，小写；省略时两种都返回；原样转给 Claw"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": "none",
+      "description": "无请求体。筛选条件以 AND 组合；重复参数或未知参数返回 400 SCHEDULE_REQUEST_INVALID。"
+    },
+    "responses": [
+      {
+        "id": "200-ok",
+        "status": "200",
+        "tabLabel": "200 · 列表",
+        "label": "OK",
+        "summary": "每项与创建、详情相同，是把 sessionId 换成 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。total 是当前用户可见且匹配筛选的任务总数，不受分页影响。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "第 1 页（page=1&limit=2&status=active，共 3 个）": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "schedules": [
+                {
+                  "type": "schedule",
+                  "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
+                  "name": "工作日园区告警汇总",
+                  "description": null,
+                  "agentId": "agent-550e8400e29b41d4a716446655440000",
+                  "chatId": null,
+                  "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
+                  "schedule": {
+                    "type": "cron",
+                    "expression": "0 0 8 * * MON-FRI",
+                    "timezone": "Asia/Shanghai",
+                    "lastRunAt": null,
+                    "upcomingRunsAt": [
+                      "2026-10-05T00:00:00Z",
+                      "2026-10-06T00:00:00Z",
+                      "2026-10-07T00:00:00Z",
+                      "2026-10-08T00:00:00Z",
+                      "2026-10-09T00:00:00Z"
+                    ]
+                  },
+                  "status": "active",
+                  "pausedReason": null,
+                  "createdAt": "2026-10-04T02:00:00Z",
+                  "updatedAt": "2026-10-04T02:00:00Z",
+                  "metadata": {
+                    "parkCode": "park-east",
+                    "purpose": "alarm-summary"
+                  }
+                },
+                {
+                  "type": "schedule",
+                  "id": "schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b",
+                  "name": "每晚门禁异常复盘",
+                  "description": "在门禁巡检对话中创建，每晚复盘当天的门禁异常。",
+                  "agentId": "agent-550e8400e29b41d4a716446655440000",
+                  "chatId": "b5e1c2d3f4a5468798a0b1c2d3e4f506",
+                  "prompt": "复盘今天东区门禁的异常记录，列出需要处理的设备。",
+                  "schedule": {
+                    "type": "cron",
+                    "expression": "0 30 21 * * *",
+                    "timezone": "Asia/Shanghai",
+                    "lastRunAt": "2026-10-03T13:30:00Z",
+                    "upcomingRunsAt": [
+                      "2026-10-04T13:30:00Z",
+                      "2026-10-05T13:30:00Z",
+                      "2026-10-06T13:30:00Z",
+                      "2026-10-07T13:30:00Z",
+                      "2026-10-08T13:30:00Z"
+                    ]
+                  },
+                  "status": "active",
+                  "pausedReason": null,
+                  "createdAt": "2026-10-01T09:12:00Z",
+                  "updatedAt": "2026-10-01T09:12:00Z",
+                  "metadata": {}
+                }
+              ],
+              "total": 3,
+              "nextPage": 2
+            }
+          },
+          "超出末页（page=3&limit=2，共 3 个）": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "schedules": [],
+              "total": 3,
+              "nextPage": null
+            }
+          }
+        }
+      },
+      {
+        "id": "400-schedule-request-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_REQUEST_INVALID",
+        "label": "Bad Request",
+        "summary": "page、limit 越界或格式非法（Mate 校验）；name 为空或超长、agentId 或 status 格式非法、参数重复或未知（Claw 校验，错误码原样返回）。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "定时任务请求无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "Invalid schedule request."
+          }
+        }
+      },
+      {
+        "id": "500-schedule-read-failed",
+        "status": "500",
+        "tabLabel": "500 · SCHEDULE_READ_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Claw 中有任务记录损坏或投影失败，不伪装成空列表。Mate 读取 t_schedule 或 Chat 映射失败时与其他接口一样返回 Mate 通用 500。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_READ_FAILED",
+            "resMsg": "读取定时任务失败。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_READ_FAILED",
+            "resMsg": "Failed to read the schedule."
+          }
+        }
+      },
+      {
+        "id": "503-schedule-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · SCHEDULE_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Claw 不可达、证书校验失败或超时。读取没有副作用，可以直接重试。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "定时任务服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "The schedule service is temporarily unavailable. Please try again later."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "列表接口待评审",
+    "promptPrefix": "更新 GET /mate-service/v1/schedules",
+    "promptSuffix": "保持与 mate-service 定时任务设计 §4.2 和 Claw 列表接口同步。"
+  }
+}

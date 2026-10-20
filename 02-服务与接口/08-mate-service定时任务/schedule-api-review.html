@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>mate-service 定时任务管理 API - POST /schedules</title>
+  <title>mate-service 定时任务管理 API - API Review</title>
   <style>
     :root { color-scheme: light dark; background: light-dark(#f7f8fa, #11151b); }
     body { margin: 0; padding: 16px; background: inherit; }
@@ -231,7 +231,7 @@
     }
   </style>
 
-  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service 定时任务管理 API</h2><span class="tag">1.4.1</span><span class="tag">Public · 待评审 · 待实现</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/schedules</code><span class="muted">创建定时任务</span></header><section class="section"><h3>作用</h3><p class="description">当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体原样转发给 Claw 创建，再记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。</p></section><section class="section contract-detail"><h3>参数与请求体</h3><p class="muted empty">无 path/query/header 业务参数。</p><p class="muted empty">字段与 Claw 创建接口相同，Mate 原样转发、不增删。name 必填，去首尾空白后 1..256 个字符，可重名；description 可选，最多 2048 个字符；agentId 必填，只校验格式，不校验 Agent 是否存在或启用；prompt 必填，去首尾空白后非空的纯文本，每次运行作为新会话的首条用户消息；schedule 可选，省略或 null 表示只手动运行，非空时只接受 type=cron、Spring 六字段 expression 和可选 IANA timezone（默认 Asia/Shanghai）；metadata 可选，最多 16 对字符串，键最多 64、值最多 512 个字符。不得传入 chatId、sessionId 或 type、id、status、pausedReason、createdAt、updatedAt、lastRunAt、upcomingRunsAt 等只读字段，未知字段同样拒绝。</p><pre><code>{
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service 定时任务管理 API</h2><span class="tag">1.6.0</span><span class="tag">Public · 待评审 · 待实现</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-post"><header class="operation-head"><span class="method method-post">POST</span><code class="path">/schedules</code><span class="muted">创建定时任务</span></header><section class="section"><h3>作用</h3><p class="description">当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体原样转发给 Claw 创建，再记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。</p></section><section class="section contract-detail"><h3>参数与请求体</h3><p class="muted empty">无 path/query/header 业务参数。</p><p class="muted empty">字段与 Claw 创建接口相同，Mate 原样转发、不增删。name 必填，去首尾空白后 1..256 个字符，可重名；description 可选，最多 2048 个字符；agentId 必填，只校验格式，不校验 Agent 是否存在或启用；prompt 必填，去首尾空白后非空的纯文本，每次运行作为新会话的首条用户消息；schedule 可选，省略或 null 表示只手动运行，非空时只接受 type=cron、Spring 六字段 expression 和可选 IANA timezone（默认 Asia/Shanghai）；metadata 可选，最多 16 对字符串，键最多 64、值最多 512 个字符。不得传入 chatId、sessionId 或 type、id、status、pausedReason、createdAt、updatedAt、lastRunAt、upcomingRunsAt 等只读字段，未知字段同样拒绝。</p><pre><code>{
   &quot;name&quot;: &quot;工作日园区告警汇总&quot;,
   &quot;agentId&quot;: &quot;agent-550e8400e29b41d4a716446655440000&quot;,
   &quot;prompt&quot;: &quot;汇总园区过去24小时的设备告警，并标出需要跟进的工单。&quot;,
@@ -433,10 +433,1281 @@ Content-Language: en-US
   &quot;resCode&quot;: &quot;SCHEDULE_SERVICE_UNAVAILABLE&quot;,
   &quot;resMsg&quot;: &quot;The schedule service is temporarily unavailable. Refresh the list to check whether the schedule was created before trying again.&quot;
 }</code></pre></details></details></section></article></div></div>
-  <script type="application/json" data-review-model>{"api":{"title":"mate-service 定时任务管理 API","version":"1.4.1","basePath":"/mate-service/v1","visibility":"Public · 待评审 · 待实现"},"operation":{"method":"POST","path":"/schedules","summary":"创建定时任务","description":"当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体原样转发给 Claw 创建，再记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。","parameters":[],"requestBody":{"required":true,"contentType":"application/json","description":"字段与 Claw 创建接口相同，Mate 原样转发、不增删。name 必填，去首尾空白后 1..256 个字符，可重名；description 可选，最多 2048 个字符；agentId 必填，只校验格式，不校验 Agent 是否存在或启用；prompt 必填，去首尾空白后非空的纯文本，每次运行作为新会话的首条用户消息；schedule 可选，省略或 null 表示只手动运行，非空时只接受 type=cron、Spring 六字段 expression 和可选 IANA timezone（默认 Asia/Shanghai）；metadata 可选，最多 16 对字符串，键最多 64、值最多 512 个字符。不得传入 chatId、sessionId 或 type、id、status、pausedReason、createdAt、updatedAt、lastRunAt、upcomingRunsAt 等只读字段，未知字段同样拒绝。","example":{"name":"工作日园区告警汇总","agentId":"agent-550e8400e29b41d4a716446655440000","prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":{"type":"cron","expression":"0 0 8 * * MON-FRI","timezone":"Asia/Shanghai"},"metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}},"responses":[{"id":"201-created","status":"201","tabLabel":"201 · 已创建","label":"Created","summary":"返回完整任务；Location 指向 Mate 的详情路径。接口创建的任务 chatId 恒为 null，每次运行时才新建 Chat。示例分别是按工作日自动运行和只手动运行的任务。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Location":"/mate-service/v1/schedules/schedule-927e03d2a4784f90a6238e790539c6e4"},"bodies":{"工作日 08:00 自动运行":{"resCode":"0","resMsg":"success","result":{"type":"schedule","id":"schedule-927e03d2a4784f90a6238e790539c6e4","name":"工作日园区告警汇总","description":null,"agentId":"agent-550e8400e29b41d4a716446655440000","chatId":null,"prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":{"type":"cron","expression":"0 0 8 * * MON-FRI","timezone":"Asia/Shanghai","lastRunAt":null,"upcomingRunsAt":["2026-10-05T00:00:00Z","2026-10-06T00:00:00Z","2026-10-07T00:00:00Z","2026-10-08T00:00:00Z","2026-10-09T00:00:00Z"]},"status":"active","pausedReason":null,"createdAt":"2026-10-04T02:00:00Z","updatedAt":"2026-10-04T02:00:00Z","metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}},"只手动运行（schedule 为 null）":{"resCode":"0","resMsg":"success","result":{"type":"schedule","id":"schedule-3c5e7a9b1d2f4e6a8b0c2d4e6f8a0b1c","name":"园区告警汇总（手动运行）","description":null,"agentId":"agent-550e8400e29b41d4a716446655440000","chatId":null,"prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":null,"status":"active","pausedReason":null,"createdAt":"2026-10-04T02:05:00Z","updatedAt":"2026-10-04T02:05:00Z","metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}}}},{"id":"400-schedule-name-invalid","status":"400","tabLabel":"400 · SCHEDULE_NAME_INVALID","label":"Bad Request","summary":"name 缺失、去空白后为空或超过 256 个字符。Claw 校验，Mate 原样返回错误码并按语言给出文案。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_NAME_INVALID","resMsg":"定时任务名称无效。"},"en-US":{"resCode":"SCHEDULE_NAME_INVALID","resMsg":"Invalid schedule name."}}},{"id":"400-schedule-prompt-invalid","status":"400","tabLabel":"400 · SCHEDULE_PROMPT_INVALID","label":"Bad Request","summary":"prompt 缺失或去空白后为空。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_PROMPT_INVALID","resMsg":"定时任务内容无效。"},"en-US":{"resCode":"SCHEDULE_PROMPT_INVALID","resMsg":"Invalid schedule prompt."}}},{"id":"400-schedule-rule-invalid","status":"400","tabLabel":"400 · SCHEDULE_RULE_INVALID","label":"Bad Request","summary":"schedule 不是 cron 对象，或 expression 不是合法的 Spring 六字段表达式。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_RULE_INVALID","resMsg":"定时规则无效，请使用合法的 Spring 六字段 Cron 表达式。"},"en-US":{"resCode":"SCHEDULE_RULE_INVALID","resMsg":"Invalid schedule rule. Use a valid Spring six-field Cron expression."}}},{"id":"400-schedule-timezone-invalid","status":"400","tabLabel":"400 · SCHEDULE_TIMEZONE_INVALID","label":"Bad Request","summary":"timezone 不是有效的 IANA 时区名称。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_TIMEZONE_INVALID","resMsg":"定时时区无效。"},"en-US":{"resCode":"SCHEDULE_TIMEZONE_INVALID","resMsg":"Invalid schedule timezone."}}},{"id":"400-schedule-request-invalid","status":"400","tabLabel":"400 · SCHEDULE_REQUEST_INVALID","label":"Bad Request","summary":"JSON 非法；description、agentId 或 metadata 不符合约束；传入了 chatId、sessionId、只读字段或未知字段。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"定时任务请求无效。"},"en-US":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"Invalid schedule request."}}},{"id":"422-schedule-quota-exceeded","status":"422","tabLabel":"422 · SCHEDULE_QUOTA_EXCEEDED","label":"Unprocessable Content","summary":"当前用户通过接口创建的任务数已达上限（默认 20，部署可配置），Mate 在转发前判断，没有调用 Claw。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_QUOTA_EXCEEDED","resMsg":"定时任务数量已达上限，请删除不再需要的任务后再创建。"},"en-US":{"resCode":"SCHEDULE_QUOTA_EXCEEDED","resMsg":"You have reached the maximum number of schedules. Delete schedules you no longer need and try again."}}},{"id":"422-schedule-policy-rejected","status":"422","tabLabel":"422 · SCHEDULE_POLICY_REJECTED","label":"Unprocessable Content","summary":"Cron 规则超出部署的频率策略，由 Claw 判断。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_POLICY_REJECTED","resMsg":"定时任务超出部署策略。"},"en-US":{"resCode":"SCHEDULE_POLICY_REJECTED","resMsg":"The schedule exceeds the deployment policy."}}},{"id":"500-schedule-create-failed","status":"500","tabLabel":"500 · SCHEDULE_CREATE_FAILED","label":"Internal Server Error","summary":"Claw 内部处理失败，任务没有创建。Mate 自己写归属记录失败时与其他接口一样返回 Mate 通用 500，残留在 Claw 的任务对用户不可见，由对账清理。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_CREATE_FAILED","resMsg":"创建定时任务失败。"},"en-US":{"resCode":"SCHEDULE_CREATE_FAILED","resMsg":"Failed to create the schedule."}}},{"id":"503-schedule-service-unavailable","status":"503","tabLabel":"503 · SCHEDULE_SERVICE_UNAVAILABLE","label":"Service Unavailable","summary":"Claw 不可达、证书校验失败，或请求已发出但结果未知（超时、断连）。Mate 不自动重试，也不返回 Retry-After；用户刷新列表确认后再决定是否重新创建。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"定时任务服务暂不可用，请刷新列表确认任务是否已创建后再试。"},"en-US":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"The schedule service is temporarily unavailable. Refresh the list to check whether the schedule was created before trying again."}}}]},"review":{"questions":[],"followUpTitle":"创建接口待评审","promptPrefix":"更新 POST /mate-service/v1/schedules","promptSuffix":"保持与 mate-service 定时任务设计 §4.2 和 Claw 创建接口同步。"}}</script>
+  <script type="application/json" data-review-model>{"api":{"title":"mate-service 定时任务管理 API","version":"1.6.0","basePath":"/mate-service/v1","visibility":"Public · 待评审 · 待实现"},"operation":{"method":"POST","path":"/schedules","summary":"创建定时任务","description":"当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体原样转发给 Claw 创建，再记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。","parameters":[],"requestBody":{"required":true,"contentType":"application/json","description":"字段与 Claw 创建接口相同，Mate 原样转发、不增删。name 必填，去首尾空白后 1..256 个字符，可重名；description 可选，最多 2048 个字符；agentId 必填，只校验格式，不校验 Agent 是否存在或启用；prompt 必填，去首尾空白后非空的纯文本，每次运行作为新会话的首条用户消息；schedule 可选，省略或 null 表示只手动运行，非空时只接受 type=cron、Spring 六字段 expression 和可选 IANA timezone（默认 Asia/Shanghai）；metadata 可选，最多 16 对字符串，键最多 64、值最多 512 个字符。不得传入 chatId、sessionId 或 type、id、status、pausedReason、createdAt、updatedAt、lastRunAt、upcomingRunsAt 等只读字段，未知字段同样拒绝。","example":{"name":"工作日园区告警汇总","agentId":"agent-550e8400e29b41d4a716446655440000","prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":{"type":"cron","expression":"0 0 8 * * MON-FRI","timezone":"Asia/Shanghai"},"metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}},"responses":[{"id":"201-created","status":"201","tabLabel":"201 · 已创建","label":"Created","summary":"返回完整任务；Location 指向 Mate 的详情路径。接口创建的任务 chatId 恒为 null，每次运行时才新建 Chat。示例分别是按工作日自动运行和只手动运行的任务。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Location":"/mate-service/v1/schedules/schedule-927e03d2a4784f90a6238e790539c6e4"},"bodies":{"工作日 08:00 自动运行":{"resCode":"0","resMsg":"success","result":{"type":"schedule","id":"schedule-927e03d2a4784f90a6238e790539c6e4","name":"工作日园区告警汇总","description":null,"agentId":"agent-550e8400e29b41d4a716446655440000","chatId":null,"prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":{"type":"cron","expression":"0 0 8 * * MON-FRI","timezone":"Asia/Shanghai","lastRunAt":null,"upcomingRunsAt":["2026-10-05T00:00:00Z","2026-10-06T00:00:00Z","2026-10-07T00:00:00Z","2026-10-08T00:00:00Z","2026-10-09T00:00:00Z"]},"status":"active","pausedReason":null,"createdAt":"2026-10-04T02:00:00Z","updatedAt":"2026-10-04T02:00:00Z","metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}},"只手动运行（schedule 为 null）":{"resCode":"0","resMsg":"success","result":{"type":"schedule","id":"schedule-3c5e7a9b1d2f4e6a8b0c2d4e6f8a0b1c","name":"园区告警汇总（手动运行）","description":null,"agentId":"agent-550e8400e29b41d4a716446655440000","chatId":null,"prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":null,"status":"active","pausedReason":null,"createdAt":"2026-10-04T02:05:00Z","updatedAt":"2026-10-04T02:05:00Z","metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}}}},{"id":"400-schedule-name-invalid","status":"400","tabLabel":"400 · SCHEDULE_NAME_INVALID","label":"Bad Request","summary":"name 缺失、去空白后为空或超过 256 个字符。Claw 校验，Mate 原样返回错误码并按语言给出文案。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_NAME_INVALID","resMsg":"定时任务名称无效。"},"en-US":{"resCode":"SCHEDULE_NAME_INVALID","resMsg":"Invalid schedule name."}}},{"id":"400-schedule-prompt-invalid","status":"400","tabLabel":"400 · SCHEDULE_PROMPT_INVALID","label":"Bad Request","summary":"prompt 缺失或去空白后为空。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_PROMPT_INVALID","resMsg":"定时任务内容无效。"},"en-US":{"resCode":"SCHEDULE_PROMPT_INVALID","resMsg":"Invalid schedule prompt."}}},{"id":"400-schedule-rule-invalid","status":"400","tabLabel":"400 · SCHEDULE_RULE_INVALID","label":"Bad Request","summary":"schedule 不是 cron 对象，或 expression 不是合法的 Spring 六字段表达式。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_RULE_INVALID","resMsg":"定时规则无效，请使用合法的 Spring 六字段 Cron 表达式。"},"en-US":{"resCode":"SCHEDULE_RULE_INVALID","resMsg":"Invalid schedule rule. Use a valid Spring six-field Cron expression."}}},{"id":"400-schedule-timezone-invalid","status":"400","tabLabel":"400 · SCHEDULE_TIMEZONE_INVALID","label":"Bad Request","summary":"timezone 不是有效的 IANA 时区名称。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_TIMEZONE_INVALID","resMsg":"定时时区无效。"},"en-US":{"resCode":"SCHEDULE_TIMEZONE_INVALID","resMsg":"Invalid schedule timezone."}}},{"id":"400-schedule-request-invalid","status":"400","tabLabel":"400 · SCHEDULE_REQUEST_INVALID","label":"Bad Request","summary":"JSON 非法；description、agentId 或 metadata 不符合约束；传入了 chatId、sessionId、只读字段或未知字段。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"定时任务请求无效。"},"en-US":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"Invalid schedule request."}}},{"id":"422-schedule-quota-exceeded","status":"422","tabLabel":"422 · SCHEDULE_QUOTA_EXCEEDED","label":"Unprocessable Content","summary":"当前用户通过接口创建的任务数已达上限（默认 20，部署可配置），Mate 在转发前判断，没有调用 Claw。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_QUOTA_EXCEEDED","resMsg":"定时任务数量已达上限，请删除不再需要的任务后再创建。"},"en-US":{"resCode":"SCHEDULE_QUOTA_EXCEEDED","resMsg":"You have reached the maximum number of schedules. Delete schedules you no longer need and try again."}}},{"id":"422-schedule-policy-rejected","status":"422","tabLabel":"422 · SCHEDULE_POLICY_REJECTED","label":"Unprocessable Content","summary":"Cron 规则超出部署的频率策略，由 Claw 判断。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_POLICY_REJECTED","resMsg":"定时任务超出部署策略。"},"en-US":{"resCode":"SCHEDULE_POLICY_REJECTED","resMsg":"The schedule exceeds the deployment policy."}}},{"id":"500-schedule-create-failed","status":"500","tabLabel":"500 · SCHEDULE_CREATE_FAILED","label":"Internal Server Error","summary":"Claw 内部处理失败，任务没有创建。Mate 自己写归属记录失败时与其他接口一样返回 Mate 通用 500，残留在 Claw 的任务对用户不可见，由对账清理。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_CREATE_FAILED","resMsg":"创建定时任务失败。"},"en-US":{"resCode":"SCHEDULE_CREATE_FAILED","resMsg":"Failed to create the schedule."}}},{"id":"503-schedule-service-unavailable","status":"503","tabLabel":"503 · SCHEDULE_SERVICE_UNAVAILABLE","label":"Service Unavailable","summary":"Claw 不可达、证书校验失败，或请求已发出但结果未知（超时、断连）。Mate 不自动重试，也不返回 Retry-After；用户刷新列表确认后再决定是否重新创建。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"定时任务服务暂不可用，请刷新列表确认任务是否已创建后再试。"},"en-US":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"The schedule service is temporarily unavailable. Refresh the list to check whether the schedule was created before trying again."}}}]},"review":{"questions":[],"followUpTitle":"创建接口待评审","promptPrefix":"更新 POST /mate-service/v1/schedules","promptSuffix":"保持与 mate-service 定时任务设计 §4.2 和 Claw 创建接口同步。"}}</script>
   <script>
     (() => {
       const root = document.getElementById('company-api-review-post-schedules-a14187a6');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      };
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
+      };
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
+
+      const methodClass = operation.method.toLowerCase();
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item, index) => {
+            const cell = make('td', '', item);
+            cell.dataset.label = comparison.columns[index] || '';
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section contract-detail');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          const authColumns = ['Header', '必填', '示例值', '说明'];
+          authColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            const cells = [
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description)
+            ];
+            cells.forEach((cell, index) => { cell.dataset.label = authColumns[index]; });
+            append(row, ...cells);
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section contract-detail');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        const parameterColumns = ['位置', '名称', '必填', '约束', '说明'];
+        parameterColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          const cells = [
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description)
+          ];
+          cells.forEach((cell, index) => { cell.dataset.label = parameterColumns[index]; });
+          append(row, ...cells);
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section contract-detail');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
+        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
+      });
+      renderResponse();
+
+      shell.replaceChildren();
+      append(shell, topbar, article);
+
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+<div id="company-api-review-get-schedules-41eba0a9">
+  <style>
+    #company-api-review-get-schedules-41eba0a9 {
+      color-scheme: light dark;
+      color: light-dark(#17202a, #edf2f7);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+      margin-block-end: 16px;
+    }
+    #company-api-review-get-schedules-41eba0a9 * { box-sizing: border-box; }
+    #company-api-review-get-schedules-41eba0a9 h2,
+    #company-api-review-get-schedules-41eba0a9 h3,
+    #company-api-review-get-schedules-41eba0a9 p { margin: 0; }
+    #company-api-review-get-schedules-41eba0a9 code,
+    #company-api-review-get-schedules-41eba0a9 pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-get-schedules-41eba0a9 .api-shell {
+      overflow: hidden;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 12px;
+      background: light-dark(#f7f8fa, #11151b);
+    }
+    #company-api-review-get-schedules-41eba0a9 .topbar,
+    #company-api-review-get-schedules-41eba0a9 .operation-head,
+    #company-api-review-get-schedules-41eba0a9 .row,
+    #company-api-review-get-schedules-41eba0a9 .tabs,
+    #company-api-review-get-schedules-41eba0a9 .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+    #company-api-review-get-schedules-41eba0a9 .topbar {
+      justify-content: space-between;
+      padding: 15px 17px;
+      background: light-dark(#ffffff, #1a2028);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-schedules-41eba0a9 h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-get-schedules-41eba0a9 h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-get-schedules-41eba0a9 .tag {
+      padding: 2px 8px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 999px;
+      background: light-dark(#f2f5f8, #222a34);
+      font-size: 12px;
+    }
+    #company-api-review-get-schedules-41eba0a9 .base,
+    #company-api-review-get-schedules-41eba0a9 .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-get-schedules-41eba0a9 .operation {
+      margin: 15px;
+      overflow: hidden;
+      border: 1px solid light-dark(#1f883d, #3fb950);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-schedules-41eba0a9 .operation-head {
+      padding: 13px 15px;
+      background: light-dark(#eaf8ee, #15331f);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-schedules-41eba0a9 .method {
+      padding: 6px 11px;
+      border-radius: 5px;
+      background: light-dark(#1f883d, #3fb950);
+      color: light-dark(#ffffff, #07150b);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #company-api-review-get-schedules-41eba0a9 .operation-delete {
+      border-color: light-dark(#cf222e, #f85149);
+    }
+    #company-api-review-get-schedules-41eba0a9 .operation-delete .operation-head {
+      background: light-dark(#fff1f0, #3a1d1d);
+    }
+    #company-api-review-get-schedules-41eba0a9 .method-delete {
+      background: light-dark(#cf222e, #f85149);
+      color: #ffffff;
+    }
+    #company-api-review-get-schedules-41eba0a9 .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-get-schedules-41eba0a9 .section {
+      padding: 15px;
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-schedules-41eba0a9 .section:last-child { border-bottom: 0; }
+    #company-api-review-get-schedules-41eba0a9 .section-title { justify-content: space-between; }
+    #company-api-review-get-schedules-41eba0a9 .description { line-height: 1.6; }
+    #company-api-review-get-schedules-41eba0a9 .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-get-schedules-41eba0a9 .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-schedules-41eba0a9 .gate-only .contract-detail { display: none; }
+    #company-api-review-get-schedules-41eba0a9 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-get-schedules-41eba0a9 th,
+    #company-api-review-get-schedules-41eba0a9 td {
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-schedules-41eba0a9 th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-get-schedules-41eba0a9 tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-get-schedules-41eba0a9 pre {
+      margin: 10px 0 0;
+      padding: 13px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: light-dark(#eef2f6, #0d1117);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #company-api-review-get-schedules-41eba0a9 button {
+      appearance: none;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 6px;
+      background: light-dark(#ffffff, #1a2028);
+      color: light-dark(#17202a, #edf2f7);
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #company-api-review-get-schedules-41eba0a9 button[aria-selected="true"],
+    #company-api-review-get-schedules-41eba0a9 button[aria-pressed="true"] {
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#eaf3ff, #132b46);
+      color: light-dark(#0969da, #58a6ff);
+    }
+    #company-api-review-get-schedules-41eba0a9 .review-form {
+      margin: 0 15px 15px;
+      padding: 15px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-schedules-41eba0a9 .question-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    #company-api-review-get-schedules-41eba0a9 .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-get-schedules-41eba0a9 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-get-schedules-41eba0a9 legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-get-schedules-41eba0a9 label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-get-schedules-41eba0a9 label input { margin-top: 3px; }
+    #company-api-review-get-schedules-41eba0a9 .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-get-schedules-41eba0a9 .option-label { font-weight: 500; }
+    #company-api-review-get-schedules-41eba0a9 .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-schedules-41eba0a9 .submit {
+      margin-top: 12px;
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#0969da, #58a6ff);
+      color: light-dark(#ffffff, #07111e);
+      font-weight: 500;
+    }
+    #company-api-review-get-schedules-41eba0a9 .empty { margin-top: 8px; }
+    #company-api-review-get-schedules-41eba0a9 .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-schedules-41eba0a9 details { margin-top: 9px; }
+    #company-api-review-get-schedules-41eba0a9 summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-schedules-41eba0a9 .static-response {
+      padding: 8px 0;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-schedules-41eba0a9 .static-response:last-child { border-bottom: 0; }
+    #company-api-review-get-schedules-41eba0a9 .static-choice { margin-left: 8px; }
+    @media (max-width: 680px) {
+      #company-api-review-get-schedules-41eba0a9 .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-get-schedules-41eba0a9 .operation,
+      #company-api-review-get-schedules-41eba0a9 .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap { overflow: visible; }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap thead { display: none; }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap table,
+      #company-api-review-get-schedules-41eba0a9 .table-wrap tbody,
+      #company-api-review-get-schedules-41eba0a9 .table-wrap tr,
+      #company-api-review-get-schedules-41eba0a9 .table-wrap td { display: block; width: 100%; }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap tr {
+        padding: 7px 0;
+        border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+      }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+      #company-api-review-get-schedules-41eba0a9 .table-wrap td::before {
+        content: attr(data-label);
+        color: light-dark(#5f6b78, #aab4c0);
+        font-weight: 500;
+      }
+      #company-api-review-get-schedules-41eba0a9 pre {
+        overflow-x: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service 定时任务管理 API</h2><span class="tag">1.6.0</span><span class="tag">Public · 待评审 · 待实现</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-get"><header class="operation-head"><span class="method method-get">GET</span><code class="path">/schedules</code><span class="muted">读取定时任务列表</span></header><section class="section"><h3>作用</h3><p class="description">页面按名称、Agent 和状态查看当前用户能看到的定时任务，包括接口创建的任务和在自己对话中创建的任务。Mate 把筛选条件转给 Claw 拉取全部页，按可见范围过滤后自行分页。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。</p></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">query</td><td data-label="名称">page</td><td data-label="必填">否</td><td data-label="约束">integer, ≥1, default 1</td><td data-label="说明">普通页码，不是游标；Mate 自行校验，0、负数、非整数或超出支持范围返回 400</td></tr><tr><td data-label="位置">query</td><td data-label="名称">limit</td><td data-label="必填">否</td><td data-label="约束">integer, 1..200, default 50</td><td data-label="说明">本页最多任务数，越界拒绝，不静默截断；Mate 自行校验</td></tr><tr><td data-label="位置">query</td><td data-label="名称">name</td><td data-label="必填">否</td><td data-label="约束">string, 1..256 after trim</td><td data-label="说明">按名称包含匹配，大小写敏感，% 和 _ 按字面量；空值拒绝；原样转给 Claw</td></tr><tr><td data-label="位置">query</td><td data-label="名称">agentId</td><td data-label="必填">否</td><td data-label="约束">Agent ID</td><td data-label="说明">按 Agent 精确匹配；合法但无匹配时返回空页；原样转给 Claw</td></tr><tr><td data-label="位置">query</td><td data-label="名称">status</td><td data-label="必填">否</td><td data-label="约束">active | paused</td><td data-label="说明">单值精确匹配，小写；省略时两种都返回；原样转给 Claw</td></tr></tbody></table></div><p class="muted empty">无请求体。筛选条件以 AND 组合；重复参数或未知参数返回 400 SCHEDULE_REQUEST_INVALID。</p></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · 列表</code> 200 OK — 每项与创建、详情相同，是把 sessionId 换成 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。total 是当前用户可见且匹配筛选的任务总数，不受分页影响。</summary><details class="static-choice" open><summary>第 1 页（page=1&amp;limit=2&amp;status=active，共 3 个）</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;schedules&quot;: [
+      {
+        &quot;type&quot;: &quot;schedule&quot;,
+        &quot;id&quot;: &quot;schedule-927e03d2a4784f90a6238e790539c6e4&quot;,
+        &quot;name&quot;: &quot;工作日园区告警汇总&quot;,
+        &quot;description&quot;: null,
+        &quot;agentId&quot;: &quot;agent-550e8400e29b41d4a716446655440000&quot;,
+        &quot;chatId&quot;: null,
+        &quot;prompt&quot;: &quot;汇总园区过去24小时的设备告警，并标出需要跟进的工单。&quot;,
+        &quot;schedule&quot;: {
+          &quot;type&quot;: &quot;cron&quot;,
+          &quot;expression&quot;: &quot;0 0 8 * * MON-FRI&quot;,
+          &quot;timezone&quot;: &quot;Asia/Shanghai&quot;,
+          &quot;lastRunAt&quot;: null,
+          &quot;upcomingRunsAt&quot;: [
+            &quot;2026-10-05T00:00:00Z&quot;,
+            &quot;2026-10-06T00:00:00Z&quot;,
+            &quot;2026-10-07T00:00:00Z&quot;,
+            &quot;2026-10-08T00:00:00Z&quot;,
+            &quot;2026-10-09T00:00:00Z&quot;
+          ]
+        },
+        &quot;status&quot;: &quot;active&quot;,
+        &quot;pausedReason&quot;: null,
+        &quot;createdAt&quot;: &quot;2026-10-04T02:00:00Z&quot;,
+        &quot;updatedAt&quot;: &quot;2026-10-04T02:00:00Z&quot;,
+        &quot;metadata&quot;: {
+          &quot;parkCode&quot;: &quot;park-east&quot;,
+          &quot;purpose&quot;: &quot;alarm-summary&quot;
+        }
+      },
+      {
+        &quot;type&quot;: &quot;schedule&quot;,
+        &quot;id&quot;: &quot;schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b&quot;,
+        &quot;name&quot;: &quot;每晚门禁异常复盘&quot;,
+        &quot;description&quot;: &quot;在门禁巡检对话中创建，每晚复盘当天的门禁异常。&quot;,
+        &quot;agentId&quot;: &quot;agent-550e8400e29b41d4a716446655440000&quot;,
+        &quot;chatId&quot;: &quot;b5e1c2d3f4a5468798a0b1c2d3e4f506&quot;,
+        &quot;prompt&quot;: &quot;复盘今天东区门禁的异常记录，列出需要处理的设备。&quot;,
+        &quot;schedule&quot;: {
+          &quot;type&quot;: &quot;cron&quot;,
+          &quot;expression&quot;: &quot;0 30 21 * * *&quot;,
+          &quot;timezone&quot;: &quot;Asia/Shanghai&quot;,
+          &quot;lastRunAt&quot;: &quot;2026-10-03T13:30:00Z&quot;,
+          &quot;upcomingRunsAt&quot;: [
+            &quot;2026-10-04T13:30:00Z&quot;,
+            &quot;2026-10-05T13:30:00Z&quot;,
+            &quot;2026-10-06T13:30:00Z&quot;,
+            &quot;2026-10-07T13:30:00Z&quot;,
+            &quot;2026-10-08T13:30:00Z&quot;
+          ]
+        },
+        &quot;status&quot;: &quot;active&quot;,
+        &quot;pausedReason&quot;: null,
+        &quot;createdAt&quot;: &quot;2026-10-01T09:12:00Z&quot;,
+        &quot;updatedAt&quot;: &quot;2026-10-01T09:12:00Z&quot;,
+        &quot;metadata&quot;: {}
+      }
+    ],
+    &quot;total&quot;: 3,
+    &quot;nextPage&quot;: 2
+  }
+}</code></pre></details><details class="static-choice"><summary>超出末页（page=3&amp;limit=2，共 3 个）</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;schedules&quot;: [],
+    &quot;total&quot;: 3,
+    &quot;nextPage&quot;: null
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400 · SCHEDULE_REQUEST_INVALID</code> 400 Bad Request — page、limit 越界或格式非法（Mate 校验）；name 为空或超长、agentId 或 status 格式非法、参数重复或未知（Claw 校验，错误码原样返回）。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_REQUEST_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;定时任务请求无效。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_REQUEST_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;Invalid schedule request.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>500 · SCHEDULE_READ_FAILED</code> 500 Internal Server Error — Claw 中有任务记录损坏或投影失败，不伪装成空列表。Mate 读取 t_schedule 或 Chat 映射失败时与其他接口一样返回 Mate 通用 500。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_READ_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;读取定时任务失败。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_READ_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;Failed to read the schedule.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · SCHEDULE_SERVICE_UNAVAILABLE</code> 503 Service Unavailable — Claw 不可达、证书校验失败或超时。读取没有副作用，可以直接重试。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_SERVICE_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;定时任务服务暂不可用，请稍后重试。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_SERVICE_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The schedule service is temporarily unavailable. Please try again later.&quot;
+}</code></pre></details></details></section></article></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"mate-service 定时任务管理 API","version":"1.6.0","basePath":"/mate-service/v1","visibility":"Public · 待评审 · 待实现"},"operation":{"method":"GET","path":"/schedules","summary":"读取定时任务列表","description":"页面按名称、Agent 和状态查看当前用户能看到的定时任务，包括接口创建的任务和在自己对话中创建的任务。Mate 把筛选条件转给 Claw 拉取全部页，按可见范围过滤后自行分页。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。","parameters":[{"in":"query","name":"page","required":false,"schema":"integer, ≥1, default 1","description":"普通页码，不是游标；Mate 自行校验，0、负数、非整数或超出支持范围返回 400"},{"in":"query","name":"limit","required":false,"schema":"integer, 1..200, default 50","description":"本页最多任务数，越界拒绝，不静默截断；Mate 自行校验"},{"in":"query","name":"name","required":false,"schema":"string, 1..256 after trim","description":"按名称包含匹配，大小写敏感，% 和 _ 按字面量；空值拒绝；原样转给 Claw"},{"in":"query","name":"agentId","required":false,"schema":"Agent ID","description":"按 Agent 精确匹配；合法但无匹配时返回空页；原样转给 Claw"},{"in":"query","name":"status","required":false,"schema":"active | paused","description":"单值精确匹配，小写；省略时两种都返回；原样转给 Claw"}],"requestBody":{"required":false,"contentType":"none","description":"无请求体。筛选条件以 AND 组合；重复参数或未知参数返回 400 SCHEDULE_REQUEST_INVALID。"},"responses":[{"id":"200-ok","status":"200","tabLabel":"200 · 列表","label":"OK","summary":"每项与创建、详情相同，是把 sessionId 换成 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。total 是当前用户可见且匹配筛选的任务总数，不受分页影响。","headers":{"Content-Type":"application/json","Cache-Control":"no-store"},"bodies":{"第 1 页（page=1\u0026limit=2\u0026status=active，共 3 个）":{"resCode":"0","resMsg":"success","result":{"schedules":[{"type":"schedule","id":"schedule-927e03d2a4784f90a6238e790539c6e4","name":"工作日园区告警汇总","description":null,"agentId":"agent-550e8400e29b41d4a716446655440000","chatId":null,"prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":{"type":"cron","expression":"0 0 8 * * MON-FRI","timezone":"Asia/Shanghai","lastRunAt":null,"upcomingRunsAt":["2026-10-05T00:00:00Z","2026-10-06T00:00:00Z","2026-10-07T00:00:00Z","2026-10-08T00:00:00Z","2026-10-09T00:00:00Z"]},"status":"active","pausedReason":null,"createdAt":"2026-10-04T02:00:00Z","updatedAt":"2026-10-04T02:00:00Z","metadata":{"parkCode":"park-east","purpose":"alarm-summary"}},{"type":"schedule","id":"schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b","name":"每晚门禁异常复盘","description":"在门禁巡检对话中创建，每晚复盘当天的门禁异常。","agentId":"agent-550e8400e29b41d4a716446655440000","chatId":"b5e1c2d3f4a5468798a0b1c2d3e4f506","prompt":"复盘今天东区门禁的异常记录，列出需要处理的设备。","schedule":{"type":"cron","expression":"0 30 21 * * *","timezone":"Asia/Shanghai","lastRunAt":"2026-10-03T13:30:00Z","upcomingRunsAt":["2026-10-04T13:30:00Z","2026-10-05T13:30:00Z","2026-10-06T13:30:00Z","2026-10-07T13:30:00Z","2026-10-08T13:30:00Z"]},"status":"active","pausedReason":null,"createdAt":"2026-10-01T09:12:00Z","updatedAt":"2026-10-01T09:12:00Z","metadata":{}}],"total":3,"nextPage":2}},"超出末页（page=3\u0026limit=2，共 3 个）":{"resCode":"0","resMsg":"success","result":{"schedules":[],"total":3,"nextPage":null}}}},{"id":"400-schedule-request-invalid","status":"400","tabLabel":"400 · SCHEDULE_REQUEST_INVALID","label":"Bad Request","summary":"page、limit 越界或格式非法（Mate 校验）；name 为空或超长、agentId 或 status 格式非法、参数重复或未知（Claw 校验，错误码原样返回）。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"定时任务请求无效。"},"en-US":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"Invalid schedule request."}}},{"id":"500-schedule-read-failed","status":"500","tabLabel":"500 · SCHEDULE_READ_FAILED","label":"Internal Server Error","summary":"Claw 中有任务记录损坏或投影失败，不伪装成空列表。Mate 读取 t_schedule 或 Chat 映射失败时与其他接口一样返回 Mate 通用 500。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_READ_FAILED","resMsg":"读取定时任务失败。"},"en-US":{"resCode":"SCHEDULE_READ_FAILED","resMsg":"Failed to read the schedule."}}},{"id":"503-schedule-service-unavailable","status":"503","tabLabel":"503 · SCHEDULE_SERVICE_UNAVAILABLE","label":"Service Unavailable","summary":"Claw 不可达、证书校验失败或超时。读取没有副作用，可以直接重试。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"定时任务服务暂不可用，请稍后重试。"},"en-US":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"The schedule service is temporarily unavailable. Please try again later."}}}]},"review":{"questions":[],"followUpTitle":"列表接口待评审","promptPrefix":"更新 GET /mate-service/v1/schedules","promptSuffix":"保持与 mate-service 定时任务设计 §4.2 和 Claw 列表接口同步。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-get-schedules-41eba0a9');
+      const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
+      const api = model.api;
+      const operation = model.operation;
+      const review = model.review || { questions: [] };
+      const shell = root.querySelector('[data-api-shell]');
+      const make = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      };
+      const append = (parent, ...children) => {
+        children.filter(Boolean).forEach((child) => parent.appendChild(child));
+        return parent;
+      };
+      const code = (text, className) => make('code', className || '', text);
+      const pretty = (value) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const fullPath = `${api.basePath.replace(/\/$/, '')}/${operation.path.replace(/^\//, '')}`;
+
+      const topbar = make('header', 'topbar');
+      const titleRow = make('div', 'row');
+      append(titleRow, make('h2', '', api.title), make('span', 'tag', api.version));
+      if (api.visibility) titleRow.appendChild(make('span', 'tag', api.visibility));
+      append(topbar, titleRow, code(api.basePath, 'base'));
+
+      const methodClass = operation.method.toLowerCase();
+      const decisionGate = review.decisionGate;
+      const gateClass = decisionGate && decisionGate.hideOperationDetails ? ' gate-only' : '';
+      const article = make('article', `operation operation-${methodClass}${gateClass}`);
+      const operationHead = make('header', 'operation-head');
+      append(operationHead,
+        make('span', `method method-${methodClass}`, operation.method.toUpperCase()),
+        code(operation.path, 'path'),
+        make('span', 'muted', operation.summary));
+      article.appendChild(operationHead);
+
+      const purpose = make('section', 'section');
+      append(purpose, make('h3', '', '作用'), make('p', 'description', operation.description));
+      article.appendChild(purpose);
+
+      if (decisionGate) {
+        const gateSection = make('section', 'section decision-gate');
+        append(gateSection,
+          make('h3', '', decisionGate.title),
+          make('p', 'description', decisionGate.description));
+        const comparison = decisionGate.comparison;
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        comparison.columns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        comparison.rows.forEach((items) => {
+          const row = make('tr', '');
+          items.forEach((item, index) => {
+            const cell = make('td', '', item);
+            cell.dataset.label = comparison.columns[index] || '';
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        append(gateSection, wrap, make('p', 'decision-notice', decisionGate.detailNotice));
+        article.appendChild(gateSection);
+      }
+
+      const authModes = operation.authModes || [];
+      if (authModes.length) {
+        const authSection = make('section', 'section contract-detail');
+        const authTitle = make('div', 'row section-title');
+        const authTabs = make('div', 'tabs');
+        const authBody = make('div', '');
+        append(authTitle, make('h3', '', '认证'), authTabs);
+        append(authSection, authTitle, authBody);
+        article.appendChild(authSection);
+        let selectedAuth = authModes.find((item) => item.preferred) || authModes[0];
+        const renderAuth = () => {
+          authTabs.querySelectorAll('button').forEach((button) => {
+            button.setAttribute('aria-pressed', String(button.dataset.authId === selectedAuth.id));
+          });
+          authBody.replaceChildren();
+          const wrap = make('div', 'table-wrap');
+          const table = make('table', '');
+          const head = make('thead', '');
+          const headRow = make('tr', '');
+          const authColumns = ['Header', '必填', '示例值', '说明'];
+          authColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+          head.appendChild(headRow);
+          const body = make('tbody', '');
+          selectedAuth.headers.forEach((header) => {
+            const row = make('tr', '');
+            const cells = [
+              append(make('td', ''), code(header.name)),
+              make('td', '', header.required ? '是' : '否'),
+              append(make('td', ''), code(header.value)),
+              make('td', '', header.description)
+            ];
+            cells.forEach((cell, index) => { cell.dataset.label = authColumns[index]; });
+            append(row, ...cells);
+            body.appendChild(row);
+          });
+          append(table, head, body);
+          wrap.appendChild(table);
+          const request = [
+            `${operation.method.toUpperCase()} ${fullPath}`,
+            ...selectedAuth.headers.map((header) => `${header.name}: ${header.value}`)
+          ].join('\n');
+          append(authBody, wrap, append(make('pre', ''), code(request)));
+        };
+        authModes.forEach((mode) => {
+          const button = make('button', '', mode.label);
+          button.type = 'button';
+          button.dataset.authId = mode.id;
+          button.setAttribute('aria-pressed', String(mode.id === selectedAuth.id));
+          button.addEventListener('click', () => {
+            selectedAuth = mode;
+            renderAuth();
+          });
+          authTabs.appendChild(button);
+        });
+        renderAuth();
+      }
+
+      const requestSection = make('section', 'section contract-detail');
+      requestSection.appendChild(make('h3', '', '参数与请求体'));
+      const parameters = operation.parameters || [];
+      if (parameters.length) {
+        const wrap = make('div', 'table-wrap');
+        const table = make('table', '');
+        const head = make('thead', '');
+        const headRow = make('tr', '');
+        const parameterColumns = ['位置', '名称', '必填', '约束', '说明'];
+        parameterColumns.forEach((item) => headRow.appendChild(make('th', '', item)));
+        head.appendChild(headRow);
+        const body = make('tbody', '');
+        parameters.forEach((parameter) => {
+          const row = make('tr', '');
+          const cells = [
+            make('td', '', parameter.in),
+            append(make('td', ''), code(parameter.name)),
+            make('td', '', parameter.required ? '是' : '否'),
+            append(make('td', ''), code(parameter.schema || '—')),
+            make('td', '', parameter.description)
+          ];
+          cells.forEach((cell, index) => { cell.dataset.label = parameterColumns[index]; });
+          append(row, ...cells);
+          body.appendChild(row);
+        });
+        append(table, head, body);
+        wrap.appendChild(table);
+        requestSection.appendChild(wrap);
+      } else {
+        requestSection.appendChild(make('p', 'muted empty', '无 path/query/header 业务参数。'));
+      }
+      const requestBody = operation.requestBody || {};
+      requestSection.appendChild(make('p', 'muted empty', requestBody.description || '无请求体。'));
+      if (requestBody.example !== undefined && requestBody.example !== null) {
+        requestSection.appendChild(append(make('pre', ''), code(pretty(requestBody.example))));
+      }
+      article.appendChild(requestSection);
+
+      const responseSection = make('section', 'section contract-detail');
+      const responseTitle = make('div', 'row section-title');
+      const localeTabs = make('div', 'tabs');
+      append(responseTitle, make('h3', '', '响应'), localeTabs);
+      const statusTabs = make('div', 'tabs');
+      const responseBody = make('div', '');
+      append(responseSection, responseTitle, statusTabs, responseBody);
+      article.appendChild(responseSection);
+      const responses = operation.responses;
+      const responseIdentity = (response) => response.id || response.status;
+      let selectedResponse = responses[0];
+      let selectedLocale = Object.keys(selectedResponse.bodies || {})[0] || 'default';
+      const renderResponse = () => {
+        statusTabs.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-selected', String(button.dataset.responseId === responseIdentity(selectedResponse)));
+        });
+        const locales = Object.keys(selectedResponse.bodies || {});
+        if (!locales.includes(selectedLocale)) selectedLocale = locales[0] || 'default';
+        localeTabs.replaceChildren();
+        locales.forEach((locale) => {
+          const button = make('button', '', locale);
+          button.type = 'button';
+          button.setAttribute('aria-pressed', String(locale === selectedLocale));
+          button.addEventListener('click', () => {
+            selectedLocale = locale;
+            renderResponse();
+          });
+          localeTabs.appendChild(button);
+        });
+        responseBody.replaceChildren();
+        responseBody.appendChild(make('p', 'description', `${selectedResponse.status} ${selectedResponse.label} — ${selectedResponse.summary}`));
+        const responseHeaders = { ...(selectedResponse.headers || {}) };
+        if (selectedLocale !== 'default' && Object.hasOwn(responseHeaders, 'Content-Language')) {
+          responseHeaders['Content-Language'] = selectedLocale;
+        }
+        const headerLines = Object.entries(responseHeaders).map(([name, value]) => `${name}: ${value}`);
+        const payload = selectedResponse.bodies ? selectedResponse.bodies[selectedLocale] : null;
+        const output = [...headerLines, headerLines.length ? '' : null, payload === undefined ? null : pretty(payload)]
+          .filter((item) => item !== null).join('\n');
+        responseBody.appendChild(append(make('pre', ''), code(output)));
+      };
+      responses.forEach((response) => {
+        const button = make('button', '', response.tabLabel || response.status);
+        button.type = 'button';
+        button.dataset.responseId = responseIdentity(response);
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(response === selectedResponse));
+        button.addEventListener('click', () => {
+          selectedResponse = response;
+          renderResponse();
+        });
+        statusTabs.appendChild(button);
+      });
+      renderResponse();
+
+      shell.replaceChildren();
+      append(shell, topbar, article);
+
+      const questions = review.questions || [];
+      if (questions.length) {
+        const form = make('form', 'review-form');
+        form.appendChild(make('h3', '', '继续调整'));
+        const questionGrid = make('div', 'question-grid');
+        if (questions.length === 1) questionGrid.classList.add('question-grid-single');
+        questions.forEach((question) => {
+          const fieldset = make('fieldset', '');
+          fieldset.appendChild(make('legend', '', question.legend));
+          question.options.forEach((option, index) => {
+            const label = make('label', '');
+            const input = document.createElement('input');
+            input.type = 'radio';
+            input.name = question.id;
+            input.value = option.value;
+            input.checked = option.selected || (!question.options.some((item) => item.selected) && index === 0);
+            const optionCopy = make('span', 'option-copy');
+            append(optionCopy,
+              make('span', 'option-label', option.label),
+              make('span', 'option-detail', option.value));
+            append(label, input, optionCopy);
+            fieldset.appendChild(label);
+          });
+          questionGrid.appendChild(fieldset);
+        });
+        form.appendChild(questionGrid);
+        const actions = make('div', 'actions');
+        const submit = make('button', 'submit', '提交调整意见');
+        submit.type = 'submit';
+        const formStatus = make('span', 'muted', '');
+        formStatus.setAttribute('role', 'status');
+        formStatus.setAttribute('aria-live', 'polite');
+        append(actions, submit, formStatus);
+        form.appendChild(actions);
+        const promptOutput = make('pre', 'prompt-output', '');
+        promptOutput.hidden = true;
+        form.appendChild(promptOutput);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const selections = questions.map((question) => `- ${question.legend}：${data.get(question.id)}`).join('\n');
+          const promptSuffix = review.promptSuffix || '请按这些选择更新主维护契约、设计文档和当前接口展示。';
+          const prompt = `${review.promptPrefix}\n${selections}\n${promptSuffix}`;
+          if (!window.openai || typeof window.openai.sendFollowUpMessage !== 'function') {
+            promptOutput.textContent = prompt;
+            promptOutput.hidden = false;
+            try {
+              await navigator.clipboard.writeText(prompt);
+              formStatus.textContent = '调整提示已复制，请粘贴到对话中。';
+            } catch (error) {
+              formStatus.textContent = '请复制下方调整提示并发送到对话中。';
+            }
+            return;
+          }
+          formStatus.textContent = '正在提交…';
+          try {
+            await window.openai.sendFollowUpMessage({ prompt, title: review.followUpTitle });
+            formStatus.textContent = '已提交。';
+          } catch (error) {
+            formStatus.textContent = '提交失败，请重试。';
+          }
+        });
+        shell.appendChild(form);
+      }
+    })();
+  </script>
+</div>
+
+<div id="company-api-review-get-schedules-scheduleid-7fffa175">
+  <style>
+    #company-api-review-get-schedules-scheduleid-7fffa175 {
+      color-scheme: light dark;
+      color: light-dark(#17202a, #edf2f7);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 100%;
+      margin-block-end: 16px;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 * { box-sizing: border-box; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 h2,
+    #company-api-review-get-schedules-scheduleid-7fffa175 h3,
+    #company-api-review-get-schedules-scheduleid-7fffa175 p { margin: 0; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 code,
+    #company-api-review-get-schedules-scheduleid-7fffa175 pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .api-shell {
+      overflow: hidden;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 12px;
+      background: light-dark(#f7f8fa, #11151b);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .topbar,
+    #company-api-review-get-schedules-scheduleid-7fffa175 .operation-head,
+    #company-api-review-get-schedules-scheduleid-7fffa175 .row,
+    #company-api-review-get-schedules-scheduleid-7fffa175 .tabs,
+    #company-api-review-get-schedules-scheduleid-7fffa175 .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .topbar {
+      justify-content: space-between;
+      padding: 15px 17px;
+      background: light-dark(#ffffff, #1a2028);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 h2 { font-size: 18px; font-weight: 500; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 h3 { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .tag {
+      padding: 2px 8px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 999px;
+      background: light-dark(#f2f5f8, #222a34);
+      font-size: 12px;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .base,
+    #company-api-review-get-schedules-scheduleid-7fffa175 .muted { color: light-dark(#5f6b78, #aab4c0); font-size: 13px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .operation {
+      margin: 15px;
+      overflow: hidden;
+      border: 1px solid light-dark(#1f883d, #3fb950);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .operation-head {
+      padding: 13px 15px;
+      background: light-dark(#eaf8ee, #15331f);
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .method {
+      padding: 6px 11px;
+      border-radius: 5px;
+      background: light-dark(#1f883d, #3fb950);
+      color: light-dark(#ffffff, #07150b);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .operation-delete {
+      border-color: light-dark(#cf222e, #f85149);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .operation-delete .operation-head {
+      background: light-dark(#fff1f0, #3a1d1d);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .method-delete {
+      background: light-dark(#cf222e, #f85149);
+      color: #ffffff;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .path { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .section {
+      padding: 15px;
+      border-bottom: 1px solid light-dark(#d8dee6, #37414d);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .section:last-child { border-bottom: 0; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .section-title { justify-content: space-between; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .description { line-height: 1.6; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .decision-gate {
+      border-inline-start: 3px solid light-dark(#0969da, #58a6ff);
+      background: light-dark(#f5f9ff, #122337);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .decision-notice {
+      margin-top: 10px;
+      color: light-dark(#8250df, #d2a8ff);
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .gate-only .contract-detail { display: none; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 th,
+    #company-api-review-get-schedules-scheduleid-7fffa175 td {
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 th { color: light-dark(#5f6b78, #aab4c0); font-weight: 500; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 tbody tr:last-child td { border-bottom: 0; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 pre {
+      margin: 10px 0 0;
+      padding: 13px;
+      overflow-x: auto;
+      border-radius: 7px;
+      background: light-dark(#eef2f6, #0d1117);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 button {
+      appearance: none;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 6px;
+      background: light-dark(#ffffff, #1a2028);
+      color: light-dark(#17202a, #edf2f7);
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 button[aria-selected="true"],
+    #company-api-review-get-schedules-scheduleid-7fffa175 button[aria-pressed="true"] {
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#eaf3ff, #132b46);
+      color: light-dark(#0969da, #58a6ff);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .review-form {
+      margin: 0 15px 15px;
+      padding: 15px;
+      border: 1px solid light-dark(#d8dee6, #37414d);
+      border-radius: 9px;
+      background: light-dark(#ffffff, #1a2028);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .question-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .question-grid-single { grid-template-columns: 1fr; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 legend { margin-bottom: 7px; font-size: 13px; font-weight: 500; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 label { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 13px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 label input { margin-top: 3px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .option-copy { display: grid; min-width: 0; gap: 2px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .option-label { font-weight: 500; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .option-detail {
+      color: light-dark(#5f6b78, #aab4c0);
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .submit {
+      margin-top: 12px;
+      border-color: light-dark(#0969da, #58a6ff);
+      background: light-dark(#0969da, #58a6ff);
+      color: light-dark(#ffffff, #07111e);
+      font-weight: 500;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .empty { margin-top: 8px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .prompt-output {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 details { margin-top: 9px; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .static-response {
+      padding: 8px 0;
+      border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+    }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .static-response:last-child { border-bottom: 0; }
+    #company-api-review-get-schedules-scheduleid-7fffa175 .static-choice { margin-left: 8px; }
+    @media (max-width: 680px) {
+      #company-api-review-get-schedules-scheduleid-7fffa175 .question-grid { grid-template-columns: 1fr; }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .operation,
+      #company-api-review-get-schedules-scheduleid-7fffa175 .review-form { margin-left: 9px; margin-right: 9px; }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap { overflow: visible; }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap thead { display: none; }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap table,
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap tbody,
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap tr,
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap td { display: block; width: 100%; }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap tr {
+        padding: 7px 0;
+        border-bottom: 1px solid light-dark(#e5e9ef, #303944);
+      }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap tbody tr:last-child { border-bottom: 0; }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap td {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+      #company-api-review-get-schedules-scheduleid-7fffa175 .table-wrap td::before {
+        content: attr(data-label);
+        color: light-dark(#5f6b78, #aab4c0);
+        font-weight: 500;
+      }
+      #company-api-review-get-schedules-scheduleid-7fffa175 pre {
+        overflow-x: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    }
+  </style>
+
+  <div class="api-shell" data-api-shell aria-live="polite"><div data-static-review><header class="topbar"><div class="row"><h2>mate-service 定时任务管理 API</h2><span class="tag">1.6.0</span><span class="tag">Public · 待评审 · 待实现</span></div><code class="base">/mate-service/v1</code></header><article class="operation operation-get"><header class="operation-head"><span class="method method-get">GET</span><code class="path">/schedules/{scheduleId}</code><span class="muted">读取定时任务详情</span></header><section class="section"><h3>作用</h3><p class="description">用户打开某个定时任务，查看保存的任务内容、Agent、时间规则和当前计划摘要。Mate 先检查任务对当前用户可见，再读取 Claw 并把 sessionId 换成 chatId；运行记录另从 Run 列表读取。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。</p></section><section class="section contract-detail"><h3>参数与请求体</h3><div class="table-wrap"><table><thead><tr><th>位置</th><th>名称</th><th>必填</th><th>约束</th><th>说明</th></tr></thead><tbody><tr><td data-label="位置">path</td><td data-label="名称">scheduleId</td><td data-label="必填">是</td><td data-label="约束">string, schedule-{32 位十六进制}</td><td data-label="说明">创建或列表返回的任务 ID，原样传回，不按名称查找，不自行构造；格式非法由 Claw 返回 400</td></tr></tbody></table></div><p class="muted empty">无请求体，也没有 query 参数。读取没有副作用，可以安全重试。</p></section><section class="section contract-detail"><h3>响应</h3><details class="static-response" open><summary><code>200 · 详情</code> 200 OK — 返回与创建、列表相同的完整任务：接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。upcomingRunsAt 按本次读取时刻计算，updatedAt 不因读取变化。</summary><details class="static-choice" open><summary>接口创建的任务</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;type&quot;: &quot;schedule&quot;,
+    &quot;id&quot;: &quot;schedule-927e03d2a4784f90a6238e790539c6e4&quot;,
+    &quot;name&quot;: &quot;工作日园区告警汇总&quot;,
+    &quot;description&quot;: null,
+    &quot;agentId&quot;: &quot;agent-550e8400e29b41d4a716446655440000&quot;,
+    &quot;chatId&quot;: null,
+    &quot;prompt&quot;: &quot;汇总园区过去24小时的设备告警，并标出需要跟进的工单。&quot;,
+    &quot;schedule&quot;: {
+      &quot;type&quot;: &quot;cron&quot;,
+      &quot;expression&quot;: &quot;0 0 8 * * MON-FRI&quot;,
+      &quot;timezone&quot;: &quot;Asia/Shanghai&quot;,
+      &quot;lastRunAt&quot;: null,
+      &quot;upcomingRunsAt&quot;: [
+        &quot;2026-10-05T00:00:00Z&quot;,
+        &quot;2026-10-06T00:00:00Z&quot;,
+        &quot;2026-10-07T00:00:00Z&quot;,
+        &quot;2026-10-08T00:00:00Z&quot;,
+        &quot;2026-10-09T00:00:00Z&quot;
+      ]
+    },
+    &quot;status&quot;: &quot;active&quot;,
+    &quot;pausedReason&quot;: null,
+    &quot;createdAt&quot;: &quot;2026-10-04T02:00:00Z&quot;,
+    &quot;updatedAt&quot;: &quot;2026-10-04T02:00:00Z&quot;,
+    &quot;metadata&quot;: {
+      &quot;parkCode&quot;: &quot;park-east&quot;,
+      &quot;purpose&quot;: &quot;alarm-summary&quot;
+    }
+  }
+}</code></pre></details><details class="static-choice"><summary>对话中创建的任务</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+
+{
+  &quot;resCode&quot;: &quot;0&quot;,
+  &quot;resMsg&quot;: &quot;success&quot;,
+  &quot;result&quot;: {
+    &quot;type&quot;: &quot;schedule&quot;,
+    &quot;id&quot;: &quot;schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b&quot;,
+    &quot;name&quot;: &quot;每晚门禁异常复盘&quot;,
+    &quot;description&quot;: &quot;在门禁巡检对话中创建，每晚复盘当天的门禁异常。&quot;,
+    &quot;agentId&quot;: &quot;agent-550e8400e29b41d4a716446655440000&quot;,
+    &quot;chatId&quot;: &quot;b5e1c2d3f4a5468798a0b1c2d3e4f506&quot;,
+    &quot;prompt&quot;: &quot;复盘今天东区门禁的异常记录，列出需要处理的设备。&quot;,
+    &quot;schedule&quot;: {
+      &quot;type&quot;: &quot;cron&quot;,
+      &quot;expression&quot;: &quot;0 30 21 * * *&quot;,
+      &quot;timezone&quot;: &quot;Asia/Shanghai&quot;,
+      &quot;lastRunAt&quot;: &quot;2026-10-03T13:30:00Z&quot;,
+      &quot;upcomingRunsAt&quot;: [
+        &quot;2026-10-04T13:30:00Z&quot;,
+        &quot;2026-10-05T13:30:00Z&quot;,
+        &quot;2026-10-06T13:30:00Z&quot;,
+        &quot;2026-10-07T13:30:00Z&quot;,
+        &quot;2026-10-08T13:30:00Z&quot;
+      ]
+    },
+    &quot;status&quot;: &quot;active&quot;,
+    &quot;pausedReason&quot;: null,
+    &quot;createdAt&quot;: &quot;2026-10-01T09:12:00Z&quot;,
+    &quot;updatedAt&quot;: &quot;2026-10-01T09:12:00Z&quot;,
+    &quot;metadata&quot;: {}
+  }
+}</code></pre></details></details><details class="static-response"><summary><code>400 · SCHEDULE_REQUEST_INVALID</code> 400 Bad Request — scheduleId 格式非法，或带了 query 参数。Claw 校验，错误码原样返回。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_REQUEST_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;定时任务请求无效。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_REQUEST_INVALID&quot;,
+  &quot;resMsg&quot;: &quot;Invalid schedule request.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>404 · SCHEDULE_NOT_FOUND</code> 404 Not Found — 任务不存在、已删除，或对当前用户不可见。三种情况返回相同结果，不暴露别人的任务是否存在；Mate 判断不可见时不调用 Claw。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;定时任务不存在或不可访问。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_NOT_FOUND&quot;,
+  &quot;resMsg&quot;: &quot;Schedule not found or not accessible.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>500 · SCHEDULE_READ_FAILED</code> 500 Internal Server Error — Claw 中的任务记录损坏或投影失败，不转成 404。Mate 读取 t_schedule 或 Chat 映射失败时返回 Mate 通用 500。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_READ_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;读取定时任务失败。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_READ_FAILED&quot;,
+  &quot;resMsg&quot;: &quot;Failed to read the schedule.&quot;
+}</code></pre></details></details><details class="static-response"><summary><code>503 · SCHEDULE_SERVICE_UNAVAILABLE</code> 503 Service Unavailable — Claw 不可达、证书校验失败或超时。读取没有副作用，可以直接重试。</summary><details class="static-choice" open><summary>zh-CN</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: zh-CN
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_SERVICE_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;定时任务服务暂不可用，请稍后重试。&quot;
+}</code></pre></details><details class="static-choice"><summary>en-US</summary><pre><code>Content-Type: application/json
+Cache-Control: no-store
+Content-Language: en-US
+
+{
+  &quot;resCode&quot;: &quot;SCHEDULE_SERVICE_UNAVAILABLE&quot;,
+  &quot;resMsg&quot;: &quot;The schedule service is temporarily unavailable. Please try again later.&quot;
+}</code></pre></details></details></section></article></div></div>
+  <script type="application/json" data-review-model>{"api":{"title":"mate-service 定时任务管理 API","version":"1.6.0","basePath":"/mate-service/v1","visibility":"Public · 待评审 · 待实现"},"operation":{"method":"GET","path":"/schedules/{scheduleId}","summary":"读取定时任务详情","description":"用户打开某个定时任务，查看保存的任务内容、Agent、时间规则和当前计划摘要。Mate 先检查任务对当前用户可见，再读取 Claw 并把 sessionId 换成 chatId；运行记录另从 Run 列表读取。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。","parameters":[{"in":"path","name":"scheduleId","required":true,"schema":"string, schedule-{32 位十六进制}","description":"创建或列表返回的任务 ID，原样传回，不按名称查找，不自行构造；格式非法由 Claw 返回 400"}],"requestBody":{"required":false,"contentType":"none","description":"无请求体，也没有 query 参数。读取没有副作用，可以安全重试。"},"responses":[{"id":"200-ok","status":"200","tabLabel":"200 · 详情","label":"OK","summary":"返回与创建、列表相同的完整任务：接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。upcomingRunsAt 按本次读取时刻计算，updatedAt 不因读取变化。","headers":{"Content-Type":"application/json","Cache-Control":"no-store"},"bodies":{"接口创建的任务":{"resCode":"0","resMsg":"success","result":{"type":"schedule","id":"schedule-927e03d2a4784f90a6238e790539c6e4","name":"工作日园区告警汇总","description":null,"agentId":"agent-550e8400e29b41d4a716446655440000","chatId":null,"prompt":"汇总园区过去24小时的设备告警，并标出需要跟进的工单。","schedule":{"type":"cron","expression":"0 0 8 * * MON-FRI","timezone":"Asia/Shanghai","lastRunAt":null,"upcomingRunsAt":["2026-10-05T00:00:00Z","2026-10-06T00:00:00Z","2026-10-07T00:00:00Z","2026-10-08T00:00:00Z","2026-10-09T00:00:00Z"]},"status":"active","pausedReason":null,"createdAt":"2026-10-04T02:00:00Z","updatedAt":"2026-10-04T02:00:00Z","metadata":{"parkCode":"park-east","purpose":"alarm-summary"}}},"对话中创建的任务":{"resCode":"0","resMsg":"success","result":{"type":"schedule","id":"schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b","name":"每晚门禁异常复盘","description":"在门禁巡检对话中创建，每晚复盘当天的门禁异常。","agentId":"agent-550e8400e29b41d4a716446655440000","chatId":"b5e1c2d3f4a5468798a0b1c2d3e4f506","prompt":"复盘今天东区门禁的异常记录，列出需要处理的设备。","schedule":{"type":"cron","expression":"0 30 21 * * *","timezone":"Asia/Shanghai","lastRunAt":"2026-10-03T13:30:00Z","upcomingRunsAt":["2026-10-04T13:30:00Z","2026-10-05T13:30:00Z","2026-10-06T13:30:00Z","2026-10-07T13:30:00Z","2026-10-08T13:30:00Z"]},"status":"active","pausedReason":null,"createdAt":"2026-10-01T09:12:00Z","updatedAt":"2026-10-01T09:12:00Z","metadata":{}}}}},{"id":"400-schedule-request-invalid","status":"400","tabLabel":"400 · SCHEDULE_REQUEST_INVALID","label":"Bad Request","summary":"scheduleId 格式非法，或带了 query 参数。Claw 校验，错误码原样返回。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"定时任务请求无效。"},"en-US":{"resCode":"SCHEDULE_REQUEST_INVALID","resMsg":"Invalid schedule request."}}},{"id":"404-schedule-not-found","status":"404","tabLabel":"404 · SCHEDULE_NOT_FOUND","label":"Not Found","summary":"任务不存在、已删除，或对当前用户不可见。三种情况返回相同结果，不暴露别人的任务是否存在；Mate 判断不可见时不调用 Claw。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_NOT_FOUND","resMsg":"定时任务不存在或不可访问。"},"en-US":{"resCode":"SCHEDULE_NOT_FOUND","resMsg":"Schedule not found or not accessible."}}},{"id":"500-schedule-read-failed","status":"500","tabLabel":"500 · SCHEDULE_READ_FAILED","label":"Internal Server Error","summary":"Claw 中的任务记录损坏或投影失败，不转成 404。Mate 读取 t_schedule 或 Chat 映射失败时返回 Mate 通用 500。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_READ_FAILED","resMsg":"读取定时任务失败。"},"en-US":{"resCode":"SCHEDULE_READ_FAILED","resMsg":"Failed to read the schedule."}}},{"id":"503-schedule-service-unavailable","status":"503","tabLabel":"503 · SCHEDULE_SERVICE_UNAVAILABLE","label":"Service Unavailable","summary":"Claw 不可达、证书校验失败或超时。读取没有副作用，可以直接重试。","headers":{"Content-Type":"application/json","Cache-Control":"no-store","Content-Language":"zh-CN"},"bodies":{"zh-CN":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"定时任务服务暂不可用，请稍后重试。"},"en-US":{"resCode":"SCHEDULE_SERVICE_UNAVAILABLE","resMsg":"The schedule service is temporarily unavailable. Please try again later."}}}]},"review":{"questions":[],"followUpTitle":"详情接口待评审","promptPrefix":"更新 GET /mate-service/v1/schedules/{scheduleId}","promptSuffix":"保持与 mate-service 定时任务设计 §4.2 和 Claw 详情接口同步。"}}</script>
+  <script>
+    (() => {
+      const root = document.getElementById('company-api-review-get-schedules-scheduleid-7fffa175');
       const model = JSON.parse(root.querySelector('[data-review-model]').textContent);
       const api = model.api;
       const operation = model.operation;

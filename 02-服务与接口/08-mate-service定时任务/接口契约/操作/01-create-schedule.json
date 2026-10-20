@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service 定时任务管理 API",
-    "version": "1.4.1",
+    "version": "1.6.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
