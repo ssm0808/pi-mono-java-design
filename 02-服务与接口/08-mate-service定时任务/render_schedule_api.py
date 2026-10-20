@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent
 MODELS = (
     ROOT / "接口契约" / "操作" / "01-create-schedule.json",
     ROOT / "接口契约" / "操作" / "02-list-schedules.json",
+    ROOT / "接口契约" / "操作" / "03-get-schedule.json",
 )
 OUTPUT = ROOT / "schedule-api-review.html"
 

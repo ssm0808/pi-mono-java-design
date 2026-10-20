@@ -1,0 +1,202 @@
+{
+  "api": {
+    "title": "mate-service 定时任务管理 API",
+    "version": "1.6.0",
+    "basePath": "/mate-service/v1",
+    "visibility": "Public · 待评审 · 待实现"
+  },
+  "operation": {
+    "method": "GET",
+    "path": "/schedules/{scheduleId}",
+    "summary": "读取定时任务详情",
+    "description": "用户打开某个定时任务，查看保存的任务内容、Agent、时间规则和当前计划摘要。Mate 先检查任务对当前用户可见，再读取 Claw 并把 sessionId 换成 chatId；运行记录另从 Run 列表读取。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "scheduleId",
+        "required": true,
+        "schema": "string, schedule-{32 位十六进制}",
+        "description": "创建或列表返回的任务 ID，原样传回，不按名称查找，不自行构造；格式非法由 Claw 返回 400"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": "none",
+      "description": "无请求体，也没有 query 参数。读取没有副作用，可以安全重试。"
+    },
+    "responses": [
+      {
+        "id": "200-ok",
+        "status": "200",
+        "tabLabel": "200 · 详情",
+        "label": "OK",
+        "summary": "返回与创建、列表相同的完整任务：接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。upcomingRunsAt 按本次读取时刻计算，updatedAt 不因读取变化。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "接口创建的任务": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "type": "schedule",
+              "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
+              "name": "工作日园区告警汇总",
+              "description": null,
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "chatId": null,
+              "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
+              "schedule": {
+                "type": "cron",
+                "expression": "0 0 8 * * MON-FRI",
+                "timezone": "Asia/Shanghai",
+                "lastRunAt": null,
+                "upcomingRunsAt": [
+                  "2026-10-05T00:00:00Z",
+                  "2026-10-06T00:00:00Z",
+                  "2026-10-07T00:00:00Z",
+                  "2026-10-08T00:00:00Z",
+                  "2026-10-09T00:00:00Z"
+                ]
+              },
+              "status": "active",
+              "pausedReason": null,
+              "createdAt": "2026-10-04T02:00:00Z",
+              "updatedAt": "2026-10-04T02:00:00Z",
+              "metadata": {
+                "parkCode": "park-east",
+                "purpose": "alarm-summary"
+              }
+            }
+          },
+          "对话中创建的任务": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "type": "schedule",
+              "id": "schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b",
+              "name": "每晚门禁异常复盘",
+              "description": "在门禁巡检对话中创建，每晚复盘当天的门禁异常。",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "chatId": "b5e1c2d3f4a5468798a0b1c2d3e4f506",
+              "prompt": "复盘今天东区门禁的异常记录，列出需要处理的设备。",
+              "schedule": {
+                "type": "cron",
+                "expression": "0 30 21 * * *",
+                "timezone": "Asia/Shanghai",
+                "lastRunAt": "2026-10-03T13:30:00Z",
+                "upcomingRunsAt": [
+                  "2026-10-04T13:30:00Z",
+                  "2026-10-05T13:30:00Z",
+                  "2026-10-06T13:30:00Z",
+                  "2026-10-07T13:30:00Z",
+                  "2026-10-08T13:30:00Z"
+                ]
+              },
+              "status": "active",
+              "pausedReason": null,
+              "createdAt": "2026-10-01T09:12:00Z",
+              "updatedAt": "2026-10-01T09:12:00Z",
+              "metadata": {}
+            }
+          }
+        }
+      },
+      {
+        "id": "400-schedule-request-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_REQUEST_INVALID",
+        "label": "Bad Request",
+        "summary": "scheduleId 格式非法，或带了 query 参数。Claw 校验，错误码原样返回。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "定时任务请求无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "Invalid schedule request."
+          }
+        }
+      },
+      {
+        "id": "404-schedule-not-found",
+        "status": "404",
+        "tabLabel": "404 · SCHEDULE_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "任务不存在、已删除，或对当前用户不可见。三种情况返回相同结果，不暴露别人的任务是否存在；Mate 判断不可见时不调用 Claw。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_NOT_FOUND",
+            "resMsg": "定时任务不存在或不可访问。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_NOT_FOUND",
+            "resMsg": "Schedule not found or not accessible."
+          }
+        }
+      },
+      {
+        "id": "500-schedule-read-failed",
+        "status": "500",
+        "tabLabel": "500 · SCHEDULE_READ_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Claw 中的任务记录损坏或投影失败，不转成 404。Mate 读取 t_schedule 或 Chat 映射失败时返回 Mate 通用 500。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_READ_FAILED",
+            "resMsg": "读取定时任务失败。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_READ_FAILED",
+            "resMsg": "Failed to read the schedule."
+          }
+        }
+      },
+      {
+        "id": "503-schedule-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · SCHEDULE_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Claw 不可达、证书校验失败或超时。读取没有副作用，可以直接重试。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "定时任务服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "The schedule service is temporarily unavailable. Please try again later."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "详情接口待评审",
+    "promptPrefix": "更新 GET /mate-service/v1/schedules/{scheduleId}",
+    "promptSuffix": "保持与 mate-service 定时任务设计 §4.2 和 Claw 详情接口同步。"
+  }
+}
