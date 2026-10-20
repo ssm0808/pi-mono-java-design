@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.4.0 |
+| 文档版本 | 1.4.1 |
 | 更新日期 | 2026-10-20 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -345,7 +345,7 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | 项 | 规定 |
 |---|---|
 | 基础路径 | `/mate-service/v1` |
-| 认证与 Header | 与 [通用对话 API §3.1](../07-mate-service通用对话API/README.md#31-认证header-与-path) 相同：Authorization 与 X-HW-APPKEY 至少一个，JWT 优先；X-HW-ID 与 access-token 为显式请求头。access-token 只供 Mate 框架检查权限，不转发给 Claw，定时运行也不使用调用者的凭据 |
+| 认证 | 前端到 Mate 的 access-token 由 Mate 框架统一校验，通过后才进入管理接口；管理接口不定义任何请求头，也不把 access-token 转发给 Claw，定时运行不使用调用者的凭据 |
 | 报文 | ResultBean，lowerCamelCase；成功 `resCode/resMsg/result`，失败只有 `resCode/resMsg`，保留真实 HTTP 状态；`Cache-Control: no-store` |
 | 时间 | 沿用 Claw：UTC 秒级、以 Z 结尾；页面按任务时区或浏览器时区显示 |
 | 语言 | 错误文案按公司公共上下文的语言返回，`Content-Language` 标明实际语言 |
@@ -400,8 +400,6 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 
 | HTTP / resCode | 来源与含义 |
 |---|---|
-| 401 公司认证组件错误码 | 用户认证失败，复用公司组件 |
-| 403 Mate 框架错误码 | 权限检查不通过，由 Mate 框架按 access-token 返回 |
 | 422 `SCHEDULE_QUOTA_EXCEEDED` | 当前用户任务数已达上限，Mate 判断 |
 | 404 `SCHEDULE_NOT_FOUND` / `SCHEDULE_RUN_NOT_FOUND` | 不存在、已删除或不可见 |
 | 400、404、409、422 的 Claw 业务错误码 | 字段校验、激活冲突、频率策略等，resCode 原样返回，文案由 Mate 按语言重新给出 |
@@ -409,7 +407,7 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | 500 `SCHEDULE_*_FAILED` | Claw 内部失败，原样返回 |
 | 500 Mate 通用错误码 | Mate 写入 `t_schedule` 等本地失败，与 Mate 其他接口一致 |
 
-错误不回显 Claw 内部地址、原始异常或 sessionId。
+access-token 校验失败由 Mate 框架在进入管理接口前返回，不在本设计定义。错误不回显 Claw 内部地址、原始异常或 sessionId。
 
 <a id="create-schedule-api"></a>
 
@@ -417,16 +415,9 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 
 `POST /mate-service/v1/schedules`。用户在页面上配置“工作日 08:00 汇总园区设备告警”这类任务，Mate 检查配额后把请求体原样转发给 Claw，Claw 创建成功后记录归属，返回投影后的完整任务；处理顺序见 [§3.3](#create-sequence)。请求、两种成功响应和全部错误的示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [01-create-schedule.json](接口契约/操作/01-create-schedule.json)，用 `render_schedule_api.py` 生成，正文不维护第二套 JSON。
 
-**请求头**
+本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验（[§4.2.1](#management-api)）。
 
-| Header | 必填 | 规定 |
-|---|---|---|
-| Content-Type | 是 | `application/json` |
-| Authorization 或 X-HW-APPKEY | 至少一个 | `Bearer <JWT>` 优先；同时提供时用 JWT，JWT 无效不回退 APPKEY |
-| X-HW-ID | 是 | 公司调用方身份 |
-| access-token | 是 | 当前用户的访问令牌，Mate 框架据此检查权限；不转发给 Claw，定时运行也不使用 |
-
-**请求体**：字段与 Claw [§4.3](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同，Mate 原样转发，不增删字段，校验由 Claw 完成。
+**请求体**：JSON，字段与 Claw [§4.3](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同，Mate 原样转发，不增删字段，校验由 Claw 完成。
 
 | 字段 | 必填 | 规定 |
 |---|---|---|
@@ -449,8 +440,6 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | 400 / SCHEDULE_RULE_INVALID | schedule 不是 cron 对象或表达式非法 | 定时规则无效，请使用合法的 Spring 六字段 Cron 表达式。 / Invalid schedule rule. Use a valid Spring six-field Cron expression. |
 | 400 / SCHEDULE_TIMEZONE_INVALID | timezone 不是有效的 IANA 名称 | 定时时区无效。 / Invalid schedule timezone. |
 | 400 / SCHEDULE_REQUEST_INVALID | JSON 非法；description、agentId、metadata 不合规；传入 chatId、sessionId、只读或未知字段 | 定时任务请求无效。 / Invalid schedule request. |
-| 401 / UNAUTHENTICATED | 认证字段缺失或凭据无效，复用公司认证组件 | 调用方身份认证失败。 / Caller authentication failed. |
-| 403 / Mate 框架错误码 | 框架按 access-token 检查权限不通过 | 沿用框架 |
 | 422 / SCHEDULE_QUOTA_EXCEEDED | 当前用户接口创建的任务数已达上限（[M2](#m2)），Mate 转发前判断 | 定时任务数量已达上限，请删除不再需要的任务后再创建。 / You have reached the maximum number of schedules. Delete schedules you no longer need and try again. |
 | 422 / SCHEDULE_POLICY_REJECTED | Cron 规则超出部署频率策略，Claw 判断 | 定时任务超出部署策略。 / The schedule exceeds the deployment policy. |
 | 500 / SCHEDULE_CREATE_FAILED | Claw 内部处理失败，任务未创建 | 创建定时任务失败。 / Failed to create the schedule. |
@@ -681,6 +670,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.4.1 | 2026-10-20 | 管理接口不定义请求头：access-token 由 Mate 框架在进入接口前校验，§4.2.1、§4.2.5、§4.2.6 与接口 HTML 删除请求头、401 和 403。 |
 | 1.4.0 | 2026-10-20 | 新增 §4.2.6 创建接口的完整定义：请求头、字段规则、201 响应与双语错误表，示例由接口 HTML 展示；§4.2.1 改为接收 access-token 供 Mate 框架检查权限、不转发给 Claw；§4.4.2 删除与证书校验矛盾的 401。 |
 | 1.3.0 | 2026-10-20 | Claw 与 Mate 互相调用由证书校验保证调用方：§4.3 删除服务凭据与操作范围，503 与 F8 改为证书校验失败；M5 关闭，§4.4 不再有 access-token 未认证的风险，删除 401 `SCHEDULED_TOKEN_AUTH_REQUIRED`。 |
 | 1.2.1 | 2026-10-20 | 创建时写入 `t_schedule` 失败改为直接返回 500，不再同步补偿删除 Claw 任务，残留由对账清理；创建时序图去掉补偿分支。 |
