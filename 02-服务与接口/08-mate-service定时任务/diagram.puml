@@ -186,17 +186,17 @@ package "持久化（待实现，物理表由 Mate 决定）" as StorePkg {
     + 定时会话登记：写入、确认、删除
   }
 
-  class ScheduleOwnership <<t_mate_schedule_owner>> {
+  class ScheduleOwnership <<t_schedule_owner>> {
     scheduleId : String（创建成功前为空）
     userId : String
     state : pending / active
     createdAt : Instant
   }
-  class ScheduleQuota <<t_mate_schedule_quota>> {
+  class ScheduleQuota <<t_schedule_quota>> {
     userId : String
     ownedCount : int
   }
-  class ScheduledSessionRegistration <<t_mate_scheduled_session>> {
+  class ScheduledSessionRegistration <<t_schedule_session>> {
     sessionId : String
     scheduleId, runId, agentId : String
     userId : String
