@@ -51,7 +51,7 @@ deactivate Operator
 ' 目标：待实现；UC1 创建接口配置的任务。
 ' Claw 接口：POST /campusclaw-service/v1/schedules，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4 节。
 ' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
-' 表达方式：画正常创建与 Claw 结果三种去向；配额统计不加锁；补偿删除失败后的对账见 README.md 第 3.7 节。
+' 表达方式：画正常创建与 Claw 结果三种去向；配额统计不加锁；写入失败直接返回 500，Claw 残留的对账见 README.md 第 3.7 节。
 title 创建定时任务（UC1）
 hide footbox
 skinparam backgroundColor white
@@ -71,9 +71,6 @@ alt Claw 返回 201
   Claw --> Mate : 定时任务（scheduleId）
   Mate -> MateStore ++ : 插入 t_schedule（id、user_id）
   return 已写入
-  opt 写入失败
-    Mate -> Claw : DELETE /schedules/{scheduleId}（补偿删除）
-  end
   Mate --> Operator : 201 定时任务（sessionId 换为 chatId）
 else Claw 明确失败（带错误码）
   Claw --> Mate : 4xx / 5xx 错误码
