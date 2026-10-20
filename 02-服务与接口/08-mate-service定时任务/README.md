@@ -6,12 +6,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.0.0 |
+| 文档版本 | 1.1.0 |
 | 更新日期 | 2026-10-19 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
 | 源码基线 | Claw：pi-mono-java main `ead67eba`（见 [§8.1](#source-evidence)）；mate-service 源码未核验，本文不指定物理表名和既有组件的真实类名 |
-| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.66.0；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
+| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.67.0；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
 
 ## 评审记录
 
@@ -31,7 +31,7 @@
 | <a id="m2"></a>M2 | 每个用户最多能有多少个接口配置的任务 | 每用户 20 个，部署可配置；对话中创建的任务不计入，Claw 已限制每个会话一个启用中的任务 | [§3.3](#create-sequence) 配额检查 | 产品 |
 | <a id="m3"></a>M3 | Session 归属登记接口的路径与报文 | 采用 [§4.4.2](#session-ownership) 的两个 runtime 路径 | 关闭 Claw [T7](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t7) 中登记接口部分；确定后 Claw 实现 HTTP 适配 | Mate 与 Claw |
 | <a id="m4"></a>M4 | Mate 写归属失败时留下的无主任务如何处理 | 无主任务登记一律拒绝，因此不会运行业务；对账任务 10 分钟后经 Claw 删除 | [§3.7](#reconciliation) | Mate |
-| <a id="m5"></a>M5 | Claw 与 Mate 互相调用的服务认证 | 仍待定，沿用 Claw [T2](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t2) | [§4.3](#mate-to-claw)、[§4.4](#mate-for-claw) 全部接口 | Mate 与 Claw |
+| <a id="m5"></a>M5 | Claw 与 Mate 互相调用的服务认证 | 仍待定，沿用 Claw [T2](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t2)。**TODO（已知风险）**：为先跑通端到端，access-token 接口首版不认证调用方，只靠网络或网关限制（[§4.4.1](#scheduled-access-token)）；确定后 Claw 补回出站认证，Mate 只允许 Claw 调用 | [§4.3](#mate-to-claw)、[§4.4](#mate-for-claw) 全部接口 | Mate 与 Claw |
 | <a id="m6"></a>M6 | 定时运行产生的对话如何进入 Mate 自己的历史库 | 待后续对齐，本文暂不设计 | 平时 Mate 在转发 events 时写历史，定时运行不经过转发，Mate 历史库没有这些对话 | Mate |
 | <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 实现前按 mate-service 源码核对用户 ID 长度，以及 Chat 映射表能否按 sessionId 查到 chatId 与所属用户；`t_schedule_session` 不存这两项，依赖这一点 | [§3.2](#data-model) 的字段类型与登记、核对接口 | Mate |
 
@@ -423,7 +423,7 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 
 ### 4.4 Mate 为 Claw 提供的接口
 
-两个接口都只允许已认证的 Claw 服务调用（[M5](#m5)），不接收用户凭据；成功与错误都用 ResultBean，`Cache-Control: no-store`，支持 `Accept-Language` zh-CN / en-US，缺省 en-US，只影响错误文案。Claw 何时调用、失败后怎么处理只在 Claw [§4.8](../../01-总体架构/08-CampusClaw定时任务/README.md#mate-calls) 维护。
+登记接口只允许已认证的 Claw 服务调用（[M5](#m5)）；access-token 接口首版暂不认证调用方（[§4.4.1](#scheduled-access-token)）。两个接口都不接收用户凭据；成功与错误都用 ResultBean，`Cache-Control: no-store`，支持 `Accept-Language` zh-CN / en-US，缺省 en-US，只影响错误文案。Claw 何时调用、失败后怎么处理只在 Claw [§4.8](../../01-总体架构/08-CampusClaw定时任务/README.md#mate-calls) 维护。
 
 <a id="scheduled-access-token"></a>
 
@@ -442,6 +442,7 @@ Accept-Language: zh-CN
 |---|---|
 | 路径 | 草案路径；Claw 用 `campusclaw.schedule.access-token-path` 配置，服务地址沿用[共享连接目录](../02-CampusMate共享客户端配置/README.md)的 `campusmate.base-url` |
 | 请求体与参数 | 无请求体，无 query 参数；不传用户、任务、Session 或 Agent 标识 |
+| 调用方认证 | 首版与其他 Mate 调用一致，Claw 不附加服务认证，Mate 也不校验调用方，只靠网络或网关限制谁能访问。**TODO（已知风险）**：本接口返回所有定时任务共用的统一账号 Token，权限高于单个用户；服务认证（[M5](#m5)、Claw T2）确定后，Claw 补回出站认证，Mate 只允许 Claw 调用 |
 
 **成功响应**：HTTP 200。
 
@@ -466,7 +467,7 @@ Accept-Language: zh-CN
 
 | HTTP / resCode | 含义 | zh-CN / en-US |
 |---|---|---|
-| 401 / SCHEDULED_TOKEN_AUTH_REQUIRED | 调用方不是获准的 Claw 服务 | 定时执行凭据认证失败。 / Scheduled execution token authentication is required. |
+| 401 / SCHEDULED_TOKEN_AUTH_REQUIRED | 调用方不是获准的 Claw 服务；补回服务认证后启用 | 定时执行凭据认证失败。 / Scheduled execution token authentication is required. |
 | 403 / SCHEDULED_TOKEN_FORBIDDEN | 统一账号未配置或已停用 | 定时执行账号不可用。 / Scheduled execution account is not available. |
 | 500 / SCHEDULED_TOKEN_FAILED | 内部处理失败 | 获取定时执行凭据失败。 / Failed to obtain scheduled execution token. |
 | 503 / SCHEDULED_TOKEN_UNAVAILABLE | 认证中心等依赖不可用 | 定时执行凭据服务暂不可用。 / Scheduled execution token service is temporarily unavailable. |
@@ -536,7 +537,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 ### 5.1 安全性
 
-- 浏览器入口只接受公司用户认证；Claw 入口只接受 Claw 的服务认证（[M5](#m5)），两类入口不共用认证链。
+- 浏览器入口只接受公司用户认证；Claw 入口只接受 Claw 的服务认证（[M5](#m5)），两类入口不共用认证链。例外：access-token 接口首版暂不认证调用方，只靠网络或网关限制，是待补回的已知风险（[§4.4.1](#scheduled-access-token)）。
 - 不可见的任务和 Run 一律按不存在返回 404，不泄露其存在。
 - Mate 调用 Claw 时不传用户身份和访问令牌；Claw 只凭服务认证和 Mate 给出的操作范围执行。
 - 对外响应不含 sessionId、Claw 内部地址或原始异常。
@@ -600,7 +601,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 创建 | 达到配额返回 422；Claw 失败时不写入；结果未知不自动重试；写入 `t_schedule` 失败触发补偿删除 |
 | 删除 | 删除后 `t_schedule` 记录清除，已生成会话仍可从 Chat 打开 |
 | 对话中创建的任务 | 关联 Chat 的所属用户可见、可管理，不能改 agentId |
-| access-token | 只认 Claw 服务认证；统一账号停用返回 403；Token 不进日志 |
+| access-token | 首版不带服务认证可取到 Token（补回服务认证后改为只认 Claw）；统一账号停用返回 403；Token 不进日志 |
 | 登记 | 同一 sessionId 以相同 scheduleId、runId 重复登记返回同一 chatId，不新建 Chat；无主、已删除或对话中创建的任务被拒绝；登记后只有归属用户能从 Chat 打开该会话；核对接口不创建记录 |
 | 对账 | 无主任务不会运行，并在对账后被删除；读取结果未知时不删除登记 |
 | 表约束 | `t_schedule_session` 的 CHECK 与两张表的唯一索引拒绝不一致数据 |
@@ -634,4 +635,5 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.0 | 2026-10-20 | 为先跑通端到端，access-token 接口首版暂不认证调用方；M5、§4.4、§4.4.1、§5.1 与测试验收记录该风险与补回条件。 |
 | 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、两张表的结构与事务（2026-10-20 按评审精简为 `t_schedule` 3 列、`t_schedule_session` 5 列）、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |
