@@ -109,13 +109,13 @@ Claw -> Claw : 固定本次 Run 的 sessionId
 Claw -> Mate ++ : POST /runtime/scheduled-sessions（数据库事务外）
 Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
 return 任务归属
-alt t_schedule 有该任务，且 sessionId 未登记或四个字段相同
+alt t_schedule 有该任务，且 sessionId 未登记或 scheduleId、runId 相同
   Mate -> MateStore ++ : 同一事务写定时会话登记与 Chat 映射（已存在则复用）
   return chatId
   Mate --> Claw : 200 四个字段与 chatId
   Claw -> ClawStore ++ : 同库事务受理 Session、首条消息、根执行与 Run
   return 已受理
-else t_schedule 没有该任务，或 sessionId 已用不同字段登记
+else t_schedule 没有该任务，或 sessionId 已用不同的 scheduleId 或 runId 登记
   Mate --> Claw : 409 SCHEDULED_SESSION_REJECTED
   Claw -> ClawStore ++ : 记录 Run 失败 session_creation_rejected_error
   return 已记录
@@ -192,10 +192,9 @@ package "持久化（待实现，物理表由 Mate 决定）" as StorePkg {
   }
   class ScheduledSessionRegistration <<t_schedule_session>> {
     sessionId : String
-    scheduleId, runId, agentId : String
-    userId : String
-    chatId : String
+    scheduleId, runId : String
     status : registered / confirmed
+    createdAt : Instant
   }
 }
 

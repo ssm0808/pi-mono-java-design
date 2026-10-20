@@ -33,7 +33,7 @@
 | <a id="m4"></a>M4 | Mate 写归属失败时留下的无主任务如何处理 | 无主任务登记一律拒绝，因此不会运行业务；对账任务 10 分钟后经 Claw 删除 | [§3.7](#reconciliation) | Mate |
 | <a id="m5"></a>M5 | Claw 与 Mate 互相调用的服务认证 | 仍待定，沿用 Claw [T2](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t2) | [§4.3](#mate-to-claw)、[§4.4](#mate-for-claw) 全部接口 | Mate 与 Claw |
 | <a id="m6"></a>M6 | 定时运行产生的对话如何进入 Mate 自己的历史库 | 待后续对齐，本文暂不设计 | 平时 Mate 在转发 events 时写历史，定时运行不经过转发，Mate 历史库没有这些对话 | Mate |
-| <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 实现前按 mate-service 源码核对用户 ID、chatId 长度与 Chat 映射表结构 | [§3.2](#data-model) 的字段类型 | Mate |
+| <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 实现前按 mate-service 源码核对用户 ID 长度，以及 Chat 映射表能否按 sessionId 查到 chatId 与所属用户；`t_schedule_session` 不存这两项，依赖这一点 | [§3.2](#data-model) 的字段类型与登记、核对接口 | Mate |
 
 ### 需求信息
 
@@ -146,7 +146,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 ### 3.2 数据模型
 
-目标新增两张表：`t_schedule`、`t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；mate-service 源码与既有表未核验，用户 ID 与 chatId 的长度先按 64 设计，实现前按 Mate 实际定义核对（[M7](#m7)）。
+目标新增两张表：`t_schedule`、`t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；mate-service 源码与既有表未核验，用户 ID 的长度先按 64 设计，实现前按 Mate 实际定义核对（[M7](#m7)）。
 
 <a id="mate-tables"></a>
 
@@ -155,7 +155,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 | 表 | 权威职责 | 关联及生命周期 |
 |---|---|---|
 | `t_schedule` | 接口配置的任务属于哪个用户 | `id` 即 Claw `t_schedule.id`，不设外键；Claw 创建成功后写入，删除任务时删除；对话中创建的任务不建记录 |
-| `t_schedule_session` | 每次运行新建的 Session 属于哪个用户，以及对应的 chatId | `session_id` 逻辑引用 Claw 的 `t_sessions.id`；删除任务不删除；Session 删除时与 Chat 映射一起删除 |
+| `t_schedule_session` | 每次运行新建的 Session 来自哪个任务、哪次 Run，以及 Claw 是否已提交该 Session；所属用户与 chatId 不重复保存，以 Chat 映射为准 | `session_id` 逻辑引用 Claw 的 `t_sessions.id`；删除任务不删除；Session 删除时与 Chat 映射一起删除 |
 | Mate 既有 Chat 映射表 | Chat → Session 映射与所属用户 | 结构不变，未核验；登记时在同一事务内写入一行（[§3.2.4](#mate-transactions)） |
 
 不新增任务配置副本、Run 副本、配额计数或请求去重表。任务配置、计划时间和 Run 只在 Claw 保存，Mate 每次读取 Claw；配额按 `t_schedule` 的行数计算。
@@ -189,26 +189,20 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 |---|---|---|---|---|
 | session_id | VARCHAR(40) | 否 | — | Claw 为本次运行固定的 Session ID |
 | schedule_id | VARCHAR(41) | 否 | — | 所属任务，登记时 Mate `t_schedule` 中必须有该任务；之后任务删除不影响本行 |
-| run_id | VARCHAR(36) | 否 | — | 本次 Run |
-| agent_id | VARCHAR(38) | 否 | — | 本次运行使用的 Agent |
-| user_id | VARCHAR(64) | 否 | — | 登记时从 `t_schedule` 复制的所属用户；之后访问授权以 Chat 映射为准 |
-| chat_id | VARCHAR(64) | 否 | — | 登记时为该用户建立的 Chat |
+| run_id | VARCHAR(36) | 否 | — | 本次 Run；重复登记时与 schedule_id 一起做幂等比较 |
 | status | VARCHAR(16) | 否 | — | `registered` 已登记、Claw 是否提交未知；`confirmed` 已确认 Claw 中存在该 Session |
 | created_at | TIMESTAMPTZ(0) | 否 | — | 登记时刻 |
-| confirmed_at | TIMESTAMPTZ(0) | 是 | — | 确认时刻 |
 
 主键：`session_id`。
 
 | 索引 | 规则 | 支持的访问 |
 |---|---|---|
 | uk_schedule_session_run | 唯一 `(run_id)` | 一次 Run 只登记一个 Session |
-| uk_schedule_session_chat | 唯一 `(chat_id)` | 一个 Chat 只对应一次定时运行 |
 | idx_schedule_session_unconfirmed | `(created_at) WHERE status = 'registered'` | 对账查找超过准备期限仍未确认的登记 |
 
-数据库约束：
+数据库约束：status 只能是 `registered` / `confirmed`。
 
-- status 只能是 `registered` / `confirmed`。
-- status 为 `registered` 时 confirmed_at 为空，为 `confirmed` 时非空。
+不保存的信息：所属用户与 chatId 在 Mate 既有 Chat 映射中，按 session_id 查询（[M7](#m7)）；agentId 在 Claw 的 Run 中，登记接口只原样回显。
 
 流转：登记时插入 `registered`；对账读到 Claw 中该 Session 存在时改为 `confirmed`；对账读到 Claw 明确不存在时与 Chat 映射一起删除。`confirmed` 之后只随 Session 删除。
 
@@ -220,7 +214,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 |---|---|
 | 创建 | Claw 返回 201 后插入 `t_schedule`；插入失败时调用 Claw 删除刚创建的任务作补偿。配额统计在调用 Claw 之前，不加锁 |
 | 删除任务 | Claw 删除成功或返回 404 后，按 id 删除 `t_schedule` 行；不动定时会话登记与 Chat 映射 |
-| 登记 | 以共享锁读取该 schedule_id 的 `t_schedule` 行，没有则拒绝；按 session_id 查已有登记，四个字段相同则返回原记录，不同则拒绝；否则插入 `registered` 登记与 Chat 映射。删除任务的事务持排他锁，两者先后提交，不会登记到已删除的任务 |
+| 登记 | 以共享锁读取该 schedule_id 的 `t_schedule` 行，没有则拒绝；按 session_id 查已有登记，schedule_id 与 run_id 相同则返回原记录，不同则拒绝；否则插入 `registered` 登记与 Chat 映射。删除任务的事务持排他锁，两者先后提交，不会登记到已删除的任务 |
 | 确认登记 | 对账读到 Session 存在时，把 `registered` 改为 `confirmed` |
 | 删除未提交登记 | 对账确认 Claw 中不存在该 Session 后，删除登记与 Chat 映射 |
 | 删除 Session | 沿用 Mate 删除 Chat 的流程；同事务删除定时会话登记 |
@@ -303,7 +297,7 @@ Run 查询：
 | 2 | Claw 为同一次 Run 先固定 sessionId，之后准备和受理都复用这个 ID |
 | 3 | 在 Claw 数据库事务外请求登记 |
 | 4～5 | 按 scheduleId 查 `t_schedule`；没有该任务（已删除、无主或是对话中创建的任务）时拒绝 |
-| 6～7 | sessionId 已登记：四个字段完全相同则直接返回原登记（幂等）；任一字段不同则拒绝。未登记时在同一事务中写 `registered` 登记、为 `t_schedule` 中该任务的 user_id 建立 Chat 映射（[§3.2.5](#mate-transactions)） |
+| 6～7 | sessionId 已登记：scheduleId 与 runId 都相同则直接返回原登记（幂等），任一不同则拒绝；agentId 不保存，只原样回显。未登记时在同一事务中写 `registered` 登记、为 `t_schedule` 中该任务的 user_id 建立 Chat 映射（[§3.2.5](#mate-transactions)） |
 | 8～10 | 登记成功后，Claw 在同库事务中创建 Session、首消息、根执行和 Run 关联；Mate 记录不加入这个事务 |
 | 11～13 | Mate 明确拒绝时 Claw 本次不受理，Run 记为 `session_creation_rejected_error` |
 
@@ -501,7 +495,7 @@ Content-Type: application/json
 |---|---|
 | sessionId、scheduleId、runId、agentId | 必填，Claw 生成的 ID，格式为前缀加 32 位十六进制；不传用户、消息正文或凭据 |
 
-成功 HTTP 200，result 返回与请求相同的四个字段，另附 chatId；Claw 只比较四个字段，忽略 chatId：
+成功 HTTP 200，result 返回与请求相同的四个字段，另附 chatId；Claw 只比较四个字段，忽略 chatId。Mate 只保存并校验 sessionId、scheduleId、runId，agentId 原样回显：
 
 ```json
 {
@@ -523,7 +517,7 @@ Content-Type: application/json
 GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 ```
 
-已登记时 HTTP 200，result 与登记响应同形；未登记返回 404 `SCHEDULED_SESSION_NOT_FOUND`，Claw 视为空。只读，不创建记录。
+已登记时 HTTP 200，result 含 sessionId、scheduleId、runId 与 chatId，不含 agentId（Mate 不保存）。Claw 的 HTTP 适配比较这三个 ID，相同即视为核对到原登记，agentId 取自本次请求；未登记返回 404 `SCHEDULED_SESSION_NOT_FOUND`，Claw 视为空。只读，不创建记录。
 
 **错误**
 
@@ -532,7 +526,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 400 / SCHEDULED_SESSION_REQUEST_INVALID | 字段缺失或格式非法 | 明确拒绝，本次不受理 |
 | 401 / SCHEDULED_SESSION_AUTH_REQUIRED | 调用方不是获准的 Claw 服务 | 明确拒绝，本次不受理 |
 | 404 / SCHEDULED_SESSION_NOT_FOUND | 仅核对：未登记 | 继续核对直到准备期限 |
-| 409 / SCHEDULED_SESSION_REJECTED | `t_schedule` 中没有该任务，或 sessionId 已用不同字段登记 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
+| 409 / SCHEDULED_SESSION_REJECTED | `t_schedule` 中没有该任务，或 sessionId 已用不同的 scheduleId 或 runId 登记 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
 | 500 / SCHEDULED_SESSION_FAILED | 内部处理失败 | 结果未知，转只读核对 |
 | 503 / SCHEDULED_SESSION_UNAVAILABLE | 存储等依赖不可用 | 结果未知，转只读核对 |
 
@@ -607,7 +601,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 删除 | 删除后 `t_schedule` 记录清除，已生成会话仍可从 Chat 打开 |
 | 对话中创建的任务 | 关联 Chat 的所属用户可见、可管理，不能改 agentId |
 | access-token | 只认 Claw 服务认证；统一账号停用返回 403；Token 不进日志 |
-| 登记 | 相同四字段重复登记返回同一 chatId，不新建 Chat；无主、已删除或对话中创建的任务被拒绝；登记后只有归属用户能从 Chat 打开该会话；核对接口不创建记录 |
+| 登记 | 同一 sessionId 以相同 scheduleId、runId 重复登记返回同一 chatId，不新建 Chat；无主、已删除或对话中创建的任务被拒绝；登记后只有归属用户能从 Chat 打开该会话；核对接口不创建记录 |
 | 对账 | 无主任务不会运行，并在对账后被删除；读取结果未知时不删除登记 |
 | 表约束 | `t_schedule_session` 的 CHECK 与两张表的唯一索引拒绝不一致数据 |
 
@@ -640,4 +634,4 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、两张表的结构与事务、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |
+| 1.0.0 | 2026-10-19 | 新建 Mate 侧定时任务唯一设计，按设计模板组织管理接口、两张表的结构与事务（2026-10-20 按评审精简为 `t_schedule` 3 列、`t_schedule_session` 5 列）、调用 Claw 的处理、Session 归属登记接口草案与对账，并入原共享连接目录下的定时执行凭据草案。 |
