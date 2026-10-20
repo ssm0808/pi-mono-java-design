@@ -1,0 +1,377 @@
+{
+  "operation": {
+    "shortName": "查询命令可选值",
+    "operationKey": "ListAgentCommandValues",
+    "method": "GET",
+    "path": "/agents/{agentId}/commands/{commandName}/values",
+    "summary": "查询指定 Agent 下某个选项型命令的当前值和可选值；带 sessionId 时按会话计算",
+    "description": "查询某个 argumentType=options 的命令的当前值和可选值，用于展示该命令的选择列表。所有选项型命令共用本接口，结构都是 {currentValue, values}。可选查询参数 sessionId 的规则与 ListAgentCommands 相同：带 sessionId 时按会话计算，currentValue 为会话当前值；不带时用于尚未创建会话的新对话，currentValue 为创建会话时会使用的初始值。model 的值是 modelId，取自 Agent enabledModels 与 Model Manager 当前可用模型的交集，保持 Agent 配置顺序、不分页；values 可以为空，已保存的 currentValue 可能因后续停用而不在 values 中。thinking 按会话当前模型计算，不带 sessionId 时按 Agent 默认模型计算，模型支持深度思考时为 on、off，不支持时只有 off；不接受 modelId 参数。mode 的值为 plan、build。值与该命令的参数相同，与语言无关；显示名由调用方决定。新增选项型命令时只在 Runtime 登记取值，接口不变。",
+    "parameters": [
+      {
+        "$ref": "parameters.agentId"
+      },
+      {
+        "in": "path",
+        "name": "commandName",
+        "required": true,
+        "schema": "model | thinking | mode",
+        "description": "命令名，不带斜杠；只接受命令清单中 argumentType=options 的 Builtin。其他命令（无参、文本参数或技能命令）返回 404 COMMAND_VALUES_NOT_FOUND。"
+      },
+      {
+        "in": "query",
+        "name": "sessionId",
+        "required": false,
+        "schema": {
+          "$ref": "resourceIdPatterns.session"
+        },
+        "description": "可选。规则与 ListAgentCommands 相同：必须是该 Agent 下存在且未删除的 Session，否则返回 404；省略时返回新会话的初始值。"
+      },
+      {
+        "$ref": "parameters.acceptLanguage"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": null,
+      "description": "无请求体；不支持过滤参数。",
+      "example": null
+    },
+    "responses": [
+      {
+        "id": "200-model",
+        "status": "200",
+        "label": "OK · model",
+        "summary": "带 sessionId：model：currentValue 为会话当前模型，values 为会话实时可选模型。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "values": [
+                "model_011CZq2GkV8aD4NwP7sLmXfR",
+                "model_011CZq2GkV8aD4NwP7sLmXfS"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-model-empty",
+        "status": "200",
+        "label": "OK · model 无可选模型",
+        "summary": "带 sessionId：model：会话没有可选模型时 values 为空，currentValue 仍为当前模型；这是成功。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "values": []
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking",
+        "status": "200",
+        "label": "OK · thinking 支持",
+        "summary": "带 sessionId：thinking：当前模型支持深度思考，values 为 on、off，currentValue 是会话当前的深度思考开关。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "on",
+              "values": [
+                "on",
+                "off"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking-unsupported",
+        "status": "200",
+        "label": "OK · thinking 不支持",
+        "summary": "带 sessionId：thinking：当前模型不支持深度思考，values 只有 off，会话的深度思考已按模型能力关闭。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "off",
+              "values": [
+                "off"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-mode",
+        "status": "200",
+        "label": "OK · mode",
+        "summary": "带 sessionId：mode：currentValue 为会话当前工作模式，values 为全部可选模式。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "build",
+              "values": [
+                "plan",
+                "build"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-model-agent",
+        "status": "200",
+        "label": "OK · model（无会话）",
+        "summary": "不带 sessionId：currentValue 为 Agent 默认模型（与创建会话时选用的模型相同），values 与带会话时相同。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "model_011CZq2GkV8aD4NwP7sLmXfR",
+              "values": [
+                "model_011CZq2GkV8aD4NwP7sLmXfR",
+                "model_011CZq2GkV8aD4NwP7sLmXfS"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-thinking-agent",
+        "status": "200",
+        "label": "OK · thinking（无会话）",
+        "summary": "不带 sessionId：按 Agent 默认模型计算；默认模型必须支持深度思考，因此 values 为 on、off，currentValue 为创建会话时的 on。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "on",
+              "values": [
+                "on",
+                "off"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "200-mode-agent",
+        "status": "200",
+        "label": "OK · mode（无会话）",
+        "summary": "不带 sessionId：currentValue 为 Agent 发布的工作模式，values 为全部可选模式。",
+        "headers": {
+          "Cache-Control": "no-store",
+          "Content-Language": "en-US"
+        },
+        "bodies": {
+          "en-US": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "currentValue": "build",
+              "values": [
+                "plan",
+                "build"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "400-invalid-agent-id",
+        "status": "400",
+        "tabLabel": "400 · INVALID_AGENT_ID",
+        "label": "Bad Request",
+        "summary": "agentId 不符合资源标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "agentId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_AGENT_ID",
+            "resMsg": "The agentId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "400-invalid-session-id",
+        "status": "400",
+        "label": "Bad Request",
+        "summary": "sessionId 不符合标识格式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "sessionId 格式不正确。"
+          },
+          "en-US": {
+            "resCode": "INVALID_SESSION_ID",
+            "resMsg": "The sessionId format is invalid."
+          }
+        }
+      },
+      {
+        "id": "404-session-not-found",
+        "status": "404",
+        "label": "Not Found · Session",
+        "summary": "传入的 Session 不存在、已删除或不属于该 Agent；不回退为无会话取值。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "指定的 Session 不存在。"
+          },
+          "en-US": {
+            "resCode": "SESSION_NOT_FOUND",
+            "resMsg": "The specified Session does not exist."
+          }
+        }
+      },
+      {
+        "id": "404-agent-not-found",
+        "status": "404",
+        "tabLabel": "404 · AGENT_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "指定的 Agent 不存在。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_FOUND",
+            "resMsg": "指定的 Agent 不存在。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_FOUND",
+            "resMsg": "The specified Agent does not exist."
+          }
+        }
+      },
+      {
+        "id": "404-command-values-not-found",
+        "status": "404",
+        "label": "Not Found · 命令",
+        "summary": "commandName 不是 argumentType=options 的命令，包括不存在的命令、无参命令、文本参数命令和技能命令。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "COMMAND_VALUES_NOT_FOUND",
+            "resMsg": "该命令没有可选值。"
+          },
+          "en-US": {
+            "resCode": "COMMAND_VALUES_NOT_FOUND",
+            "resMsg": "The command has no selectable values."
+          }
+        }
+      },
+      {
+        "id": "422-agent-not-available",
+        "status": "422",
+        "tabLabel": "422 · AGENT_NOT_AVAILABLE",
+        "label": "Unprocessable Entity",
+        "summary": "Agent 存在但无法准备完整快照；不带 sessionId 时需要读取 Agent 默认模型与发布的工作模式。",
+        "headers": {
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "当前 Agent 运行时不可用。"
+          },
+          "en-US": {
+            "resCode": "AGENT_NOT_AVAILABLE",
+            "resMsg": "The current Agent runtime is unavailable."
+          }
+        }
+      },
+      {
+        "id": "503-manager-unavailable",
+        "status": "503",
+        "label": "Service Unavailable",
+        "summary": "model 或 thinking：Model Manager 暂时不可用，无法形成实时可选模型或确认当前模型是否支持深度思考；mode 不受影响。",
+        "headers": {
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager 暂时不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "MANAGER_UNAVAILABLE",
+            "resMsg": "Model Manager is temporarily unavailable. Try again later."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "headerReview": {
+      "status": "confirmed",
+      "confirmedAt": "2026-09-22",
+      "decision": "移除无业务消费的执行凭据 Header 声明与示例；保留可选 Accept-Language 及该操作实际需要的传输 Header；不改变上游授权，不拒绝额外收到的 Header。"
+    },
+    "baselineAlignment": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-18",
+      "decision": "选项型命令合用一个按命令取值的接口，替代原 models、thinking-values 与 modes 三个专用接口。与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（getArgumentCompletions），不写在命令清单里；thinking 保持 on/off，不引入多级 level。模型展示名、baseUrl、凭据与价格不在本接口公开。"
+    },
+    "agentScope": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-20",
+      "decision": "路径改为按 Agent 查询，sessionId 为可选查询参数，与 ListAgentCommands 对称；不带 sessionId 时返回创建会话时的初始值，thinking 按 Agent 默认模型计算，不增加 modelId 参数。"
+    }
+  }
+}

@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.107.2 |
+| 文档版本 | 1.108.0 |
 | 更新日期 | 2026-10-20 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
@@ -68,7 +68,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | M02 · Model | 如何让业务 Agent 设置成为唯一模型权威；Provider 调用与模型选择如何分层；原始事件在哪层归一化 | 模型目录差异采用 pi；事件归一化专项采用 Codex | [A06](#a06)覆盖 CampusMate 身份、业务 Agent 设置、旧全局目录删除和 SDK 削减；[A18](#a18)覆盖模型 HTTP 客户端、连接复用与 Redis 全局并发上限；Codex 事件归一化对比及完整取消链仍待专项核验 |
 | M03 · Tool 与受管环境 | 工具发现、参数校验、权限、执行和副作用重试分别由谁负责 | pi；其他基线按具体执行问题选择 | [A03](#a03)覆盖稳定工具定义与计划 Prompt；[A05](#a05)覆盖 TODO 工具及事件边界；[A08](#a08)覆盖结构化提问；[A10](#a10)覆盖通用命令与写工具删除边界；[A11](#a11)覆盖远端代理与 Skill 工具按需披露；[A20](#a20)覆盖工具参数的 Schema 子集与本地校验器 |
 | M04 · 上下文与持久化 | 模型上下文、历史、分支与压缩如何区分；哪些事件值得保存 | pi；DeepSeek 辅助 | [A03](#a03)覆盖模式/审核恢复；[A12](#a12)覆盖单条时间线与非递归读取，其他上下文比较待补证，不默认 token 全量落盘 |
-| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../04-CampusClaw命令系统/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计、Mate 增量 |
+| M05 · Command 与 Skill | 清单、资源发现、执行与使用统计分别维护什么权威状态 | pi；发现参照 OpenCode/DSH，统计接入参照 pi 事件，Codex/OpenCode 保留历史研究 | [A09](#a09)覆盖 Skill 成功调用次数、公共观察、有界写入与 #335 差距；[A11](#a11)覆盖 Skill 加载与具体工具定义披露；[当前 Command 状态](../04-CampusClaw命令系统/README.md#current-runtime-status)区分 Runtime 已实现与版本快照、统计及 2026-10-20 对齐的增量 |
 | M06 · 事件与服务边界 | 写入与观察是否分离；流绑定谁；断线如何恢复；控制状态谁权威 | Claude；OpenCode，必要时 pi/DeepSeek | [A02](#a02)覆盖既有 Claw/Mate 流范围；[A13](#a13)覆盖 Redis 快照与短期增量恢复；[A03](#a03)维护数据库确认交接；[A04](#a04)覆盖 Session 配置更新；[A05](#a05)覆盖后端显式任务事件；[A16](#a16)覆盖按 Agent 跨会话查询用户事件与按事件读取轮次 |
 | M07 · 前端体验 | preview 何时被权威内容替换；Turn/Item 与产品 UI 如何映射 | Codex；Claude 辅助 | [A05](#a05)保留旧提交的事件合并与根执行证据；当前计划/TODO/问答前端实现见[A07](#a07)及[A08](#a08)，公共 Mate 接入仍为目标设计 |
 | M08 · 元数据与配置 | 定义、发布快照和运行对象如何分离；刷新如何影响活动执行 | pi；托管产品仅对照公开资源 | Agent.mode 专项已核对 Mate 956b547f / Runtime 09b32d8e；默认值链为 待实现，见 A03 和元数据主设计；元数据组合查询顺序另在 Mate `9dd5d85e` 核对，见 J06；发布事务一致性仍待补证 |
@@ -78,10 +78,10 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | M12 · 异常与错误码 | 失败类别用异常类型还是错误码区分；原始异常由谁保留；对外文字与日志文字如何分开 | DSH 与 Codex；OpenCode、pi 对照 | [A19](#a19)覆盖单一异常类、集中错误码枚举与构建期拦截；待实现 |
 
 M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Skill 执行、严格名称、
-展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现，Mate 公共接入独立确认。
+展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现；Mate 对外的命令接口不在本设计范围。
 这不改变原有产品约束、安全加固或架构取舍；实现映射与测试未重跑边界由主设计维护。
 外部基线历史 SHA 与比较结论保持原核验范围，不把进度校正描述为新的上游比较。
-M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与按会话的可选值（模型、深度思考、工作模式共用一个按命令取值的接口），Runtime 清单以 argumentType 说明参数形态，Mate 通过命令选项接口返回 currentValue 与 value/label 候选（模型名称取自 Mate 模型管理），前端按 argumentType 统一组装命令参数，不按命令名写取数逻辑。可选值不放在命令清单，与 pi 按会话补全一致；不返回 pi 式占位文字，因为图形界面里它与 description 重复。此项为接口架构变更，不改变全局类图结构。
+M05/M07 的[参数控件与附件边界](../../07-前端设计/技术设计/命令/README.md#command-input-controls)的分层：Runtime 提供命令清单与可选值（模型、深度思考、工作模式共用一个按命令取值的接口），清单以 argumentType 与 argumentRequired 说明参数形态与是否必填，前端按这两个字段统一组装命令参数，不按命令名写取数逻辑；显示名由调用方决定。可选值不放在命令清单，与 pi 按会话补全一致；不返回 pi 式占位文字，因为图形界面里它与 description 重复。此项为接口架构变更，不改变全局类图结构。
 
 M05 描述符专项于 2026-09-22 重新确认默认分支并 fetch pi `main@d201760ffee16564aa8d9a759e0c85b70db33674`
 与 OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`，只更新命令发现和请求边界；默认分支快照不等于稳定发布。
@@ -94,6 +94,10 @@ Java 53eff85c 的 VO/组装器及前端仍用 kind/input，新投影与客户端
 M05 清单作用域于 2026-10-16 核对 OpenCode `dev@e25b7abf`（按工作目录查询，实验接口）、Codex `main@6b991972`（`skills/list` 按 cwds 查询）与 pi `main@4954d760`（每个会话进程 `get_commands`）。
 CampusClaw 的命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（待评审 · 待实现），不按会话状态过滤；这是接口架构变更：不带 sessionId 只返回 help、skills 与技能命令，供尚无会话的新对话使用，带 sessionId 返回完整命令；代价是运行中的禁用改由前端状态规则表展示、POST 终判。
 证据见 [Agent 清单作用域核对](../04-CampusClaw命令系统/source-evidence.md#agent-catalog-evidence)。
+
+M05 接口对齐于 2026-10-20 核对 Java main `628dca25` 与 Codex `main@b2aa07db`。Codex 先 `thread/start`（可带 model）建线程，再由 `turn/start` 携带 model、effort、collaborationMode，设置总有作用对象；CampusClaw 同样要求新对话先创建会话再执行命令，不新增 Agent 级执行入口，但设置通过会话命令而不是消息请求提交，前端不按命令名分支。
+这一轮的取舍：不带 sessionId 的清单改为“对新会话有作用或帮助了解 Agent”的命令（help、rename、model、thinking、mode、skills 与技能命令），可选值接口改为按 Agent 查询并返回新会话初始值；`name` 改名 `rename`，rename、model、thinking、mode 参数必填并新增 argumentRequired；Builtin 成功只返回本地化 Markdown 文本，调用方再读 GET Session；技能命令受理错误码与普通消息一致。收益是新对话也能先设置再提问、前端统一处理结果；代价是只执行命令也会生成一个空对话，Builtin 后多一次 GET Session，均为待实现的接口架构变更。
+证据见 [接口对齐核验](../04-CampusClaw命令系统/source-evidence.md#slash-alignment-evidence)。
 
 待补证项是持续维护范围，不能用于讲述已经实现的能力。涉及该模块的新设计应补齐受影响的问题，
 不要求一次设计把所有基线全部重做，也不能用“待补证”略过本次实际改变的架构结论。
@@ -797,6 +801,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.108.0 | 2026-10-20 | M05 记录 2026-10-20 命令接口对齐：新对话清单范围、按 Agent 的可选值、rename 与 argumentRequired、Builtin 文本结果，删除 Mate 命令选项分层。 |
 | 1.107.2 | 2026-10-20 | A20 的验证方式改为性质测试，实现状态更新为已在 `main@2b9a6ad` 实现、现网普查未完成。 |
 | 1.107.1 | 2026-10-20 | A20 去掉 networknt 测试依赖与差分对照。 |
 | 1.107.0 | 2026-10-19 | 新增 A20：工具参数改用自写 JSON Schema 子集校验，与 pi、Codex、OpenCode、DeepSeek Harness 的校验做法对照。 |

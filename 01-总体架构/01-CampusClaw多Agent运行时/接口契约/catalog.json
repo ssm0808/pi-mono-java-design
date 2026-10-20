@@ -45,12 +45,12 @@
       "design": "chat-events-history-design.md"
     },
     {
-      "key": "ListSessionCommandValues",
-      "source": "接口契约/操作/09-list-session-command-values.json",
+      "key": "ListAgentCommandValues",
+      "source": "接口契约/操作/09-list-agent-command-values.json",
       "common": "接口契约/common.json",
       "status": "已确认 · 待实现",
-      "note": "所有选项型命令（model、thinking、mode）共用的按会话取值接口，返回 {currentValue, values}；替代原 models、thinking-values 与 modes 三个专用接口，供 Mate 命令选项使用。",
-      "design": "chat-http-v1-design.md#245-get-session-command-values"
+      "note": "所有选项型命令（model、thinking、mode）共用的取值接口，按 Agent 查询、sessionId 可选，返回 {currentValue, values}；不带 sessionId 时返回新会话的初始值。",
+      "design": "../04-CampusClaw命令系统/README.md#command-values"
     },
     {
       "key": "UpdateSession",
@@ -64,17 +64,17 @@
       "key": "ListAgentCommands",
       "source": "接口契约/操作/12-list-agent-commands.json",
       "common": "接口契约/common.json",
-      "status": "按 Agent 查询待评审 · 待实现",
-      "note": "清单改为按 Agent 返回全部命令，不读会话状态；冷缓存与创建会话共用准备流程。描述符为 name/type/description 与可选 argumentType（text 或 options），可选值由会话查询接口提供，字段迁移待实现；运行中的限制由前端命令状态规则与 POST 最终准入承担。",
+      "status": "按 Agent 查询已实现 · 范围与 argumentRequired 待实现",
+      "note": "清单按 Agent 返回命令，不读会话状态；冷缓存与创建会话共用准备流程。按 Agent 查询与 argumentType 已在 628dca25 实现；无会话清单加入 rename、model、thinking、mode，name 改名为 rename，描述符新增 argumentRequired，均待实现。",
       "design": "../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认"
     },
     {
       "key": "ExecuteSessionCommand",
       "source": "接口契约/操作/13-execute-session-command.json",
       "common": "接口契约/common.json",
-      "status": "已确认目标契约 · 待实现",
-      "note": "B01～B15 四组全部按推荐确认；字段、错误码、事件关联和恢复边界已统一，可进入实现。数据库和容量数值按压测校准。Builtin JSON 保持，Skill 使用共享事件 SSE；Mate 公共协议独立管理。 mode 查询与 plan/build 切换为待实现增量，复用 Session 配置与领域事件。 Session 资源不返回配套 ETag，既有实现与前端依赖移除待实现。",
-      "design": "chat-http-v1-design.md#26-built-in-command已确认目标实现"
+      "status": "已确认目标契约 · 文本响应与参数必填待实现",
+      "note": "Builtin 只返回 Markdown 文本，调用方随后 GET Session；rename、model、thinking、mode 参数必填；技能命令错误码按原因细分并与普通消息共用受理阶段错误码。Skill 使用共享事件 SSE；新对话先创建会话再执行。",
+      "design": "../04-CampusClaw命令系统/README.md#execute-command"
     },
     {
       "key": "QuerySkillLoadStatistics",

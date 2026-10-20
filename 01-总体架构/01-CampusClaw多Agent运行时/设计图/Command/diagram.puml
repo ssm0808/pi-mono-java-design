@@ -5,6 +5,7 @@
 ' Product decision: GET uses full sources and state-filtered commands with name/type/description/argumentType; POST keeps locked admission.
 ' Source evidence: pi-mono-java@d8e22562 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached and toRuntime.
 ' Product decision: Help uses authored Agent metadata; it does not format the command catalog.
+' 2026-10-20 已确认（待实现）：参数按定义统一检查，Builtin 成功只返回本地化 Markdown 文本，调用方随后读取 GET Session。
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -30,14 +31,16 @@ participant "Command catalog" as Catalog
 participant "Selected handler" as Handler
 participant "Domain service" as Service
 Caller -> App : Submit command and arguments
-App -> Catalog : Resolve once with required source scope
-Catalog --> App : Real definition and immutable catalog
+App -> Catalog : Find definition by name
+Catalog --> App : Real definition
+App -> App : Check arguments against the definition
 App -> Handler : Dispatch selected definition and snapshot
 Handler -> Service : Apply command-specific admission and action
 Service --> Handler : Typed outcome
 Handler --> App : Command result
 alt Builtin
-  App --> Caller : Command-specific JSON
+  App --> Caller : Localized Markdown text
+  Caller -> Caller : Reload GET Session for state
 else Skill
   App --> Caller : User receipt, shared events and matching idle
 end
@@ -50,11 +53,11 @@ end note
 
 @startuml command_authoritative_state
 title Recommended Command Recovery Boundary
-' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java prepare; Mode command is pending.
+' Source evidence: pi-mono-java@628dca25 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java prepare; service/command/contributor/ModeCommandContributor.java.
 ' Design reason: synchronous JSON results need no generic command lifecycle storage.
 skinparam shadowing false
-rectangle "Name" as Name
-rectangle "Model / Thinking / Compact\nMode: Pending implementation" as Domain
+rectangle "Rename" as Name
+rectangle "Model / Thinking / Mode / Compact" as Domain
 database "Current Session state" as State
 database "Existing domain Entries" as Entries
 rectangle "GET Session / GET Events" as Query

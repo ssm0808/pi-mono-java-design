@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.26.0 |
-| 更新日期 | 2026-10-18 |
+| 文档版本 | 1.27.0 |
+| 更新日期 | 2026-10-20 |
 | 变更性质 | HTTP 1.63.0 统一取消条件与请求去重 Header 及配套 ETag；内部事务与业务准入保留 |
 | 唯一当前入口 | [当前十二项接口](chat-api-review.html) |
 | 页面渲染核对基线 | 设计仓 `1d9bf16381841e183d5bd12070e9df17feb7d478`；`接口契约/页面资源/catalog.js` 的 mount、`render_chat_http_v1.py` 的 render_static；仅调整页面阅读交互 |
@@ -24,7 +24,7 @@
 - [chat-api-review.html](chat-api-review.html) 是唯一当前人类接口页，从清单及精确模型生成，不手工编辑 HTML。
 - 七项 Session/Command 普通契约和一项 Skill 批量统计查询复用 `接口契约/common.json`；两个 Events 使用 `事件契约/common.json`。统计源位于 `统计契约/操作`，查询精确字段只在该处维护。目录名称只是源组织方式，不代表两套并行的当前接口清单。各 operation 不复制到另一目录。
 - `review` 与 `reviewState` 继续记录原有确认决定；清单中的说明只解释其适用边界，不替代或自动提升确认状态。B01～B15 已实际提交确认；两个 Events 目标契约已定稿，question 列表清空，数值校准另列。
-- Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；公共命令与普通对话各自维护状态。
+- Markdown 记录理由、源码证据与未决项；FollowUp 只见[未来设计](chat-follow-up-future-design.md)，本期不启用。Mate 公共契约独立管理；Mate 对外的聊天命令接口不在本设计范围。
 
 共享 Header 默认只保留可选 Accept-Language；有 JSON 请求体或 SSE 的操作显式覆盖。所有接口不声明、不消费 If-Match/Idempotency-Key，额外传入按未知 Header 忽略；响应不生成配套 ETag，不用 body/query 版本或请求键替代。执行凭据仅用于新消息与 Skill 场景，控制事件和 Builtin 各有无凭据示例；Help 仅投影 Builtin。十项 Header 决定记录在各 operation 的 review.headerReview，不覆盖原有语义评审状态；适用范围和源码依据见 [HTTP §7.1](chat-http-v1-design.md#71-凭据读取与透传) 与 [迁移证据 §8.3](chat-http-v1-design.md#session-header-free-migration)。
 
@@ -33,13 +33,14 @@ thinking、配置与 Skill 映射已联动更新，Builtin JSON 保持；公共 
 GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和配置事件由当前精确源维护。
 普通整数分页不继承旧不透明 page 的失效规则；不能用旧配置说明覆盖新历史接口。
 
-共享命令清单的字段、排序和状态过滤由 Slash 模块维护，两跳等值与负向门禁防止派生契约漂移。
+共享命令清单的字段、排序和范围由 Slash 模块维护，负向门禁防止契约漂移。
 
 命令调用阅读入口：
 
 | 要查的内容 | 入口 |
 |---|---|
 | 命令清单的请求与响应 | [查看 Agent 命令清单](chat-api-review.html#ListAgentCommands) |
+| 选项型命令的当前值与可选值 | [查询命令可选值](chat-api-review.html#ListAgentCommandValues) |
 | 描述符字段、状态过滤与交互规则 | [Slash 通用模块](../04-CampusClaw命令系统/README.md#command-state-rules) |
 | 八个 Builtin 与 Skill 的完整请求、成功和失败响应 | [执行会话命令](chat-api-review.html#ExecuteSessionCommand) |
 | zh-CN 仍返回英文描述的源码依据与契约缺口 | [Slash 语言专项核对](../04-CampusClaw命令系统/source-evidence.md#331-清单字段与语言专项核对) |
@@ -61,7 +62,7 @@ GetSession、创建及 Command 的 Session 投影同步 mode；更新入口和�
 不写“已确认”“已评审”、PR 过程或实施进度。确认状态留在 review/catalog 元数据，源码和实现差距留在 Markdown。
 参数细节与示例放在对应栏目，执行和恢复约束放在契约表格或所属设计。该规则不删除“工具确认”“确认停止”等业务动作。
 
-同一文案规则覆盖 Runtime、Mate 公共命令、Mate 公共 Events、模型代理和附件接口，以及其 OpenAPI/Help 投影；不只检查当前正在修改的一项。命令清单页不展示额外字段说明、调用速查、控件规则、响应索引或实现状态区块；字段与交互规则链接 Slash 主设计，标准请求/响应继续直接展示。
+同一文案规则覆盖 Runtime、Mate 公共 Events、模型代理和附件接口，以及其 OpenAPI/Help 投影；不只检查当前正在修改的一项。命令清单页不展示额外字段说明、调用速查、控件规则、响应索引或实现状态区块；字段与交互规则链接 Slash 主设计，标准请求/响应继续直接展示。
 
 此次文案核对基线为设计仓 `cb6a2854dc3483814efffe0c10db4f04e51b509f`，范围为全部 20 个当前 HTTP 操作（15 份 JSON 与 8 份 OpenAPI 操作投影，其中 3 项重复投影）。Java/Agent 基线、业务 Schema、评审状态和实现状态没有随文案更新；沿用各专题已注明的证据。
 
@@ -127,6 +128,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.27.0 | 2026-10-20 | 同步 HTTP 1.75.0：ListSessionCommandValues 改为 ListAgentCommandValues，Builtin 成功只返回文本，删除 Mate 公共命令引用。 |
 | 1.26.0 | 2026-10-18 | 同步 HTTP 1.74.0：ListSessionModels、ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues，当前接口为十二项。 |
 | 1.25.0 | 2026-10-17 | 同步 HTTP 1.73.0：新增 ListSessionThinkingValues 与 ListSessionModes，当前接口为十四项；命令描述符的 hints 改为 argumentType。 |
 | 1.24.0 | 2026-10-17 | 同步 HTTP 1.72.0：Session 更新取消 ETag 已实现，证据见 §8.4。 |

@@ -150,6 +150,39 @@ CampusClaw 核对实现 PR #364 的 `pi-mono-java@22310e66e93b2cd3f7bcacf9195823
 
 这些是默认分支快照，不代表稳定发布；本节只用于命名与结构对照，不改变 M05 的架构比较结论。
 
+<a id="slash-alignment-evidence"></a>
+
+## 9. 三个命令接口对齐核验（2026-10-20）
+
+2026-10-20 fetch `pi-mono-java` 默认分支 `main`，核验 `628dca25a694d9d056b15f012e1223d68091ab66`。下表路径除常量外相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。只读源码，未运行 Java 或前端测试。
+
+| 源码 / 符号 | 已观察行为 | 与 2026-10-20 目标的差距 |
+|---|---|---|
+| `web/RuntimeCommandCatalogController.java:58` · listCommands；`:76-81` · listCommandValues | 清单为 `GET /agents/{agentId}/commands`；可选值仍为 `GET /sessions/{sessionId}/commands/{commandName}/values`，调用 `CommandValuesService.listValues(sessionId, commandName)` | 可选值改为 `GET /agents/{agentId}/commands/{commandName}/values?sessionId=`，不带 sessionId 时返回新会话初始值，待实现 |
+| `service/command/CommandCatalogService.java:66-77` · listCommands | 带 sessionId 先确认归属，再 `prepare(agentId)`；不带时按 `SESSIONLESS_BUILTINS` 过滤 Builtin；技能直接取 `prepared.skills()` | 改由 Builtin 元数据声明是否只用于已有会话；不带 sessionId 时保留 rename、model、thinking、mode，待实现 |
+| `modules/common/src/main/java/com/campusclaw/common/constant/ClawConstants.java:414` · `SESSIONLESS_BUILTINS` | `List.of(HELP_COMMAND, SKILLS_COMMAND)` | 删除该常量，待实现 |
+| `command/type/CommandInputMode.java:15-18` | 声明 NONE、OPTIONAL、REQUIRED；全仓主代码与测试都没有引用 REQUIRED | 清单 argumentRequired 由它投影，rename、model、thinking、mode 改为 REQUIRED，待实现 |
+| `service/command/CommandListResponseAssembler.java:70,83` | 描述符只输出 name、type、description、argumentType；按 `BUILTIN_ORDER` 排序 | 增加 argumentRequired，`name` 改为 `rename`，待实现 |
+| `command/builtin/BuiltinCommandDefinition.java:106-114` · describe | `describe(CommandSessionSnapshotDTO)` 按会话计算 available、unavailableCode 与 input | `describe` 不依赖会话，`ResolvedCommandDTO` 删除这三个字段；主代码中没有读取它们的地方，待实现 |
+| `service/command/CompositeCommandRegistry.java:44-75` · resolve | 每次解析对每个 Definition 调用 `describe(snapshot)`；`SkillCommandSource`（`@Service`）注入来源列表 | 只按名称查找 Definition，待实现 |
+| `service/command/CommandExecutionService.java:81,141-156` · executeBuiltin / requireAdmission | 唯一的 `registry.resolve` 调用只取 BUILTIN；准入按“是否带参数”再判断一次 | 参数按 `CommandInputMode` 统一检查，待实现 |
+| `service/command/CommandExecutionService.java:160-201` · translate / commandError | 白名单外的码（含 SESSION_UPDATE_FAILED、INVALID_SESSION_UPDATE_REQUEST）折叠为 COMMAND_EXECUTION_FAILED | 前者保留 500，后者映射为 400 INVALID_COMMAND_REQUEST，待实现 |
+| `service/command/readonly/AgentHelpQueryService.java:34`；`readonly/RuntimeSessionStatusService.java:29`；`readonly/BoundSkillQueryService.java:34`；`service/command/SessionCompactionApplicationService.java:42` | Help 用 `isBlank` 拒绝参数，其余三处用 `isEmpty`，口径不一致 | 删除各自检查，由执行入口去掉首尾空白后统一检查，待实现 |
+| `service/command/SessionNamingService.java:41,68` · execute / normalizeName；`SessionModelConfigurationService.java:95`；`SessionThinkingConfigurationService.java:77`；`SessionModeConfigurationService.java:82` | 空参数走查询分支；名称修改拒绝空白 | 参数改为必填，删除查询分支，待实现 |
+| `dto/command/ModelCommandResultDTO.java`、`HelpCommandResultDTO.java`、`SkillsCommandResultDTO.java`、`SessionCommandResultDTO.java` | 结果按命令区分结构，经 `CommandResponseAssembler` 投影为不同 VO | 成功只返回本地化 Markdown 文本，删除按命令区分的结果结构，待实现 |
+| `service/command/skill/SkillCommandExecutionService.java:77-80` · execute | 捕获异常后 `translate`，日志只记录 errorCode，不带原始异常 | 日志带原始异常（J07），待实现 |
+| `service/command/skill/SkillCommandExecutionService.java:116-122` · expand | 正文为空抛 AGENT_NOT_AVAILABLE；正文加参数超长抛 INVALID_COMMAND_REQUEST | 正文为空或正文本身超长为 422 SKILL_NOT_AVAILABLE，待实现 |
+| `service/command/skill/SkillCommandExecutionService.java:127-145` · translate | 白名单不含 EVENT_SERVICE_UNAVAILABLE、EVENT_ACCEPTANCE_FAILED，折叠为 COMMAND_EXECUTION_FAILED | 补齐受理链错误码，与普通消息一致，待实现 |
+| `event/RuntimeMessageEventService.java:181-182` | 首帧不能写入事件流时抛 503 EVENT_SERVICE_UNAVAILABLE | 普通消息已有该码；技能命令共用同一受理链 |
+| `session/RuntimeSessionService.java:67`；`model/RuntimeModelManager.java:21` · resolveDefaultModel | 创建会话时按 Agent 快照解析默认模型 | 不带 sessionId 的 model 初始值复用同一方法 |
+
+Codex 对照：2026-10-20 隔离 fetch `openai/codex` main `b2aa07db8ac892a865de888dd08726680fcf873c`。
+
+| 相对路径 / 符号 | 已观察实现 | CampusClaw 取舍 |
+|---|---|---|
+| `codex-rs/app-server-protocol/src/protocol/v2/thread.rs:62-64` · `ThreadStartParams.model` | `thread/start` 创建线程时可带 model | 与“先创建会话，再执行设置命令”一致：设置总有作用对象 |
+| `codex-rs/app-server-protocol/src/protocol/v2/turn.rs:254,271,291` · `TurnStartParams.model / effort / collaboration_mode` | 每轮可覆盖模型、推理强度与协作模式，并作用于后续轮次 | CampusClaw 不在消息请求里携带设置，改用会话级命令，前端不按命令名分支 |
+
 ## 7. 交付规则
 
 `pi-mono-java@09b32d8ea4a4b43b34be302d8b2745bdc417c9a2` 的 `.github/workflows/ci.yml:17-24` 调用 `scripts/check-commit-additions.sh`，`MAX_ADDED_LINES` / `check_pull_request` 限制 PR 非文档新增行 2000；取消额度后实现仓需删除相应 CI 步骤、脚本和专用测试。

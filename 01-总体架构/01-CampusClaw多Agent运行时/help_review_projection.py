@@ -31,7 +31,8 @@ def project_help_model(runtime_model):
     model["api"]["visibility"] = "Internal · Help 已确认；Runtime Command 的只读专项展示"
     operation["shortName"] = "Help：Agent 使用指南"
     operation["summary"] = "查询 Agent 使用指南"
-    operation["description"] = "查询当前会话绑定 Agent 的名称、用途说明和使用场景，供用户了解如何使用该 Agent。"
+    operation["description"] = ("返回当前会话绑定 Agent 的使用指南：一段按请求语言生成的 Markdown 文本，"
+                                "包含 Agent 名称、用途说明和使用场景，供用户了解如何使用该 Agent。")
     operation["requestBody"]["example"] = deepcopy(examples[0]["value"])
     operation["requestBody"]["examples"] = examples
     operation["responses"] = successes + errors

@@ -291,9 +291,11 @@
     .result-subtitle { color: var(--text-secondary); font-size: 12px; }
     .result-close { width: 44px; height: 44px; border: 0; border-radius: 10px; color: var(--text-secondary); background: transparent; cursor: pointer; }
     .result-close:hover { background: rgb(46 106 79 / 8%); }
-    .help-description { display: grid; gap: 5px; margin: 16px 0 12px; font-size: 13px; }
-    .use-cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .use-case { padding: 11px; color: var(--text-secondary); font-size: 12px; border: 1px solid #cbded3; border-radius: 11px; background: rgb(255 255 255 / 56%); }
+    .result-body { margin: 12px 0 4px; font-size: 13px; overflow-wrap: anywhere; }
+    .result-body h3 { margin: 0 0 8px; font-size: 14px; }
+    .result-body p { margin: 0 0 8px; }
+    .result-body ul { margin: 0 0 8px; padding-left: 20px; }
+    .empty-chat { margin: 48px 0; color: var(--text-secondary); font-size: 13px; text-align: center; }
 
     .composer-dock {
       position: absolute;
@@ -347,7 +349,7 @@
     #command-values .command-description { margin-left: auto; }
     .value-index { display: inline-grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border-radius: 50%; background: var(--surface-secondary); color: var(--text-secondary); font-size: 12px; }
     #command-values .command-name { font-family: inherit; font-size: 14px; font-weight: 500; }
-    /* 列表获得焦点时只描出高亮行；没有高亮行（执行即查询）时描出整个列表 */
+    /* 列表获得焦点时只描出高亮行；没有高亮行（当前值不可选）时描出整个列表 */
     #command-values:focus-visible { outline: none; }
     #command-values:focus-visible .command-option.active { box-shadow: inset 0 0 0 1px var(--focus); }
     #command-values:focus-visible:not(:has(.active)) { outline: 1px solid var(--focus); outline-offset: -4px; border-radius: var(--radius-md); }
@@ -425,7 +427,6 @@
       .command-list { max-height: min(45dvh, calc(100cqh - 220px)); }
       .command-option { grid-template-columns: minmax(0, 1fr); }
       .command-option { gap: 4px; }
-      .use-cases { grid-template-columns: 1fr; }
       .result-region { width: calc(100% - 28px); }
       .prototype-caption { text-align: left; }
     }
@@ -451,8 +452,6 @@
     .result-title { font-size: 15px; }
     .result-region>summary { min-height: 44px; cursor: pointer; }
     .result-region>summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-    .use-cases { display: block; }
-    .use-case { padding: 6px 0; border: 0; background: transparent; }
     .running-banner { border: 0; padding: 3px 0; color: var(--text-secondary); background: transparent; }
     @media(max-width:920px) { .review-shell { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); } .review-main { padding: 14px; } }
   </style>
@@ -470,8 +469,9 @@
         <button class="state-tab" role="tab" aria-selected="true" data-state="catalog"><span>命令清单</span><small>输入 / 后的默认浏览状态</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="argument"><span>参数编辑</span><small>选择后仍需明确运行</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="options"><span>选项选择</span><small>弹出可选值，回车即执行</small></button>
-        <button class="state-tab" role="tab" aria-selected="false" data-state="running"><span>运行中清单</span><small>完全服从服务端 Descriptor</small></button>
-        <button class="state-tab" role="tab" aria-selected="false" data-state="help"><span>Help 结果</span><small>非对话、仅当前页面</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="newChat"><span>新对话</span><small>先建会话再执行命令</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="running"><span>运行中清单</span><small>置灰运行中不可用的命令</small></button>
+        <button class="state-tab" role="tab" aria-selected="false" data-state="help"><span>Help 结果</span><small>Markdown 文本，仅当前页面</small></button>
         <button class="state-tab" role="tab" aria-selected="false" data-state="unmatched"><span>未匹配</span><small>保留草稿、禁止自动回退</small></button>
       </div>
       <div class="review-note">待实现 交互评审稿。本页仅模拟操作，不发起真实请求；Skill 执行保持关闭。</div>
@@ -480,7 +480,7 @@
     <main class="review-main">
       <header class="review-heading">
         <div>
-          <p>前端专项 · 1.6.0</p>
+          <p>前端专项 · 1.7.0</p>
           <h1 id="state-title">命令清单</h1>
           <p id="state-description">空消息中输入 /，读取当前 Chat 的服务端命令清单。</p>
         </div>
@@ -491,7 +491,7 @@
         <header class="app-topbar">
           <div class="agent-id">
             <img class="agent-avatar" src="../资源/campusclaw-mark-o1.png" alt="">
-            <div><strong>园区运维助手</strong><small><i class="status-dot"></i><span id="agent-status">在线 · 空闲</span></small></div>
+            <div><strong>园区运维助手</strong><small><i class="status-dot"></i><span id="agent-status">在线 · 空闲</span></small><small id="session-summary"></small></div>
           </div>
           <div class="top-actions" aria-label="会话操作">
             <button class="icon-action" aria-label="查看会话信息">ⓘ</button>
@@ -503,6 +503,7 @@
           <div class="timeline">
             <div class="timeline-inner">
               <div class="date-divider">今天 15:42</div>
+              <p class="empty-chat" id="empty-chat" hidden>这个对话还没有消息。输入 / 可以先设置模型、深度思考和模式。</p>
               <article class="message user"><div class="user-bubble">帮我梳理一下园区明天的巡检重点。</div></article>
               <article class="message">
                 <img class="message-avatar" src="../资源/campusclaw-mark-o1.png" alt="">
@@ -516,17 +517,12 @@
                 <summary class="result-eyebrow">命令结果 · 仅当前页面</summary>
                 <div class="result-head">
                   <div>
-                    <h2 class="result-title">园区运维助手</h2>
+                    <h2 class="result-title">命令结果</h2>
                     <div class="result-subtitle">help · 演示结果</div>
                   </div>
                   <button class="result-close" type="button" aria-label="关闭命令结果">×</button>
                 </div>
-                <div class="help-description"><span>协助园区运维人员分析告警、组织巡检任务。</span><span>根据当前会话信息给出可执行的处置建议。</span></div>
-                <div class="use-cases" aria-label="使用场景">
-                  <div class="use-case">梳理当天高优先级告警</div>
-                  <div class="use-case">生成按楼栋划分的巡检建议</div>
-                  <div class="use-case">解释设备异常并列出处置步骤</div>
-                </div>
+                <div class="result-body" id="result-body"></div>
               </details>
             </div>
           </div>
@@ -573,62 +569,44 @@
           </div>
         </div>
       </section>
-      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果仅当前页面；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="plan-workbench.html?scene=question">查看计划、问答与命令联合交互</a></p>
+      <p class="prototype-caption"><button id="simulate-stop-terminal" type="button" hidden>模拟本轮终止</button> Builtin 结果为 Markdown 文本，仅当前页面，展示后读取会话刷新状态；新对话执行命令先创建会话；Skill 内部 SSE 已确认，公共执行仍待对齐。失败保留草稿，无自动重放。<a href="plan-workbench.html?scene=question">查看计划、问答与命令联合交互</a></p>
     </main>
   </div>
 
   <script>
 
     // Local review fixtures only. No HTTP calls are made.
-    // argumentType 决定参数输入方式：text 用文本框，options 只能从可选值中单选，缺省表示不接收参数。
-    const idleCatalog = [
-      { name: "help", type: "builtin", description: "了解助手的用途与使用场景" },
+    // argumentType 决定参数输入方式：text 用文本框，options 只能从可选值中单选，缺省表示不接收参数；
+    // argumentRequired 只随 argumentType 出现，为 true 时参数为空不能执行。
+    const fullCatalog = [
+      { name: "help", type: "builtin", description: "介绍当前智能体的用途和使用场景" },
       { name: "status", type: "builtin", description: "查看当前会话状态" },
-      { name: "name", type: "builtin", description: "查看或设置会话名称", argumentType: "text" },
-      { name: "model", type: "builtin", description: "查看或切换模型", argumentType: "options" },
-      { name: "thinking", type: "builtin", description: "查看或切换思考模式", argumentType: "options" },
-      { name: "mode", type: "builtin", description: "查看或切换 plan/build 工作模式", argumentType: "options" },
+      { name: "rename", type: "builtin", description: "修改会话名称", argumentType: "text", argumentRequired: true },
+      { name: "model", type: "builtin", description: "切换模型", argumentType: "options", argumentRequired: true },
+      { name: "thinking", type: "builtin", description: "开启或关闭深度思考", argumentType: "options", argumentRequired: true },
+      { name: "mode", type: "builtin", description: "切换计划/实施模式", argumentType: "options", argumentRequired: true },
       { name: "compact", type: "builtin", description: "压缩当前会话上下文" },
-      { name: "skills", type: "builtin", description: "查看可用技能" },
-      { name: "skill:inspection-plan", type: "skill", description: "整理园区巡检计划", argumentType: "text" }
+      { name: "skills", type: "builtin", description: "列出当前智能体可用的技能" },
+      { name: "skill:inspection-plan", type: "skill", description: "整理园区巡检计划", argumentType: "text", argumentRequired: false }
     ];
-    const runningCatalog = idleCatalog.filter((command) => command.type === "builtin" && command.name !== "compact");
-    // 选项型命令的可选值，对应 GET /commands/{name}/values 返回的 {currentValue, values}。
-    // model 的当前值不在可选值中，用来演示“当前值不可选时不勾选”。
-    const initialValues = {
-      model: { currentValue: "默认模型", values: ["标准模型", "长上下文模型"] },
-      thinking: { currentValue: "off", values: ["on", "off"] },
-      mode: { currentValue: "build", values: ["plan", "build"] }
-    };
-    let commandValues = JSON.parse(JSON.stringify(initialValues));
-    function isOptions(command) { return command?.argumentType === "options"; }
-    // 草稿能否执行：无参数命令不能带参数；选项型参数必须是可选值之一，任务运行中只能查询（参数为空）
-    function invalidArguments(command, text) {
-      if (!command.argumentType) return !!text;
-      if (isOptions(command)) return !!text && (running || !commandValues[command.name].values.includes(text));
-      return false;
-    }
-    // 默认勾选当前值；手输的参数不在可选值中时同样回到当前值。当前值不可选（如 model）或任务运行中
-    // 不勾选，执行即查询：运行中带参数的修改会被服务端拒绝
-    function defaultValue(command, text) {
-      const { currentValue, values } = commandValues[command.name];
-      if (running) return "";
-      if (values.includes(text)) return text;
-      return values.includes(currentValue) ? currentValue : "";
-    }
-    // 选项型命令选中后，可选值在命令清单的位置弹出（参考 Codex 的 /model），清单打开时让位
-    function valuesOpen() { return mode && isOptions(selected) && !paletteOpen; }
-    function argumentHint(command) {
-      if (isOptions(command)) return running ? "任务运行中只能查看当前值，回车执行查询" : "用上下键选择，回车、数字键或点击即执行";
-      if (command?.argumentType === "text") return command.type === "skill" ? "补充要求（可选）" : "输入新值，留空则查看当前值";
-      return "";
-    }
+    // 新对话不带 sessionId 读取清单：status 与 compact 只用于已有会话
+    const agentCatalog = fullCatalog.filter((command) => !["status", "compact"].includes(command.name));
+    // 会话运行中仍可执行的命令；其余命令置灰，服务端会返回 409 SESSION_BUSY
+    const runningAllowed = ["help", "status", "rename", "skills"];
+    // 可选值只返回 value，显示名由前端文案决定；没有文案的值原样显示（model 显示名来源待确认，直接显示 modelId）
+    const valueLabels = { thinking: { on: "开启", off: "关闭" }, mode: { plan: "计划", build: "实施" } };
+    // 模拟服务端：Agent 默认值、启用模型与已有会话。会话模型已停用，用来演示“当前值不可选时不高亮”。
+    const agentDefaults = { modelId: "campus-standard", thinking: "on", mode: "build" };
+    const enabledModels = ["campus-standard", "campus-long-context"];
+    const initialSession = { sessionId: "session-demo", displayName: "园区巡检", modelId: "campus-legacy", thinking: "off", mode: "build" };
+    const api = "/campusclaw-service/v1";
     const states = {
       catalog: { title: "命令清单", description: "输入 / 后继续输入可过滤，选择后收起为命令标签。" },
-      argument: { title: "参数编辑", description: "命令名称与参数分开编辑，点击名称可更换，× 可退出。" },
+      argument: { title: "参数编辑", description: "命令名称与参数分开编辑，点击名称可更换，× 可退出；必填参数为空时不能执行。" },
       options: { title: "选项选择", description: "选项型命令在清单位置弹出可选值，默认高亮当前值；上下键切换，回车或点击即执行，Esc 取消。" },
-      running: { title: "运行中清单", description: "按命令规则与会话状态展示；选项型命令运行中不高亮可选值，回车只查询当前值。" },
-      help: { title: "Help 临时结果", description: "内置命令结果独立呈现，取消或完成后恢复普通消息草稿。" },
+      newChat: { title: "新对话命令", description: "还没有会话：清单与可选值按 Agent 读取，执行命令时先创建会话。" },
+      running: { title: "运行中清单", description: "运行中 model、thinking、mode、compact 与技能命令置灰；help、status、rename、skills 仍可执行。" },
+      help: { title: "Help 临时结果", description: "内置命令只返回 Markdown 文本，展示后读取会话刷新状态。" },
       unmatched: { title: "未匹配命令", description: "保留原文，继续修改或按 Esc 退出。" }
     };
     const $ = (selector) => document.querySelector(selector);
@@ -640,15 +618,47 @@
     const submitButton = $("#submit-button");
     const result = $("#result-region");
     $(".composer-dock").insertBefore(result, $(".composer-stack"));
-    const initialHelp = $(".help-description").innerHTML;
-    const demoInvocations = [];
-    let catalog = idleCatalog;
+    const demoInvocations = [], demoRequests = [];
+    const clone = (value) => JSON.parse(JSON.stringify(value));
+    let serverSession = clone(initialSession), sessionId = initialSession.sessionId, session = clone(serverSession);
+    let catalog = fullCatalog, commandValues = null;
     let message = "", savedMessage = "", query = "/", argumentsText = "";
     let selected = null, replacement = null;
     let mode = false, paletteOpen = false, moreOpen = false, composing = false, executing = false;
     let activeIndex = 0, running = false, stopping = false, generation = 0, error = "";
     let resultFold = null;
 
+    function label(name, value) { return valueLabels[name]?.[value] ?? value; }
+    function isOptions(command) { return command?.argumentType === "options"; }
+    function busy(command) { return running && !runningAllowed.includes(command.name); }
+    function missingRequired(command, text) { return !!command.argumentRequired && !text.trim(); }
+    // 无参数命令不能带参数；选项型参数必须是可选值之一
+    function invalidArguments(command, text) {
+      if (!command.argumentType) return !!text;
+      if (isOptions(command)) return !!text && !commandValues.values.includes(text);
+      return false;
+    }
+    // 模拟 GET /agents/{agentId}/commands/{name}/values?sessionId=：没有会话时返回新会话的初始值
+    function listValues(name) {
+      demoRequests.push("GET " + api + "/agents/agent-demo/commands/" + name + "/values" + (sessionId ? "?sessionId=" + sessionId : ""));
+      const source = sessionId ? serverSession : agentDefaults;
+      if (name === "model") return { currentValue: source.modelId, values: enabledModels.slice() };
+      if (name === "thinking") return { currentValue: source.thinking, values: ["on", "off"] };
+      return { currentValue: source.mode, values: ["plan", "build"] };
+    }
+    // 高亮当前值；手输的参数不在可选值中时同样回到当前值。当前值不可选（如已停用的模型）时不高亮
+    function defaultValue(text) {
+      const { currentValue, values } = commandValues;
+      if (values.includes(text)) return text;
+      return values.includes(currentValue) ? currentValue : "";
+    }
+    // 选项型命令选中后，可选值在命令清单的位置弹出（参考 Codex 的 /model），清单打开时让位
+    function valuesOpen() { return mode && isOptions(selected) && !paletteOpen; }
+    function argumentHint(command) {
+      if (isOptions(command)) return busy(command) ? "任务运行中不可执行，草稿已保留" : "用上下键选择，回车、数字键或点击即执行";
+      if (command?.argumentType === "text") return command.argumentRequired ? "输入新名称" : "补充要求（可选）";
+      return "";
+    }
     function parse(raw) {
       const match = /^\/([^\t\n\v\f\r ]*)(?:[\t\n\v\f\r ]+([\s\S]*))?$/u.exec(raw);
       return match ? { nameToken: match[1], argumentsText: match[2] || "" } : null;
@@ -658,9 +668,41 @@
       return parsed ? catalog.filter((item) => item.name.startsWith(parsed.nameToken)) : [];
     }
     function announce(text) { $("#composer-announcement").textContent = text; }
+    // 原型只演示标题、列表与粗体；产品复用 Assistant 正文的受限 Markdown 渲染器。全部经文本节点写入，不解释 HTML。
+    function appendInline(parent, text) {
+      text.split(/(\*\*[^*]+\*\*)/).forEach((part) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) {
+          const strong = document.createElement("strong"); strong.textContent = part.slice(2, -2); parent.append(strong);
+        } else if (part) parent.append(document.createTextNode(part));
+      });
+    }
+    function renderMarkdown(container, markdown) {
+      container.replaceChildren();
+      let listNode = null, paragraph = null;
+      markdown.split("\n").forEach((line) => {
+        const heading = /^#{1,6}\s+(.*)$/.exec(line), item = /^[-*]\s+(.*)$/.exec(line);
+        if (!line.trim()) { listNode = paragraph = null; return; }
+        if (heading) {
+          const node = document.createElement("h3"); appendInline(node, heading[1]); container.append(node); listNode = paragraph = null;
+        } else if (item) {
+          if (!listNode) { listNode = document.createElement("ul"); container.append(listNode); }
+          const node = document.createElement("li"); appendInline(node, item[1]); listNode.append(node); paragraph = null;
+        } else {
+          listNode = null;
+          if (paragraph) paragraph.append(document.createElement("br"));
+          else { paragraph = document.createElement("p"); container.append(paragraph); }
+          appendInline(paragraph, line);
+        }
+      });
+    }
+    function renderSession() {
+      $("#session-summary").textContent = session
+        ? session.displayName + " · " + session.modelId + " · 深度思考" + label("thinking", session.thinking) + " · " + label("mode", session.mode) + "模式"
+        : "新对话 · 尚未创建会话";
+    }
     function focusEditor() {
-      // 选项型命令聚焦可选值列表，用 aria-activedescendant 指向高亮项；运行中可选值不可点，焦点落在执行按钮
-      if (isOptions(selected) && !running) { $("#command-values").focus(); return; }
+      // 选项型命令聚焦可选值列表，用 aria-activedescendant 指向高亮项；运行中不可执行时焦点落在执行按钮
+      if (isOptions(selected) && !busy(selected)) { $("#command-values").focus(); return; }
       (selected && (isOptions(selected) || !selected.argumentType) ? (running ? $("#command-run") : submitButton) : input).focus();
     }
     function renderValues() {
@@ -668,26 +710,27 @@
       $("#values-palette").hidden = !valuesOpen();
       listbox.replaceChildren();
       listbox.removeAttribute("aria-activedescendant");
-      if (!isOptions(selected)) return;
-      const { currentValue, values } = commandValues[selected.name];
+      if (!isOptions(selected) || !commandValues) return;
+      const { currentValue, values } = commandValues;
+      const blocked = busy(selected);
       const keys = document.createElement("kbd");
       keys.setAttribute("aria-hidden", "true");
-      keys.textContent = running ? "回车查询" : "↑↓ · 1–9 · 回车";
+      keys.textContent = blocked ? "运行中不可执行" : "↑↓ · 1–9 · 回车";
       $("#values-title").replaceChildren(selected.name + " 的可选值", keys);
       listbox.setAttribute("aria-label", selected.name + " 的可选值");
       values.forEach((value, index) => {
-        // 高亮项就是待提交的参数；当前值不可选或运行中没有高亮项，执行即查询
+        // 高亮项就是待提交的参数；运行中保留草稿但不高亮
         const option = document.createElement("div");
-        const active = value === argumentsText;
+        const active = !blocked && value === argumentsText;
         option.className = "command-option" + (active ? " active" : "");
         option.id = "value-option-" + index; option.dataset.value = value;
         option.setAttribute("role", "option");
         option.setAttribute("aria-selected", String(active));
-        if (executing || running) option.setAttribute("aria-disabled", "true");
+        if (executing || blocked) option.setAttribute("aria-disabled", "true");
         const number = document.createElement("span");
         number.className = "value-index"; number.setAttribute("aria-hidden", "true"); number.textContent = String(index + 1);
         const name = document.createElement("span");
-        name.className = "command-name"; name.textContent = value;
+        name.className = "command-name"; name.textContent = label(selected.name, value);
         const mark = document.createElement("span");
         mark.className = "command-description"; mark.textContent = value === currentValue ? "当前" : "";
         option.append(number, name, mark);
@@ -702,10 +745,11 @@
       if (popupOpen && result.classList.contains("visible") && resultFold === null) { resultFold = result.open; result.open = false; }
       else if (!popupOpen && resultFold !== null) { result.open = resultFold; resultFold = null; }
       const options = matches();
-      // 选项型草稿在任务开始运行后回到查询，与运行中不勾选可选值一致
-      if (running && isOptions(selected)) argumentsText = "";
       const invalidDraft = !!selected && (invalidArguments(selected, argumentsText) || !catalog.some((c) => c.name === selected.name));
       if (invalidDraft) error = "当前调用不可执行，草稿已保留；请清除参数或重新选择命令。";
+      const busyDraft = !!selected && busy(selected);
+      const blockedDraft = invalidDraft || busyDraft || (!!selected && missingRequired(selected, argumentsText));
+      const shownError = error || (busyDraft ? "任务运行中不可执行，草稿已保留" : "");
       activeIndex = Math.max(0, Math.min(activeIndex, options.length - 1));
       palette.hidden = !paletteOpen;
       chip.hidden = !selected;
@@ -742,12 +786,13 @@
         option.dataset.name = command.name;
         option.setAttribute("role", "option");
         option.setAttribute("aria-selected", String(index === activeIndex));
+        if (busy(command)) option.setAttribute("aria-disabled", "true");
         const name = document.createElement("span");
         name.className = "command-name";
         name.textContent = command.name;
         const description = document.createElement("span");
         description.className = "command-description";
-        description.textContent = command.description;
+        description.textContent = busy(command) ? command.description + " · 任务运行中不可用" : command.description;
         option.append(name, description);
         option.addEventListener("mousedown", (event) => event.preventDefault());
         option.addEventListener("click", () => choose(command));
@@ -755,24 +800,26 @@
       });
       $("#palette-empty").hidden = options.length > 0;
       $("#palette-empty").textContent = catalog.length ? "没有匹配命令" : "当前没有可用命令";
-      $("#inline-error").hidden = !error && (!mode || selected || paletteOpen || options.length > 0);
-      $("#inline-error").textContent = error || "没有匹配命令";
+      $("#inline-error").hidden = !shownError && (!mode || selected || paletteOpen || options.length > 0);
+      $("#inline-error").textContent = shownError || "没有匹配命令";
       input.setAttribute("aria-invalid", String(!!error));
       $("#more-menu").hidden = !moreOpen;
       $("#more-button").setAttribute("aria-expanded", String(moreOpen));
       submitButton.setAttribute("aria-label", running ? "停止生成" : selected ? "运行 " + selected.name : "发送消息");
       submitButton.title = stopping ? "正在停止" : submitButton.getAttribute("aria-label");
       submitButton.innerHTML = running ? '<span aria-hidden="true">■</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>';
-      submitButton.disabled = running ? stopping : executing || invalidDraft || paletteOpen || (mode ? !selected : !message.trim());
+      submitButton.disabled = running ? stopping : executing || blockedDraft || paletteOpen || (mode ? !selected : !message.trim());
       $("#command-run").hidden = !running || !selected;
-      $("#command-run").disabled = executing || stopping || invalidDraft || paletteOpen;
+      $("#command-run").disabled = executing || stopping || blockedDraft || paletteOpen;
       $("#command-run").setAttribute("aria-label", selected ? "运行 " + selected.name : "执行命令");
       $("#simulate-stop-terminal").hidden = !stopping;
+      $("#empty-chat").hidden = !!document.querySelector(".timeline-inner .message:not([hidden])");
+      renderSession();
       if (paletteOpen) announce(options.length + " 条匹配命令");
     }
     function openCommands() {
       if (executing) return;
-      if (selected) replacement = { selected, argumentsText };
+      if (selected) replacement = { selected, argumentsText, commandValues };
       if (!mode) { savedMessage = message; query = "/"; }
       else if (selected) query = "/";
       mode = true; selected = null; moreOpen = false; paletteOpen = true; error = ""; activeIndex = 0;
@@ -780,37 +827,40 @@
     }
     function exitCommand() {
       if (executing) return;
-      mode = false; selected = null; replacement = null; paletteOpen = false; moreOpen = false;
+      mode = false; selected = null; replacement = null; paletteOpen = false; moreOpen = false; commandValues = null;
       query = "/"; argumentsText = ""; error = ""; message = savedMessage;
       render(); input.focus();
     }
     function choose(command) {
       if (!paletteOpen || executing || composing) return;
+      if (busy(command)) { announce(command.name + " 在任务运行中不可用"); return; }
       const parsedArguments = parse(query)?.argumentsText || "";
       if (!command.argumentType && parsedArguments) {
         error = "此命令不接收参数"; render(); input.focus(); return;
       }
-      argumentsText = replacement?.selected.name === command.name && !parsedArguments
-        ? replacement.argumentsText : parsedArguments;
-      if (isOptions(command)) argumentsText = defaultValue(command, argumentsText);
+      const restoring = replacement?.selected.name === command.name && !parsedArguments;
+      argumentsText = restoring ? replacement.argumentsText : parsedArguments;
+      // 每次打开选项都重新读取可选值，不缓存
+      if (isOptions(command)) { commandValues = restoring ? replacement.commandValues : listValues(command.name); argumentsText = defaultValue(argumentsText); }
+      else commandValues = null;
       selected = command; replacement = null; paletteOpen = false; error = "";
       render(); announce("已选择 " + command.name); focusEditor();
     }
     function chooseValue(value) {
-      if (executing || running || !commandValues[selected.name].values.includes(value)) return;
+      if (executing || busy(selected) || !commandValues.values.includes(value)) return;
       argumentsText = value; error = "";
       render(); focusEditor();
     }
-    // 点选可选值即执行，与回车一致；运行中只能查询，点选无效
+    // 点选可选值即执行，与回车一致；运行中不可执行，点选无效
     function runValue(value) {
-      if (executing || running) return;
+      if (executing || busy(selected)) return;
       chooseValue(value);
       void submit();
     }
     // 上下键与 Home/End 在可选值间移动高亮，首尾循环；无高亮时向下从第一项开始，向上从最后一项开始
     function moveValue(key) {
-      const { values } = commandValues[selected.name];
-      if (executing || running || !values.length) return;
+      const { values } = commandValues;
+      if (executing || busy(selected) || !values.length) return;
       const index = values.indexOf(argumentsText), last = values.length - 1;
       const forward = key === "ArrowDown";
       const next = key === "Home" ? 0 : key === "End" ? last
@@ -822,7 +872,7 @@
       if (paletteOpen) {
         paletteOpen = false;
         if (replacement) {
-          selected = replacement.selected; argumentsText = replacement.argumentsText; replacement = null;
+          selected = replacement.selected; argumentsText = replacement.argumentsText; commandValues = replacement.commandValues; replacement = null;
         }
         error = ""; render(); focusEditor();
       } else if (mode) exitCommand();
@@ -838,29 +888,38 @@
       if (paletteOpen) { const exact = matches().findIndex(c => c.name === parse(query)?.nameToken); if (exact >= 0) activeIndex = exact; }
       render();
     }
-    function showBuiltin(invocation) {
-      // 执行成功后才更新当前值；勾选本身只是草稿
-      if (commandValues[invocation.name] && invocation.arguments) commandValues[invocation.name].currentValue = invocation.arguments;
+    // 模拟服务端执行：修改会话并只返回 Markdown 文本；前端不从文本解析状态
+    function mockExecute(invocation) {
+      const s = serverSession, value = invocation.arguments;
+      switch (invocation.name) {
+        case "help": return "## 园区运维助手\n\n协助园区运维人员分析告警、组织巡检任务。\n\n**使用场景**\n\n- 梳理当天高优先级告警\n- 生成按楼栋划分的巡检建议\n- 解释设备异常并列出处置步骤";
+        case "status": return "**" + s.displayName + "**\n\n- 运行状态：" + (running ? "运行中" : "空闲") + "\n- 模型：" + s.modelId + "\n- 深度思考：" + label("thinking", s.thinking) + "\n- 工作模式：" + label("mode", s.mode) + "模式";
+        case "rename":
+          if (value === s.displayName) return "名称未变化：**" + value + "**。";
+          s.displayName = value; return "会话名称已改为 **" + value + "**。";
+        case "model":
+          if (value === s.modelId) return "模型未变化：**" + value + "**。";
+          s.modelId = value; return "已切换到 **" + value + "**。";
+        case "thinking":
+          if (value === s.thinking) return "深度思考未变化，仍为" + label("thinking", value) + "。";
+          s.thinking = value; return value === "on" ? "已开启深度思考。" : "已关闭深度思考。";
+        case "mode":
+          if (value === s.mode) return "工作模式未变化，仍为" + label("mode", value) + "模式。";
+          s.mode = value; return "已切换到" + label("mode", value) + "模式。";
+        case "compact": return "当前没有可压缩的内容。";
+        default: return "- **inspection-plan**：整理园区巡检计划";
+      }
+    }
+    function showBuiltin(name, text) {
       result.classList.add("visible");
       result.open = true; resultFold = null;
-      $(".result-subtitle").textContent = invocation.name + " · 演示结果";
-      $(".use-cases").hidden = invocation.name !== "help";
-      if (invocation.name === "help") {
-        $(".result-title").textContent = "园区运维助手";
-        $(".help-description").innerHTML = initialHelp;
-      } else {
-        const text = {
-          status: running ? "当前会话正在执行。" : "当前会话空闲，暂无待确认操作。",
-          name: invocation.arguments ? "会话名称：" + invocation.arguments : "会话名称：园区巡检",
-          model: "当前模型：" + commandValues.model.currentValue,
-          thinking: "思考模式：" + commandValues.thinking.currentValue,
-          mode: "当前工作模式：" + commandValues.mode.currentValue,
-          compact: "本次无需压缩上下文。",
-          skills: "inspection-plan：整理园区巡检计划"
-        };
-        $(".result-title").textContent = "命令结果";
-        $(".help-description").textContent = text[invocation.name];
-      }
+      $(".result-subtitle").textContent = name + " · 演示结果";
+      renderMarkdown($("#result-body"), text);
+    }
+    // 成功后统一读取 Session，用完整资源刷新标题、模型、深度思考与模式
+    function readSession() {
+      demoRequests.push("GET " + api + "/sessions/" + sessionId);
+      session = clone(serverSession);
     }
     async function submit() {
       if (executing || composing || stopping || (running ? !selected || paletteOpen : submitButton.disabled)) return;
@@ -872,12 +931,13 @@
         bubble.textContent = message;
         article.append(bubble);
         $(".timeline-inner").append(article);
-        message = ""; running = true; catalog = runningCatalog; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
+        message = ""; running = true; $("#agent-status").textContent = "执行中 · 可停止"; render(); input.focus(); return;
       }
       if (!selected) return;
-      if (invalidArguments(selected, argumentsText) || !catalog.some((c) => c.name === selected.name)) {
+      if (invalidArguments(selected, argumentsText) || !catalog.some((c) => c.name === selected.name) || busy(selected)) {
         error = "当前调用不可执行，草稿已保留"; render(); return;
       }
+      if (missingRequired(selected, argumentsText)) return;
       if (Array.from(argumentsText).length > 2048) {
         error = "参数最多 2048 个字符"; render(); focusEditor(); return;
       }
@@ -886,13 +946,23 @@
       }
       const invocation = Object.freeze({ name: selected.name, arguments: argumentsText });
       const currentGeneration = generation;
+      // 新对话还没有会话：先创建会话，再执行命令；空对话照常显示
+      if (!sessionId) {
+        demoRequests.push("POST " + api + "/sessions");
+        sessionId = "session-new";
+        serverSession = { sessionId, displayName: "新对话", ...agentDefaults };
+        session = clone(serverSession);
+        catalog = fullCatalog;
+      }
       demoInvocations.push(invocation);
+      demoRequests.push("POST " + api + "/sessions/" + sessionId + "/command");
       executing = true; render();
       // Simulate a pending request so repeated submissions can be exercised.
       await new Promise((resolve) => setTimeout(resolve, 180));
       if (currentGeneration !== generation) return;
       executing = false;
-      showBuiltin(invocation);
+      showBuiltin(invocation.name, mockExecute(invocation));
+      readSession();
       exitCommand();
       announce(invocation.name + " 演示完成");
     }
@@ -910,7 +980,7 @@
       }
       // 数字键直接执行对应序号的可选值，与列表左侧的序号一致
       if (onValues && /^[1-9]$/.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        const value = commandValues[selected.name].values[Number(event.key) - 1];
+        const value = commandValues.values[Number(event.key) - 1];
         if (value !== undefined) { event.preventDefault(); runValue(value); }
         return;
       }
@@ -950,7 +1020,7 @@
     $("#command-run").addEventListener("click", () => void submit());
     $("#simulate-stop-terminal").addEventListener("click", () => {
       if (!stopping) return;
-      running = false; stopping = false; catalog = idleCatalog;
+      running = false; stopping = false;
       $("#agent-status").textContent = "本轮已停止";
       $("#running-banner").classList.remove("visible"); render();
     });
@@ -966,16 +1036,20 @@
     function setState(name) {
       const state = states[name] || states.catalog;
       generation++; executing = false; composing = false; stopping = false;
-      running = name === "running"; catalog = running ? runningCatalog : idleCatalog;
-      mode = name !== "help"; paletteOpen = ["catalog", "running", "unmatched"].includes(name);
-      moreOpen = false; message = ""; savedMessage = ""; argumentsText = ""; selected = null; replacement = null;
-      commandValues = JSON.parse(JSON.stringify(initialValues));
+      running = name === "running";
+      sessionId = name === "newChat" ? null : initialSession.sessionId;
+      serverSession = clone(initialSession);
+      session = sessionId ? clone(serverSession) : null;
+      catalog = sessionId ? fullCatalog : agentCatalog;
+      mode = name !== "help"; paletteOpen = ["catalog", "running", "unmatched", "newChat"].includes(name);
+      moreOpen = false; message = ""; savedMessage = ""; argumentsText = ""; selected = null; replacement = null; commandValues = null;
       query = name === "unmatched" ? "/deploy tomorrow" : "/"; activeIndex = 0; error = "";
+      document.querySelectorAll(".timeline-inner .message").forEach((node) => { node.hidden = name === "newChat"; });
       if (name === "argument") {
-        selected = idleCatalog.find((item) => item.name === "name"); argumentsText = "夜间巡检会话";
+        selected = fullCatalog.find((item) => item.name === "rename"); argumentsText = "夜间巡检会话";
       }
       if (name === "options") {
-        selected = idleCatalog.find((item) => item.name === "thinking"); argumentsText = defaultValue(selected, "");
+        selected = fullCatalog.find((item) => item.name === "thinking"); commandValues = listValues("thinking"); argumentsText = defaultValue("");
       }
       $("#state-title").textContent = state.title;
       $("#state-description").textContent = state.description;
@@ -983,7 +1057,8 @@
       $("#running-banner").classList.toggle("visible", running);
       result.classList.remove("visible");
       resultFold = null;
-      if (name === "help") showBuiltin({ name: "help", arguments: "" });
+      if (name === "help") showBuiltin("help", mockExecute({ name: "help", arguments: "" }));
+      demoInvocations.length = 0; demoRequests.length = 0;
       document.querySelectorAll(".state-tab").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.state === name)));
       render();
     }
@@ -997,6 +1072,6 @@
     window.addEventListener("hashchange", loadState);
 
   </script>
-<script src="preview.js?v=1.0.1"></script>
+<script src="preview.js?v=1.0.2"></script>
 </body>
 </html>

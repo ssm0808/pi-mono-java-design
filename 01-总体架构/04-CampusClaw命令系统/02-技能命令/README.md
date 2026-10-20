@@ -4,17 +4,17 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 4.7.0 |
-| 更新日期 | 2026-10-16 |
+| 文档版本 | 4.8.0 |
+| 更新日期 | 2026-10-20 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | Skill 发现候选 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`（PR #210，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并） |
 | 当前专项基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Runtime 执行、严格名称与展开文本恢复已实现，版本化快照等剩余差距见 §4.2 |
 | 名称历史证据 | `0300541fbbe3db8b05ffa1ac953f15f01df74b3e`，仅记录当时的宽松加载行为 |
-| 状态 | Runtime Skill POST/SSE、严格名称校验与内部展开文本持久化已实现；统一扩展结构、完整版本快照、统计与 Mate 公共接入仍待实现或独立确认 |
+| 状态 | Runtime Skill POST/SSE、严格名称校验与内部展开文本持久化已实现；argumentRequired、受理错误码修正、统一扩展结构、完整版本快照与统计待实现；Mate 公共接入不在本设计范围 |
 
 ## 1. 职责与当前目标
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（待评审 · 待实现）：技能命令属于智能体级命令，带或不带 sessionId 都返回；轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。POST 保留已确认 Builtin JSON 契约；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（已实现）：技能命令带或不带 sessionId 都返回，新对话执行前由前端先创建会话；轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。Builtin 成功只返回文本；Skill 请求联合类型、SSE 执行结果和 Events 集成按 B13/B14 已确认语义实施。
 PR #210 的动态 SkillCommandSource 可保留，但 Registry 必须在调用 Source 前按来源过滤。
 内部 Builtin 专属解析不读取 Skill 来源；Agent 命令清单必须取得完整 Agent 快照，缓存缺失时准备 Agent（与创建会话同一入口），准备失败整体返回 422，不返回部分 Builtin。
 现有 Skill 发现定义只展示，不安装伪 Handler；实际执行已由 RuntimeCommandController 委派 SkillCommandExecutionService。
@@ -89,18 +89,18 @@ pi `4af9d21d3b4d664e4a29fcabfec85171077248e3` 的
 ## 4. 统一实施与集成要求
 
 Agent 命令清单的 Skill 名称为 `skill:<name>`，排在固定 Builtin 顺序之后并按 name 排序；
-清单不按 Session 状态省略，运行中由前端置灰，POST 返回 409。返回 name、type=skill、description 和 argumentType=text（参数是自由文本），
+清单不按 Session 状态省略，运行中由前端置灰，POST 返回 409。返回 name、type=skill、description、argumentType=text（参数是自由文本）与 argumentRequired=false（待实现），
 不输出 Skill ID、版本、正文、路径或建议值。文本参数可省略，附件准入只看 type=skill。
 所有 Skill 均允许可选文件引用，不要求逐个 Skill 声明接受附件；不返回 acceptsFiles，
 也不承诺任意文件格式都能被处理。文件数量、标识、所有权与可用性沿用普通消息边界。
 Java 53eff85c 的 InputResponseVO 仍输出旧附件标记，type/argumentType 投影待实现；fileIds 执行传递已存在。
-前端 freezeCommandArguments 尚未组装 fileIds，上传按钮仍禁用，前端与 Mate 公共桥接分别验收。
+前端 freezeCommandArguments 尚未组装 fileIds，上传按钮仍禁用，前端单独验收。
 完整规则与最新源码差距见[Agent 命令清单契约](../README.md#31-get-轻量清单已确认)。
-发现与执行分别核验：当前 Runtime Skill POST 已实现；Mate 公共执行是否开放仍由独立契约决定。
+发现与执行分别核验：当前 Runtime Skill POST 已实现；Mate 对外的聊天命令接口不在本设计范围。
 
 B13/B14 已确认共享 `POST /sessions/{sessionId}/command`。精确联合请求、错误与 SSE 示例见
 [当前命令契约](../../01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand)。
-Builtin 保持 JSON；Skill 使用 name="skill:<name>"、arguments 与可选 fileIds，成功返回请求级
+Builtin 只返回文本；Skill 使用 name="skill:<name>"、arguments 与可选 fileIds，成功返回请求级
 SSE。普通 Events 不解析 Slash；Skill 的首帧 user.message 保留展开前调用，随后复用普通 Agent、
 Tool 和 idle 事件。无 commandId/通用生命周期；user.message.eventId 即本次根消息，
 sourceEventId 和 targetEventId 支撑确认、中断与历史归属。
@@ -126,6 +126,20 @@ Handler 委派 SkillExecutionService，后者使用普通消息接受/执行应�
 Active Holder 内存，实例丢失不自动恢复凭据或重放副作用工具。引用文件依然通过原有 Skill
 资源解析边界读取，本次快照承诺只覆盖已解析正文和元数据，不虚构所有外部文件均被冻结。
 参数/附件复用普通消息上限；展开后的输入预算在接受前检查，不截断 Skill 正文后继续。
+
+受理前与受理阶段的错误码准确对应原因，并与普通消息一致（2026-10-20 已确认，待实现）：
+
+| 失败 | 错误码 | 实现基线 `628dca25` |
+|---|---|---|
+| Agent 无法准备完整快照 | 422 AGENT_NOT_AVAILABLE | 相同 |
+| Agent 未绑定该技能 | 404 COMMAND_NOT_FOUND | 相同 |
+| 技能正文为空，或正文本身超过长度上限 | 422 SKILL_NOT_AVAILABLE | 正文为空 422 AGENT_NOT_AVAILABLE（`SkillCommandExecutionService.java:117`），正文超长 400 |
+| 正文加用户文本后超长 | 400 INVALID_COMMAND_REQUEST | 相同 |
+| 事件流接收不了首帧（背压） | 503 EVENT_SERVICE_UNAVAILABLE | 被 translate 折叠为 500 COMMAND_EXECUTION_FAILED（`RuntimeMessageEventService.java:182` 抛出） |
+| 受理写入失败 | 500 EVENT_ACCEPTANCE_FAILED | 被折叠为 500 COMMAND_EXECUTION_FAILED |
+| 其他未知异常 | 500 COMMAND_EXECUTION_FAILED，日志带原始异常 | 码相同，但 `SkillCommandExecutionService.java:79` 只记录 errorCode，丢掉原始异常（J07） |
+
+设计中原有的 503 SKILL_AGENT_UNAVAILABLE 与 500 SKILL_PREPARATION_FAILED 删除。
 B15 沿用部署统一保留策略，未配置时不新增自动清理；删除按根消息及必要引用保持对账完整。
 不新增 Maven 依赖，继续使用现有缓存、JDK/Jackson 与 Session 组件。
 
@@ -163,17 +177,17 @@ B15 沿用部署统一保留策略，未配置时不新增自动清理；删除�
 测试源码 `modules/coding-agent-cli/src/test/java/com/campusclaw/codingagent/runtimeapi/persistence/SkillCommandExecutionOpenGaussIT.java`
 的 `testPersistsAndRestoresActualSnapshotTextEvenAfterDetach` 和 `assertRestored` 覆盖内部展开文本、公共原调用、
 断流后继续及重开恢复；这里确认的是测试存在和断言范围，未运行该测试，不能报告该提交的集成验收通过。
-Mate 公共 bridge、错误映射与附件边界继续由[公共命令设计](../../../02-服务与接口/06-mate-service聊天命令API/README.md)维护。
+Mate 对外的命令接口不在本设计范围，由 Mate 负责人另行设计。
 
 ## 5. 实施验收
 
 后续结构整合补齐 SkillCommandDefinition/Handler、SkillExecutionService 与版本快照；
 复用已存在的共享消息接受、联合 VO 和 JSON/SSE 入口，不重复建设已经实现的执行链。验收 Skill 正常 SSE、确认分段、原消息中断、根 ID 对账，
 以及解析失败不接受、受理前绑定变更拒绝、受理后版本固定、展开预算超限拒绝、公开历史不泄露正文，
-恢复不换版本、丢失凭据不自动重跑。Builtin JSON 和 GET 轻量清单必须保持现有行为。
+恢复不换版本、丢失凭据不自动重跑，以及上表各受理失败的错误码与日志原始异常。Builtin 文本结果和 GET 轻量清单按[命令系统设计](../README.md#interface-protocol)验收。
 
 
-统一验收同时覆盖 Builtin 与 Skill Command。Builtin 专项验证来源视图只含七项、Builtin Registry 不调用 SkillCommandSource；
+统一验收同时覆盖 Builtin 与 Skill Command。Builtin 专项验证来源视图只含八项、Builtin Registry 不调用 SkillCommandSource；
 Skill 专项验证发现、真实执行与失败恢复；最终共享清单和请求联合类型覆盖两类命令，不能以 POST skill:* 必须失败作为整体验收。
 skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于发布 Skill Command。
 
@@ -187,6 +201,7 @@ skills Builtin 只展示最新完整绑定快照中的名称/描述，不等于�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 4.8.0 | 2026-10-20 | 技能命令描述符新增 argumentRequired=false，受理错误码改为与普通消息一致并新增 SKILL_NOT_AVAILABLE（待实现），删除 Mate 公共命令引用。 |
 | 4.7.0 | 2026-10-16 | 技能命令返回 argumentType=text，表示参数为自由文本；原 hints 已移除。 |
 | 4.6.0 | 2026-10-16 | 技能命令不再返回 hints 占位文案，文本参数的提示由前端决定；清单不带 sessionId 时仍返回技能命令。 |
 | 4.5.0 | 2026-10-16 | Skill 发现改由 `GET /agents/{agentId}/commands` 返回，不再在运行中省略；缓存缺失时准备 Agent，失败为 422。 |

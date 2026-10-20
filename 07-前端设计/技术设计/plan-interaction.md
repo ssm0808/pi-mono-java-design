@@ -2,7 +2,7 @@
 
 [前端主设计](../README.md) · [可操作工作台](../原型/plan-workbench.html) · [计划模式主设计](../../01-总体架构/06-CampusClaw计划模式/README.md)
 
-版本：1.10.0；日期：2026-10-04。性质：计划、问答、审核、任务投影以及计划 delta/completed 与同 ID 卡片合并已实现；ExitPlanMode({plan}) 参数增量预览的后端生产待实现，前端继续复用既有事件，见[参数流式证据](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-argument-streaming-evidence)。其他体验保留原范围；Mate 公共接入待实现，原型不代表部署验证。
+版本：1.11.0；日期：2026-10-20。性质：计划、问答、审核、任务投影以及计划 delta/completed 与同 ID 卡片合并已实现；ExitPlanMode({plan}) 参数增量预览的后端生产待实现，前端继续复用既有事件，见[参数流式证据](../../01-总体架构/06-CampusClaw计划模式/source-evidence.md#plan-argument-streaming-evidence)。其他体验保留原范围；Mate 公共接入待实现，原型不代表部署验证。
 
 本页维护 M07 的模式入口、方案阅读、审核和进度展示。模式、审核事务与恢复权威归 M01 的计划模式专题；精确字段归 Runtime 共享契约和审核增量，企业接入归 Mate 公共契约。本页不增加 HTTP API、Slash Command 或后端状态。
 
@@ -154,12 +154,13 @@ Store 生命周期按 Chat 隔离，审核草稿与问题草稿再按各自 even
 
 验收必须分别记录：设计原型状态测试、真实浏览器布局、PlantUML 生成与视觉、实现集成。原型通过不能证明 Java 计划实现或 Mate 公共桥接通过。Claw 当前实现及验证范围见[当前实现证据](../source-evidence.md#current-implementation)；Draft PR 中的代码不等于已合入或部署。
 
-Slash 的 `/mode` 使用[命令选择控件](命令/README.md#command-input-controls)，空参可在审核等待时查询，带参只能 idle 切换；它与配置按钮均不使用客户端条件或幂等请求令牌，成功后同样以完整 Session 更新界面。该增量待实现；不能将模式切换映射成审核批准或自动发送消息。
+Slash 的 `/mode` 使用[命令选择控件](命令/README.md#command-input-controls)，参数必填，只能在 idle 时切换；审核、问答等待期间会话仍在运行，`/mode` 置灰。它与配置按钮均不使用客户端条件或幂等请求令牌；命令成功只返回结果文本，界面随后读取 Session 更新模式。该增量待实现；不能将模式切换映射成审核批准或自动发送消息。
 
 ## 8. 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.11.0 | 2026-10-20 | mode 命令参数必填并在等待审核时置灰，成功后读取 Session 更新模式。 |
 | 1.10.0 | 2026-10-04 | 模式按钮与 mode 命令取消条件令牌及 ETag 依赖，恢复仍只读对账。 |
 | 1.9.0 | 2026-09-28 | 计划卡复用参数来源的 delta/completed，保持审核恢复协议并补齐工具日志兼容验收。 |
 | 1.8.0 | 2026-09-22 | 模式按钮和 mode 命令分别使用既有更新入口，共享结果与审核边界。 |

@@ -2,7 +2,6 @@
 top to bottom direction
 skinparam backgroundColor white
 skinparam shadowing false
-skinparam defaultFontName SansSerif
 skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
@@ -10,24 +9,27 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Recommended Executable Builtin Definition - Mode: Pending implementation
-' Source evidence: pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandResponseAssembler.java assemble.
-' Design reason: each contributor owns metadata, admission, and handler; no central command-name switch.
-' Source evidence: pi-mono-java@6f52fddc modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionResponseAssembler.java getView.
-' Architecture change: project business resources, never serialize the internal command receipt.
+title 可执行 Builtin 定义的目标结构
+' 源码证据：pi-mono-java@628dca25 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandExecutionService.java requireAdmission；同包 CommandResponseAssembler.java；command/type/CommandInputMode.java。
+' 已观察行为：参数由各窄服务分别检查；结果按命令投影为 Session、模型列表、Help、Compact、Skills 等不同 VO。
+' 设计原因：每个 Contributor 持有元数据、参数形态、准入与 Handler，不按命令名集中 switch；成功只返回本地化文本。
+' 待实现：执行服务按 CommandInputMode 统一检查参数；CommandResponseAssembler 只生成文本，删除按命令区分的结果 DTO 与 VO。
 interface BuiltinCommandContributor
-class BuiltinCommandSource <<singleton>>
-class BuiltinCommandDefinition <<immutable>>
+class BuiltinCommandSource <<单例>>
+class BuiltinCommandDefinition <<不可变>> {
+  元数据（是否只用于已有会话）
+  参数形态 CommandInputMode
+}
 interface CommandHandler
 interface CommandAdmissionPolicy
-class CommandExecutionContext <<request>>
-class CommandExecutionService <<singleton>>
-class CommandResponseAssembler <<singleton>>
+class CommandExecutionContext <<请求>>
+class CommandExecutionService <<单例>>
+class CommandResponseAssembler <<单例>>
 class CommandResultDTO
-class RuntimeSessionResponseAssembler <<existing singleton>>
-class GetSessionResponseVO <<existing immutable>>
-class AvailableModelsResponseVO <<existing immutable>>
-class "AgentHelp / Compaction / BoundSkills\nResponseVOs" as BusinessVOs <<immutable>>
+class "MessageSource\n中英文文本模板" as TextTemplates <<既有>>
+class CommandTextResponseVO <<不可变>> {
+  text
+}
 interface NarrowDomainService
 BuiltinCommandSource o-- "8" BuiltinCommandContributor
 BuiltinCommandContributor --> BuiltinCommandDefinition
@@ -35,25 +37,22 @@ BuiltinCommandSource *-- "8" BuiltinCommandDefinition
 BuiltinCommandDefinition *-- CommandHandler
 BuiltinCommandDefinition *-- CommandAdmissionPolicy
 CommandExecutionService --> CommandExecutionContext
-CommandExecutionService --> BuiltinCommandDefinition
+CommandExecutionService --> BuiltinCommandDefinition : 统一检查参数与准入
 CommandHandler --> NarrowDomainService
 CommandHandler ..> CommandResultDTO
 CommandExecutionService --> CommandResponseAssembler
 CommandResponseAssembler ..> CommandResultDTO
-CommandResponseAssembler --> RuntimeSessionResponseAssembler
-RuntimeSessionResponseAssembler ..> GetSessionResponseVO
-CommandResponseAssembler ..> AvailableModelsResponseVO
-CommandResponseAssembler ..> BusinessVOs
+CommandResponseAssembler --> TextTemplates
+CommandResponseAssembler ..> CommandTextResponseVO
 note bottom of CommandResponseAssembler
-Only result-type dispatch lives here.
-Controllers never expose internal DTOs.
-No public command, changed or sourceEventSeq.
+只在这里按结果类型选择文本模板。
+Controller 不暴露内部 DTO。
+不返回 command、changed、sourceEventSeq。
 end note
 CommandExecutionService -[hidden]down-> BuiltinCommandDefinition
 BuiltinCommandDefinition -[hidden]down-> CommandHandler
 CommandHandler -[hidden]down-> NarrowDomainService
-CommandResponseAssembler -[hidden]down-> RuntimeSessionResponseAssembler
-AvailableModelsResponseVO -[hidden]down-> BusinessVOs
+CommandResponseAssembler -[hidden]down-> TextTemplates
 BuiltinCommandSource -[hidden]down-> BuiltinCommandContributor
 CommandExecutionContext -[hidden]down-> CommandExecutionService
 @enduml
@@ -66,6 +65,7 @@ CommandExecutionContext -[hidden]down-> CommandExecutionService
 ' Observed behavior: slash name owns an independent row-locked update with no expected version.
 ' Observed behavior at 53eff85c: runtimeapi/session/RuntimeSessionUpdateService.java update and normalizeName share ClawConstants.Session rules and commit a combined candidate.
 ' Design reason: shared name rules do not require HTTP to call a separately committing command.
+' 待实现：命令名由 name 改为 rename，参数必填，成功只返回文本。
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -84,26 +84,26 @@ skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 
-title Rename One Session - Target, Header Migration Pending
-participant "HTTP configuration" as API
-participant "Name command" as Command
-participant "Naming rules" as Rules
-database "Session repository" as Repo
-alt HTTP configuration update
-  API -> Rules : Normalize submitted name
-  Rules --> API : Validated name
-  API -> Repo : Lock latest Session, merge fields and commit
-  Repo --> API : Authoritative Session from committed snapshot
-else Slash name command
-  Command -> Rules : Normalize command argument
-  Rules --> Command : Validated name
-  Command -> Repo : Rename under current Session lock
-  Repo --> Command : Authoritative Session for NameResult
+title 修改会话名称
+participant "会话配置接口" as API
+participant "rename 命令" as Command
+participant "命名规则" as Rules
+database "会话仓储" as Repo
+alt 会话配置更新
+  API -> Rules : 归一提交的名称
+  Rules --> API : 合法名称
+  API -> Repo : 锁定最新会话，合并字段并提交
+  Repo --> API : 提交后的会话
+else Slash rename 命令（参数必填）
+  Command -> Rules : 归一命令参数
+  Rules --> Command : 合法名称
+  Command -> Repo : 在会话锁内改名
+  Repo --> Command : 提交后的会话，用于生成结果文本
 end
 note over API,Repo
-  Invalid names return before mutation.
-  Both paths validate the latest locked Session.
-  Later committed writes to the same field win.
+  非法名称在修改前返回。
+  两条路径都校验锁内最新会话。
+  同一字段以较晚成功提交的修改生效。
 end note
 @enduml
 
@@ -137,12 +137,12 @@ database "Session history" as History
 Http -> Service : Request manual compaction
 Service -> Service : Lock operation; recheck idle
 alt Empty history
-  Service --> Http : compacted=false; no execution or history write
+  Service --> Http : Text: nothing to compact; no execution or history write
 else Compactable request
   Service -> Execution : Start with retained lease and credentials
   Http -> Execution : Observe non-cancelling terminal handle
   Execution -> History : Persist compaction if context changed
-  Execution --> Http : JSON terminal result
+  Execution --> Http : Text terminal result
   Execution -> Execution : Finish cleanup; release retained resources
 end
 note over Http,Execution

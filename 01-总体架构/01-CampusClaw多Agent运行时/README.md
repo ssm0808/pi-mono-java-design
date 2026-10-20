@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.37.0 |
-| 更新日期 | 2026-10-18 |
+| 文档版本 | 3.38.0 |
+| 更新日期 | 2026-10-20 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
@@ -44,7 +44,7 @@ Runtime 采用同一 POST 提交用户事件并接收该请求的 SSE，GET 读�
 
 mate-service 维护用户可见 Chat、公司认证、Chat 授权和 `chatId → sessionId` 私有映射，消费 Runtime 事件并投影为公共内容。它不保存 Session 名称的第二份权威状态，不向浏览器暴露内部 Session 标识、凭据或 Provider 配置。
 
-公共 Events 三个 operation 的设计状态由 [Mate 主设计](../../02-服务与接口/07-mate-service通用对话API/README.md)维护；公共 Command 的投影和待决边界由 [Mate Command](../../02-服务与接口/06-mate-service聊天命令API/README.md)维护。内部协议不能自动决定公共协议。
+公共 Events 三个 operation 的设计状态由 [Mate 主设计](../../02-服务与接口/07-mate-service通用对话API/README.md)维护；Mate 对外的聊天命令接口不在本设计范围，由 Mate 负责人另行设计。内部协议不能自动决定公共协议。
 
 ### 3.2 CampusClaw 内部 Runtime 边界
 
@@ -65,7 +65,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 3 | `DELETE` | `/sessions/{sessionId}` | 删除会话 |
 | 4 | `POST` | `/sessions/{sessionId}/events` | 提交事件并接收对应推送 |
 | 5 | `GET` | `/sessions/{sessionId}/events` | 查看对话历史 |
-| 6 | `GET` | `/sessions/{sessionId}/commands/{commandName}/values` | 查询选项型命令（model、thinking、mode）的当前值与可选值 |
+| 6 | `GET` | `/agents/{agentId}/commands/{commandName}/values` | 查询选项型命令（model、thinking、mode）的当前值与可选值；sessionId 为可选查询参数，不带时返回新会话初始值 |
 | 7 | `POST` | `/sessions/{sessionId}` | 更新会话 |
 | 8 | `GET` | `/agents/{agentId}/commands` | 查看 Agent 命令清单 |
 | 9 | `POST` | `/sessions/{sessionId}/command` | 执行会话命令 |
@@ -145,6 +145,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.38.0 | 2026-10-20 | 命令可选值接口改为按 Agent 查询（sessionId 可选），删除 Mate 聊天命令接口引用，同步 HTTP 1.75.0。 |
 | 3.37.0 | 2026-10-18 | 查询可用模型、查询深度思考可选值与查询工作模式可选值合并为一个查询选项型命令可选值的接口，model、thinking、mode 共用，同步 HTTP 1.74.0。 |
 | 3.36.0 | 2026-10-17 | 接口清单新增查询深度思考可选值与查询工作模式可选值，供 /thinking、/mode 的选择列表使用；命令清单用 argumentType 说明参数形态，同步 HTTP 1.73.0。 |
 | 3.35.0 | 2026-10-17 | 同步 HTTP 1.72.0：Session 更新取消 ETag 已实现，并发写入由数据库行锁加按字段合并控制。 |

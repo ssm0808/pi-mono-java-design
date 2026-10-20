@@ -1,9 +1,9 @@
 @startuml slash_command_overview
 title 用技能分析巡检记录（BU1、BU3）
-' 已观察行为：pi-mono-java@fd431002 RuntimeCommandCatalogController.list 仍按 sessionId 读取清单；RuntimeCommandController.execute 对 Skill 返回请求级 SSE。
-' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandCatalogController.java list；同包 RuntimeCommandController.java execute/executeSkill。
+' 已观察行为：pi-mono-java@628dca25 RuntimeCommandCatalogController.listCommands 按 agentId 与可选 sessionId 读取清单；RuntimeCommandController.execute 对 Skill 返回请求级 SSE。
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandCatalogController.java listCommands；同包 RuntimeCommandController.java execute/executeSkill。
 ' 设计原因：清单归属 Agent，可选 sessionId 只决定是否包含会话命令；执行归属会话；同一进程内的 Controller、Service 与运行时并入 CampusClaw，只在下钻图中拆开。
-' 待实现：按 agentId 与可选 sessionId 查询清单（步骤 2～5）。
+' 待实现：技能命令受理失败时的错误码修正（不改变本图正常路径）。
 skinparam shadowing false
 autonumber
 actor "运维人员" as User
@@ -14,7 +14,7 @@ database "GaussDB" as DB
 
 User -> Web ++ : 在输入框首字符输入 /
 activate User
-Web -> Claw ++ : 查询当前 Agent 的可用命令，带当前会话标识（待实现）
+Web -> Claw ++ : 查询当前 Agent 的可用命令，带当前会话标识
 Claw -> Mate ++ : 拉取 Agent 定义与绑定技能（仅本实例无完整缓存时）
 return Agent 定义与绑定技能
 Claw -> Claw : 合并内置命令与技能命令
@@ -37,11 +37,10 @@ deactivate User
 
 @startuml list_agent_commands
 title 查询可用命令的详细时序（UC1）
-' 源码证据：pi-mono-java@fd431002 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandCatalogService.java list/completeSnapshot；同包 CompositeCommandRegistry.java resolveComplete；CommandDiscoveryResponseAssembler.java assemble。
-' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare/prepareCached。
-' 已观察行为：当前先读 Session，再用 prepareCached 只读完整缓存；描述依赖会话状态。
-' 设计原因：命令来源只取决于 Agent，改用与创建会话相同的 prepare；可选 sessionId 只确认归属并决定是否包含会话命令，会话状态只在执行准入时使用。
-' 待实现：本图所有按 agentId 与可选 sessionId 的步骤。
+' 源码证据：pi-mono-java@628dca25 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandCatalogService.java listCommands；同包 CommandListResponseAssembler.java；common ClawConstants.RuntimeApi.Command.SESSIONLESS_BUILTINS。
+' 已观察行为：按 agentId 准备快照，带 sessionId 时先确认归属；不带时只保留 help、skills 与技能命令。
+' 设计原因：命令来源只取决于 Agent；不带 sessionId 时保留对新会话有作用或帮助了解 Agent 的命令，会话状态只在执行准入时使用。
+' 待实现：由 Builtin 定义声明是否只用于已有会话（status、compact），rename 与 argumentRequired。
 skinparam shadowing false
 autonumber
 participant "Claw 前端" as Web
@@ -63,7 +62,7 @@ Catalog -> AgentRuntime ++ : 准备 Agent 完整快照（有完整缓存直接�
 return Agent 完整快照
 Catalog -> Registry ++ : 解析全部命令来源（内置命令与绑定技能）
 return 本次请求的命令定义集合
-Catalog -> Catalog : 按范围筛选（无会话时只保留 help、skills 与技能命令），转换为轻量描述符（固定顺序）
+Catalog -> Catalog : 按范围筛选（无会话时去掉 status、compact，待实现），\n转换为轻量描述符（固定顺序，含参数形态与是否必填）
 return 命令描述符
 return 返回该 Agent 的命令清单
 deactivate Web
@@ -71,9 +70,10 @@ deactivate Web
 
 @startuml execute_builtin_command
 title 执行内置命令的详细时序（UC2）
-' 源码证据：pi-mono-java@fd431002 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java execute；同包 service/command/CommandExecutionService.java executeBuiltinAndAwait；service/command/CommandResponseAssembler.java。
-' 已观察行为：Builtin 分支按会话解析仅含内置来源的命令定义，经 Handler 委派窄业务服务，结果转换为 JSON。
-' 设计原因：清单与执行使用同一 Definition 身份；可变状态在所属锁或事务内重新准入，不信任先前清单。
+' 源码证据：pi-mono-java@628dca25 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeCommandController.java execute；同包 service/command/CommandExecutionService.java executeBuiltinAndAwait/requireAdmission；service/command/CommandResponseAssembler.java。
+' 已观察行为：Builtin 分支按会话解析仅含内置来源的命令定义，参数由各业务服务分别检查，结果为会话资源或按命令区分的 JSON。
+' 设计原因：清单与执行按名称查找同一 Definition；参数在执行入口按定义统一检查；成功只返回文本，状态由调用方读取 Session。
+' 待实现：统一参数检查、按名称查找与本地化文本结果。
 skinparam shadowing false
 autonumber
 participant "Claw 前端" as Web
@@ -86,28 +86,29 @@ participant "会话业务服务" as Domain
 Web -> Api ++ : 执行内置命令（会话、名称、参数）
 activate Web
 Api -> Exec ++ : 执行该命令
-Exec -> Exec : 读取会话并归一参数
-Exec -> Registry ++ : 解析内置命令来源（按会话所属 Agent）
-return 本次请求的命令定义集合
-Exec -> Exec : 按名称精确查找并校验参数
+Exec -> Exec : 读取会话，去掉参数首尾空白
+Exec -> Registry ++ : 按名称查找命令定义（按会话所属 Agent）
+return 命令定义
+Exec -> Exec : 按定义检查参数（不接受、必填或可选）与运行中准入
 Exec -> Handler ++ : 调用该命令的处理器
-Handler -> Domain ++ : 在会话锁或事务内复核状态并查询或修改
-return 会话资源或业务结果
+Handler -> Domain ++ : 在会话锁或事务内复核状态并修改或读取
+return 业务结果
 return 命令结果
-Exec -> Exec : 转换为业务响应
-return 业务响应
-return 返回业务结果
+Exec -> Exec : 按请求语言生成 Markdown 文本
+return 文本结果
+return 返回文本
+Web -> Web : 展示文本并重新读取会话刷新状态
 deactivate Web
 @enduml
 
 @startuml authoritative_command_state
 title 命令写入的最终状态
 ' 源码证据：pi-mono-java@53eff85c modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionUpdateService.java prepare。
-' 架构决策：只保存当前名称和既有领域 Entry，不建立通用命令历史；mode 命令待实现。
+' 架构决策：只保存当前名称和既有领域 Entry，不建立通用命令历史。
 skinparam shadowing false
 rectangle "Help / Status / Skills" as Read
-rectangle "Name" as Name
-rectangle "Model / Thinking / Compact\nMode：待实现" as Domain
+rectangle "Rename" as Name
+rectangle "Model / Thinking / Mode / Compact" as Domain
 database "当前 Session 状态" as Session
 database "既有领域 Entry" as Entries
 Read --> Session : 只读
@@ -117,7 +118,7 @@ Domain --> Entries : 仅真实变化
 note bottom
 不生成公开 commandId，不保存通用命令生命周期。
 不保存 Name 历史。
-查询、同值修改和空历史压缩不写 Entry。
+只读命令、同值修改和空历史压缩不写 Entry。
 end note
 @enduml
 
@@ -142,11 +143,13 @@ skinparam linetype ortho
 ' 源码证据：pi-mono@5cd93f packages/coding-agent/src/core/agent-session.ts _expandSkillCommand。
 ' 已观察行为：清单按 Session 读取并用会话状态描述命令；Skill 执行由 SkillCommandExecutionService 复用普通消息链。
 ' 设计原因：清单归属 Agent（描述与会话无关，可选 sessionId 只决定范围），执行准入归属会话；保持一张连贯主图，只合并重复实现，不合并职责边界。
-' 待实现：按 agentId 的清单入口与描述、Skill 统一 Definition/Handler、准备快照与共享消息抽象、mode。
+' 已观察行为（628dca25）：清单已按 agentId；Registry 仍按会话 describe 并只解析 BUILTIN；结果按命令区分结构。
+' 待实现：describe() 去会话参数、按名称查找、按 Agent 的可选值、文本结果、Skill 统一 Definition/Handler、准备快照与共享消息抽象。
 
 package "Web 边界" {
   class RuntimeCommandCatalogController {
-    +list(agentId, sessionId?)
+    +listCommands(agentId, sessionId?)
+    +listCommandValues(agentId, commandName, sessionId?)
   }
   class RuntimeCommandController {
     +execute(sessionId, request)
@@ -156,6 +159,7 @@ package "Web 边界" {
 
 package "应用层（单例）" {
   class CommandCatalogService
+  class CommandValuesService
   class CommandExecutionService
   class CommandResponseAssembler
   class SkillExecutionService <<待实现>>
@@ -166,7 +170,6 @@ package "应用层（单例）" {
 package "命令核心" {
   class CompositeCommandRegistry <<单例>> {
     +resolve(agentSnapshot)
-    +resolve(agentSnapshot, kind)
   }
   class ResolvedCommandCatalog <<请求快照>> {
     +list()
@@ -191,9 +194,9 @@ package "命令核心" {
 }
 
 package "Builtin 适配与业务委派（单例）" {
-  class "8 个 Builtin Contributor\nMode：待实现" as BuiltinContributors
-  class "8 个 Builtin Handler\nMode：待实现" as BuiltinHandlers
-  class "窄职责会话业务服务\nSessionModeConfigurationService：待实现" as DomainServices
+  class "8 个 Builtin Contributor\n元数据含会话范围" as BuiltinContributors
+  class "8 个 Builtin Handler" as BuiltinHandlers
+  class "窄职责会话业务服务\nNaming / Model / Thinking / Mode / Compaction" as DomainServices
   class AgentHelpQueryService <<应用服务>> #E3F2E1
 }
 
@@ -205,6 +208,8 @@ package "运行时与持久化" {
 }
 
 RuntimeCommandCatalogController --> CommandCatalogService
+RuntimeCommandCatalogController --> CommandValuesService
+CommandValuesService --> CompositeCommandRegistry : 按名称取值逻辑
 RuntimeCommandController --> CommandExecutionService
 RuntimeCommandCatalogController ..> CommandVOs
 RuntimeCommandController ..> CommandVOs
@@ -214,7 +219,7 @@ CommandCatalogService ..> CommandVOs : 描述符 DTO 转 VO
 CommandExecutionService --> RuntimeSessionRepository : 读取会话
 CommandExecutionService --> CompositeCommandRegistry
 CommandExecutionService --> CommandResponseAssembler
-CommandResponseAssembler ..> CommandVOs : 结果 DTO 转 VO
+CommandResponseAssembler ..> CommandVOs : 结果转本地化文本
 
 CompositeCommandRegistry o-- "1..*" CommandDefinitionSource
 CommandDefinitionSource ..> CommandDefinition
@@ -273,10 +278,10 @@ note bottom of AgentHelpQueryService
 end note
 
 legend bottom left
-7 个 Builtin 已实现；Mode 与标注的 Skill 统一结构待实现。
-按 agentId 与可选 sessionId 的清单入口、describe() 去会话参数待实现。
+8 个 Builtin 与按 agentId 的清单入口已实现；标注的 Skill 统一结构待实现。
+describe() 去会话参数、按 Agent 的可选值与文本结果待实现。
 分组框表示多个协作者，不是 Java 包；查询服务属于应用 Service 层。
-Builtin 返回 JSON；Skill 返回共享消息 SSE 与持久化事件。
+Builtin 返回本地化文本；Skill 返回共享消息 SSE 与持久化事件。
 运行时注册表是单例；Holder / Session / Projector 属于单次执行。
 endlegend
 @enduml

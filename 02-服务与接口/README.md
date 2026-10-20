@@ -9,15 +9,12 @@
 | Model | 业务 Agent 模型设置、CampusMate 调用与用量记录 | [主设计](./03-Model/README.md) · [全局图](./03-Model/model-classes.svg) · [用量](./03-Model/usage.md) |
 | Runtime HTTP 测试 Agent | 如何根据已确认契约维护分层回归测试 | [设计](./04-Runtime-HTTP测试Agent/README.md) |
 | CampusClaw TDD 测试 Agent | 如何以版本化能力注册表驱动全产品测试与质量门禁 | [设计](./05-CampusClaw-TDD测试Agent/README.md) |
-| mate-service 聊天命令 API | GET 轻量清单与命令选项（Mate 提供选项型命令的候选与显示名）；公共边界与执行协议待独立重审 | [设计与契约](./06-mate-service聊天命令API/README.md) |
 | Claw 定时任务配置 API | 配置、生命周期与Run读取；目标契约待实现；Mate 侧见下一行 | [HTML 展示](../01-总体架构/08-CampusClaw定时任务/schedule-api-review.html) · [Claw 接口协议](../01-总体架构/08-CampusClaw定时任务/README.md#interface) |
 | mate-service 定时任务 | Mate 管理入口的定时任务接口、调用 Claw 前后的权限与配额处理、为 Claw 提供的 access-token 与 Session 归属登记 | [设计](./08-mate-service定时任务/README.md) |
 | mate-service 通用对话 Events API | 公共 Chat 提交、live SSE、历史对账及未整合分页要求 | [三接口设计、HTML 与 OpenAPI](./07-mate-service通用对话API/README.md) |
 
 精确 Runtime HTTP 契约位于
 [`01-总体架构/01-CampusClaw多Agent运行时/接口契约/`](../01-总体架构/01-CampusClaw多Agent运行时/接口契约/)。
-公共聊天命令 GET 展示源位于
-[`06-mate-service聊天命令API/接口契约/`](./06-mate-service聊天命令API/接口契约/)。
 通用对话 Events 的已确认 operation models 位于
 [`07-mate-service通用对话API/接口契约/`](./07-mate-service通用对话API/接口契约/)，
 同步的机器契约是
