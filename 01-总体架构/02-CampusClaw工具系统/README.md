@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.28.1 |
+| 文档版本 | 2.28.2 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线、前端可恢复展示及 [§9.7](#tool-schema-subset) 自写 Schema 子集校验器待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-19 |
+| 更新日期 | 2026-10-20 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -605,7 +605,7 @@ Runtime 继续保存每次调用与失败结果，并向客户端投影既有 `a
 
 ### 9.7 工具 Schema 子集与本地校验器
 
-**状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码不再依赖该库；库只留在测试里做行为对照。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A20](../07-Agent架构对比/README.md#a20)。
+**状态：待实现。** Java `main@1446c585` 的 `ToolSchemaValidator` 委托 networknt `json-schema-validator` 1.5.2 按 2020-12 校验框架工具和 Mate 业务工具参数。目标是在 agent-core 内自写子集校验器，生产代码和测试都不再依赖该库。现状、库的默认行为和依赖树见[校验器证据](source-evidence.md#tool-schema-validator-evidence)，与基线的对照见[架构对比 A20](../07-Agent架构对比/README.md#a20)。
 
 框架工具 Schema 实际只用到 13 个校验关键字；Mate 工具 Schema 用到的关键字更多，本节只校验表内关键字，表外关键字静默丢弃，不阻塞调用。继续用完整校验库，要多带三个运行时 jar（约 686 KB），还带上子集用不到的能力，其中两项对外部 Schema 不利：默认加载器会在校验时按远程 `$ref` 发起网络请求；错误文案随 JVM 默认 Locale 变化，模型看到的修正依据不稳定。自写子集后，哪些关键字参与校验、错误文案和失败分类都由本节固定。
 
@@ -713,7 +713,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 | agent-core `ToolSchemaCompiler`、`CompiledToolSchema` | 新增，包内可见：前者负责第 1 步，后者是编译结果并负责第 2 步；无状态或不可变，线程安全 |
 | `ToolExecutionPipeline`、`MateToolExecutor` | 删除 `JsonSchemaFactory` 字段和 networknt import，调用新入口 |
 | `modules/ai/pom.xml` | 删除未使用的依赖声明 |
-| `modules/agent-core/pom.xml`、`modules/coding-agent-cli/pom.xml`、`campusclaw/pom.xml` | 依赖改为 `test` scope，只供对照测试；根 POM 的 `dependencyManagement` 保留版本号 |
+| `modules/agent-core/pom.xml`、`modules/coding-agent-cli/pom.xml`、`campusclaw/pom.xml`、根 POM | 删除依赖声明，根 POM 的 `dependencyManagement` 同时删除版本号；测试也不引入该库 |
 
 运行时产物去掉 `json-schema-validator` 1.5.2、`itu` 1.10.2、`jackson-dataformat-yaml` 2.18.3 三个 jar，约 686 KB。`snakeyaml` 仍由 Spring Boot 引入，不受影响。主代码估计 650～850 行，测试约 1300 行。
 
@@ -722,8 +722,8 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 - **关键字单测：** 逐个关键字覆盖通过、失败和边界值，包括按码点计数的 emoji、`1` 与 `1.0`、`integer`、深层嵌套路径、指针转义，以及 Cron 的 `oneOf` 分支；类型数组含 `null` 和 `integer` 的组合；子 Schema 形式 `additionalProperties` 的字段路径；`true`、`false` 子 Schema 出现在 `properties`、`items` 和组合分支中；`allOf` 的错误合并；`anyOf` 无分支通过时的最接近分支；`if` 通过和不通过两条路径，以及 `if` 含丢弃项时整组丢弃。
 - **定义单测：** 每个表外关键字、不符合形状的取值和超深嵌套都进入丢弃清单，且不影响同级其余关键字的校验；分支含丢弃项的 `oneOf` 按“至少一个”判断；`properties` 被丢弃或同级有 `patternProperties` 时 `additionalProperties` 一起丢弃，同级有 `prefixItems` 时 `items` 一起丢弃；`format`、`x-` 进入丢弃清单但不触发 `oneOf` 退化和 `if` 整组丢弃；只有根节点不是对象时判定义无效。
 - **框架工具全量编译：** 从 Runtime、Cron、Subagent 三入口的框架工具清单枚举全部工具（不手写名单），逐个编译输入 Schema；任何一个的丢弃清单非空都让测试失败，失败信息给出工具名和丢弃项位置。
-- **差分对照：** networknt 只在测试 scope 中使用。语料是全部框架工具定义加按关键字构造的 Schema；参数用合法样例加确定性变异生成（删必填字段、换类型、越过长度、数量和数值边界、加多余字段、改枚举值、制造重复元素）。两边的有效、无效判定必须一致；只有一个错误的用例，字段路径也要一致（比较前把 networknt 的 `required` 和 `additionalProperties` 位置换算到字段路径）。文案不比较。另加含表外关键字的语料，只做单向比较：networknt 判有效的参数，本实现也必须判有效，证明丢弃只放宽、不收紧。
-- **依赖验收：** `campusclaw-coding-agent` 的 `dependency:tree` 在 compile 和 runtime scope 下不再出现上述三个构件，镜像同步后 `campusclaw/pom.xml` 一致。
+- **不做库对照：** 测试不引入 networknt 做差分对照。子集语义由 §9.7.1 的关键字表和上面的关键字单测固定，丢弃只放宽、不收紧由定义单测中的丢弃保护用例覆盖。代价是没有与标准实现的自动对照，换来测试和公司镜像都不再需要解析该库。
+- **依赖验收：** `campusclaw-coding-agent` 的 `dependency:tree` 在全部 scope（含 test）下不再出现上述三个构件，镜像同步后 `campusclaw/pom.xml` 一致。
 
 #### 9.7.6 待对齐事项
 
@@ -961,10 +961,9 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 - §9.7.1 表内每个关键字的通过、失败和边界用例通过；表外关键字、不符合形状的取值和超过 32 层的子 Schema 只丢弃、不阻塞调用，运行时不写日志；含丢弃项的 `oneOf` 退化为至少一个分支通过，`if` 含丢弃项时整组 `if`/`then`/`else` 丢弃，`format` 与 `x-` 的无害丢弃不触发这两条；只有根节点不是对象时判定义无效；
 - 框架工具全量编译测试从工具清单枚举、不依赖手写名单，全部框架工具定义编译后没有丢弃项；Cron 的 `oneOf` 在缺字段时报出所缺字段，在命中多个分支时报汇总错误；
-- 与 networknt 1.5.2 的差分对照中，有效、无效判定全部一致，单错误用例的字段路径一致；含表外关键字的语料中，networknt 判有效的参数本实现全部判有效；
 - 错误文案与 JVM 默认 Locale 无关；模型结果不含参数值和定义诊断信息；
 - F1～F5 的错误码、日志字段，以及定义无效时“不确认、不请求 Mate execute”的行为符合 §9.7.3；
-- 运行时依赖树和公司镜像 POM 不再含 `json-schema-validator`、`itu`、`jackson-dataformat-yaml`；生产源码不再 import `com.networknt`；
+- 依赖树（含 test scope）和公司镜像 POM 不再含 `json-schema-validator`、`itu`、`jackson-dataformat-yaml`；生产与测试源码都不再 import `com.networknt`；
 - 切换前完成 §9.7.6 T2 的现网定义普查，记录结果并由 Mate 侧确认丢弃项。
 
 ## 14. 实施顺序
@@ -982,7 +981,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 9. 删除 Bash/Edit/Write 及专属死代码、任意动态注册、Extension、Loop、旧 delegation 和退役模型入口；
 10. 同步生成镜像并完成全量回归。
 
-[§9.7](#tool-schema-subset) 的校验器可以独立于上述步骤实施，顺序是：关键字单测和定义编译 → 替换 `ToolSchemaValidator` 内部实现并删除调用方的 `JsonSchemaFactory` → 差分对照测试 → 依赖改为测试 scope 并同步镜像 → 现网定义普查结果经 Mate 侧确认后合入。
+[§9.7](#tool-schema-subset) 的校验器可以独立于上述步骤实施，顺序是：关键字单测和定义编译 → 替换 `ToolSchemaValidator` 内部实现并删除调用方的 `JsonSchemaFactory` → 删除全部 `json-schema-validator` 依赖声明并同步镜像 → 现网定义普查结果经 Mate 侧确认后合入。
 
 本页描述推荐目标结构；已实现部分及差距须按[源码证据](source-evidence.md)中的提交逐项判断。实现 PR 应列出实际落地范围，不能把旧差距直接延伸为最新状态。
 
@@ -990,6 +989,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.28.2 | 2026-10-20 | 测试也不再依赖 json-schema-validator，删除与 networknt 的差分对照（待实现）。 |
 | 2.28.1 | 2026-10-19 | 丢弃保护补充 `patternProperties`、`prefixItems` 同级情形并把 `format`、`x-` 定为无害丢弃，数值边界限定为有限值（待实现）。 |
 | 2.28.0 | 2026-10-19 | 工具参数改由自写 JSON Schema 子集校验器校验，表外关键字静默丢弃、不阻塞调用，按 Mate 需要加入 `uniqueItems`、`minimum`、`maximum`、`allOf`、`anyOf`、`if`/`then`/`else`，列出候选关键字分档，json-schema-validator 降为测试对照依赖（待实现）。 |
 | 2.27.2 | 2026-10-15 | 框架工具中文 label 已实现。 |
