@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.7.0 |
+| 文档版本 | 0.7.1 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
-| 设计状态 | 待实现。两个上游（Mate、CampusMCP）的接口目录、`CampusMateClient` 与 `CampusMcpClient` 两个客户端和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil`、三个按业务划分的客户端等现状见 [§8.2](#source-evidence)。除两个客户端外，新增类名为暂定名，见 [§8.4](#naming) |
+| 设计状态 | 待实现。两个上游（Mate、CampusMCP）的接口目录、`CampusMateClient` 与 `CampusMcpClient` 两个客户端和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil`、三个按业务划分的客户端等现状见 [§8.2](#source-evidence)。类名已定，见 [§8.4](#naming) |
 | 源码基线 | Claw Java main `628dca25a694d9d056b15f012e1223d68091ab66`（2026-10-21 fetch） |
 | 主基线 | Codex main `d571eaf1f61d0d93a797506335a99a9950ffe37b`、Anthropic Java SDK main `85bfc1966a94862ec39477278430c3f8f5a0c3f6`，均于 2026-10-21 fetch；pi main `16f5f0af4d85ca583d045ceb5ed6d646fcaf7761`、OpenCode dev `dbe08ddc3c405168c679a3dac0029ef64787b7af` 作对照 |
 
@@ -29,7 +29,7 @@
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
 | T6 | 采纳后同步 [Model §5.6](../03-Model/README.md#http-transport-config) 的两个超时配置键为 `campusclaw.outbound.connect-timeout`、`campusclaw.outbound.sse.idle-timeout` | Claude | [§7.1](#config-items) |
 | T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
-| T7 | 与 Lotus 逐个确定 [§8.4](#naming) 中其余类名和本文标题，确定后全文替换暂定名。已定（2026-10-21，Lotus）：只保留 `CampusMateClient`、`CampusMcpClient` 两个客户端 | Lotus、Claude | 2026-10-21 讨论 |
+| T7 | 已确认（2026-10-21，Lotus）：只保留 `CampusMateClient`、`CampusMcpClient` 两个客户端；其余名字按 [§8.4](#naming) 建议名确定 | Lotus | 2026-10-21 讨论 |
 | T8 | 已确认（2026-10-21，Lotus）：① 读取 Agent 和 Skill 绑定的工具仍走 Mate；② CampusMCP 两个接口的报文与原 Mate 工具接口相同，也用统一响应、非 2xx 即失败；③ 目前不考虑新旧版本并存和回滚到 Mate 旧工具接口 | Lotus | [§3.2](#data-model)、[§6.2](#rollback) |
 
 ### 需求信息
@@ -49,7 +49,7 @@
 | 接口目录 | 某个上游的全部接口，每项是一个 HTTP 方法加路径模板，定义在代码中；每个上游一份 |
 | 同步请求 | 除模型流式推理外的所有上游调用：读取 Agent 和 Skill、查询和执行工具、取定时 token；一次请求一次响应 |
 | 上游客户端 | 每个上游一个：`CampusMateClient`、`CampusMcpClient`。按接口提供类型化方法，负责请求组装和响应 DTO 转换；失败统一抛出 `UpstreamCallException`，由调用方模块转换为本模块错误 |
-| 共享发送组件 | 两个上游客户端内部共用的发送逻辑（`UpstreamHttpSender`，暂定名，包内可见）：拼地址、超时、响应上限、失败判定和统一响应解包；业务代码不能直接使用 |
+| 共享发送组件 | 两个上游客户端内部共用的发送逻辑（`UpstreamHttpSender`，包内可见）：拼地址、超时、响应上限、失败判定和统一响应解包；业务代码不能直接使用 |
 
 ### 1.2 需求整理
 
@@ -108,8 +108,8 @@ Agent 服务依赖上游平台提供模型、Agent 定义、业务工具和定�
 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
-| D1 | 接口路径由部署配置，还是写在代码里？第二个上游的地址怎么给？ | Codex 的 `Provider` 只有 `base_url`、请求头和重试，每个接口客户端在代码里写死路径（`"models"`、`"memories/trace_summarize"`、`/responses`），唯一例外 `model_catalog_url` 是因为模型目录可能在另一个主机；Anthropic SDK 只暴露 `baseUrl`，各 Service 用 `addPathSegments("v1", "messages")` 写死；pi 的模型只有 `baseUrl` 和 `api`；OpenCode 的 Provider 设置只有 `baseURL` | 一个上游的接口都在同一主机，CampusMCP 是另一个主机（用户确认）；路径变化必然伴随请求或响应变化，Claw 本来就要发版；仓库内没有部署覆盖任何路径变量 | 路径写成 common 模块中每个上游一份的接口目录：`CampusMateOperation`（5 项）、`CampusMcpOperation`（2 项），都实现 `UpstreamOperation`（方法 + 路径模板）；配置每个上游只保留服务地址 `campusmate.base-url`、`campusmcp.base-url`。不学 Codex 的 `model_catalog_url` 给单个接口配完整 URL，因为 CampusMCP 是一个服务，接口会继续增加 | 改路径时 Claw 必须发版；退役 7 个路径配置键和环境变量，不做兼容双读；新增 `CAMPUSMCP_BASE_URL`，通用模块必须设置；若某环境需要不同网关前缀，要再加一个前缀配置（T1） |
-| D2 | 同步请求的发送、超时、响应上限和失败判定由谁负责？多个上游是否共用？ | Codex 的 `EndpointSession` 为一个 Provider 的所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 每个客户端一份 `ClientOptions`（`baseUrl`、`HttpClient`、默认 `Timeout`），所有 Service 共用，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块；工具执行带业务凭据，不能误发到另一个上游 | 两个上游客户端共用一个包内可见的发送组件 `UpstreamHttpSender`（暂定名），它持有唯一的 JDK HttpClient 和 `campusclaw.outbound` 参数，统一拼地址、超时、响应上限，并只按 HTTP 状态判定成败（非 2xx 即失败，T2、T8）；每个客户端只持有自己上游的地址，只引用自己的接口目录。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用 Mate 目录和地址校验 | 现有三套失败判定合并成一套，工具执行和取 token 不再自行检查 `resCode`；若某个接口违反"非 2xx 即失败"，Claw 会把失败当成功；模型与同步请求仍是两条连接，不能共用连接池；某个上游需要不同超时时要另加覆盖项（[§7.1](#config-items)） |
+| D1 | 接口路径由部署配置，还是写在代码里？第二个上游的地址怎么给？ | Codex 的 `Provider` 只有 `base_url`、请求头和重试，每个接口客户端在代码里写死路径（`"models"`、`"memories/trace_summarize"`、`/responses`），唯一例外 `model_catalog_url` 是因为模型目录可能在另一个主机；Anthropic SDK 只暴露 `baseUrl`，各 Service 用 `addPathSegments("v1", "messages")` 写死；pi 的模型只有 `baseUrl` 和 `api`；OpenCode 的 Provider 设置只有 `baseURL` | 一个上游的接口都在同一主机，CampusMCP 是另一个主机（用户确认）；路径变化必然伴随请求或响应变化，Claw 本来就要发版；仓库内没有部署覆盖任何路径变量 | 路径写成 common 模块中每个上游一份的接口目录：`CampusMateOperation`（5 项）、`CampusMcpOperation`（2 项），都实现 `UpstreamOperation`（方法 + 路径模板）；配置每个上游只保留服务地址 `campusmate.base-url`、`campusmcp.base-url`，分别绑定到 `CampusMateProperties`、`CampusMcpProperties`。不学 Codex 的 `model_catalog_url` 给单个接口配完整 URL，因为 CampusMCP 是一个服务，接口会继续增加 | 改路径时 Claw 必须发版；退役 7 个路径配置键和环境变量，不做兼容双读；新增 `CAMPUSMCP_BASE_URL`，通用模块必须设置；若某环境需要不同网关前缀，要再加一个前缀配置（T1） |
+| D2 | 同步请求的发送、超时、响应上限和失败判定由谁负责？多个上游是否共用？ | Codex 的 `EndpointSession` 为一个 Provider 的所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 每个客户端一份 `ClientOptions`（`baseUrl`、`HttpClient`、默认 `Timeout`），所有 Service 共用，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块；工具执行带业务凭据，不能误发到另一个上游 | 两个上游客户端共用一个包内可见的发送组件 `UpstreamHttpSender`，它持有唯一的 JDK HttpClient 和 `campusclaw.outbound` 参数，统一拼地址、超时、响应上限，并只按 HTTP 状态判定成败（非 2xx 即失败，T2、T8）；每个客户端只持有自己上游的地址，只引用自己的接口目录。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用 Mate 目录和地址校验 | 现有三套失败判定合并成一套，工具执行和取 token 不再自行检查 `resCode`；若某个接口违反"非 2xx 即失败"，Claw 会把失败当成功；模型与同步请求仍是两条连接，不能共用连接池；某个上游需要不同超时时要另加覆盖项（[§7.1](#config-items)） |
 | D3 | 调用上游的客户端按上游划分，还是按业务划分？ | Anthropic SDK 每个服务一个客户端 `AnthropicClient`，按资源暴露 `messages()`、`models()` 等，调用方自己处理 `AnthropicServiceException`；Codex 按接口划分 `ModelsClient`、`MemoriesClient` 等，共用同一个 `EndpointSession` | 用户要求只保留 `CampusMateClient`、`CampusMcpClient`（R7）；三个调用方属于不同模块（M01、M03、M10），各自的失败要转换成本模块的错误：工具执行失败要变成给模型看的工具结果，定时 token 失败要区分"需要重新授权"和"服务不可用" | 按上游划分，与 Anthropic SDK 一致：`CampusMateClient` 提供读取 Agent 运行定义、Agent 绑定工具、Skill 和取定时 token 四个方法；`CampusMcpClient` 提供查询工具定义和执行工具两个方法。两个客户端只做请求组装和 DTO 转换，失败统一抛出 `UpstreamCallException`；转换成模块错误由调用方负责（[§3.3](#short-request-sequence) 转换表）。删除 `MateServiceClient`、`MateToolClient` 与 `HttpMateToolClient`、`MateAccessTokenClient`、`MateRestUtil` | 错误码转换分散到 4 个调用点（`AgentRuntimeManager`、`MateToolResolver`、`MateRemoteToolHandler`、定时 token 适配）；"先从 Mate 读绑定、再到 CampusMCP 查定义"的编排移到 `MateToolResolver`；`MateServiceClient` 中的 DTO（`AgentRuntime`、`SkillInfo`、`BoundTool` 等）要迁到客户端包，约 10 个文件改 import；`CampusMateClient` 的改动同时影响三个模块 |
 
 ## 3. 详细设计
@@ -372,29 +372,31 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 <a id="naming"></a>
 
-### 8.4 命名（T7）
+### 8.4 命名（T7，已定）
 
-已定（2026-10-21，Lotus）：调用上游的客户端只保留 `CampusMateClient`、`CampusMcpClient`，替代 `MateServiceClient`、`MateToolClient` 与 `HttpMateToolClient`、`MateAccessTokenClient`。其余新增或要改的名字正文先用"暂定名"一列，确定后全文替换。
+2026-10-21 与 Lotus 确定：调用上游的客户端只保留 `CampusMateClient`、`CampusMcpClient`；其余名字按下表"定名"一列。
 
-| # | 现名（或目标设计旧名） | 正文暂定名 | 备选 | 为什么要改 |
-|---|---|---|---|---|
-| N1 | 本文标题"CampusMate 客户端收敛设计" | 不变 | "上游客户端收敛设计" | 范围已含 CampusMCP |
-| N2 | —（新增接口） | `UpstreamOperation` | `ServiceOperation`、`RemoteOperation` | 两个目录枚举的共同接口 |
-| N3 | `CampusMateOperation` | 不变，只剩 Mate 的 5 项 | — | 仍只属于 Mate |
-| N4 | —（新增） | `CampusMcpOperation` | `McpOperation` | 与 N3 成对 |
-| N5 | `CampusMateOrigin`（旧目标设计） | `UpstreamOrigin` | `ServiceOrigin`、`ServiceBaseUrl` | 不再只校验 Mate 地址 |
-| N6 | `CampusMateClientProperties` | 不变，只剩 `baseUrl` | `CampusMateProperties` | 与 `CampusMateClient` 只差一个词，容易混；"Client" 已无含义 |
-| N7 | —（新增） | `CampusMcpClientProperties` | `CampusMcpProperties` | 与 N6 成对 |
-| N8 | `OutboundHttpProperties` | 不变 | `OutboundProperties` | 也含 SSE 参数，与前缀 `campusclaw.outbound` 对齐 |
-| N9 | `CampusMateHttpClient`（旧目标设计） | `UpstreamHttpSender`（包内可见） | `UpstreamTransport`；或改为两个客户端继承的 `AbstractUpstreamClient` | 不能再叫 Client，否则又多一个客户端 |
-| N10 | `CampusMateCallException`（旧目标设计） | `UpstreamCallException` | `UpstreamException` | 两个客户端共用 |
-| N11 | `FailureKind` | 不变 | `UpstreamFailure` | — |
-| N12 | 客户端、发送组件和 DTO 所在包 | `com.campusclaw.codingagent.upstream` | `...codingagent.campusmate` | 发送组件包内可见，两个客户端必须同包；`AgentRuntime`、`SkillInfo` 等 DTO 从 `MateServiceClient` 移到这里 |
+| # | 现名（或目标设计旧名） | 定名 | 理由 |
+|---|---|---|---|
+| N1 | 本文标题"CampusMate 客户端收敛设计" | 不变 | 专题目录与链接沿用 |
+| N2 | —（新增接口） | `UpstreamOperation` | 两个目录枚举的共同接口 |
+| N3 | `CampusMateOperation` | 不变，只剩 Mate 的 5 项 | 仍只属于 Mate |
+| N4 | —（新增） | `CampusMcpOperation` | 与 N3 成对 |
+| N5 | `CampusMateOrigin`（旧目标设计） | `UpstreamOrigin` | 不再只校验 Mate 地址 |
+| N6 | `CampusMateClientProperties` | `CampusMateProperties` | 与 `CampusMateClient` 区分；不再有 Endpoints，只剩 `baseUrl` |
+| N7 | —（新增） | `CampusMcpProperties` | 与 N6 成对 |
+| N8 | `OutboundHttpProperties` | 不变 | 绑定 `campusclaw.outbound` |
+| N9 | `CampusMateHttpClient`（旧目标设计） | `UpstreamHttpSender`（包内可见） | 不叫 Client，避免多出第三个客户端；用组合而不是继承 |
+| N10 | `CampusMateCallException`（旧目标设计） | `UpstreamCallException` | 两个客户端共用 |
+| N11 | `FailureKind` | 不变 | — |
+| N12 | `MateServiceClient`、`MateToolClient` 与 `HttpMateToolClient`、`MateAccessTokenClient` | `CampusMateClient`、`CampusMcpClient` | 按上游划分（D3） |
+| N13 | 客户端、发送组件和 DTO 所在包 | `com.campusclaw.codingagent.upstream`（公司镜像 `com.huawei.hicampus.claw.upstream`） | 发送组件包内可见，两个客户端必须同包；`AgentRuntime`、`SkillInfo` 等 DTO 从 `MateServiceClient` 移到这里 |
 
 ### 8.5 版本历史
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.7.1 | 2026-10-21 | 命名定稿（T7）：`UpstreamHttpSender`、`UpstreamOrigin`、`CampusMateProperties`、`CampusMcpProperties`、`upstream` 包。 |
 | 0.7.0 | 2026-10-21 | 客户端按上游划分，只保留 `CampusMateClient`、`CampusMcpClient`，共用包内发送组件；错误码转换移到调用方；T8 三点确认，不考虑新旧版本并存和回滚。 |
 | 0.6.0 | 2026-10-21 | 新增上游 CampusMCP：工具定义查询和执行改走 `/mcp-service/v1/runtime/tools/*`，新增 `campusmcp.base-url`；接口目录按上游拆分，通道一个实现、每个上游一个实例；新增类名为暂定名（§8.4）。 |
 | 0.5.0 | 2026-10-21 | 传输参数按请求类型放到 `campusclaw.outbound` 下供各上游共用，流式超时改名 `sse.idle-timeout`。 |

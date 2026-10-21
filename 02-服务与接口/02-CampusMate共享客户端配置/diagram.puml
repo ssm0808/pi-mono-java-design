@@ -129,7 +129,7 @@ deactivate User
 ' 目标：待实现；每个上游一份接口目录与一个客户端（用户 2026-10-21 确定只保留 CampusMateClient、CampusMcpClient）。
 ' 依赖方向：common <- ai <- agent-core <- coding-agent-cli；ai 不依赖 coding-agent-cli，所以目录必须在 common。
 ' 基线：Anthropic Java SDK AnthropicClient（每个服务一个客户端）+ ClientOptions；Codex Provider + EndpointSession。
-' 命名：Upstream*、CampusMcpClientProperties、包名为暂定名，见设计文档 8.4 节。
+' 命名：2026-10-21 与用户确定，见设计文档 8.4 节。
 title 上游客户端：全局目标类图（Mate + CampusMCP）
 skinparam backgroundColor white
 skinparam defaultFontSize 13
@@ -139,7 +139,7 @@ skinparam nodesep 40
 skinparam ranksep 50
 
 package "common" as CommonPkg {
-  interface UpstreamOperation <<待实现，暂定名>> {
+  interface UpstreamOperation <<待实现>> {
     + method() : String
     + pathTemplate() : String
   }
@@ -150,11 +150,11 @@ package "common" as CommonPkg {
     SKILL_INFO
     SCHEDULED_ACCESS_TOKEN
   }
-  enum CampusMcpOperation <<待实现，暂定名>> {
+  enum CampusMcpOperation <<待实现>> {
     TOOL_METADATA_QUERY
     TOOL_EXECUTE
   }
-  class UpstreamOrigin <<待实现，暂定名>> {
+  class UpstreamOrigin <<待实现>> {
     - origin : URI
     + {static} of(configKey, baseUrl) : UpstreamOrigin
     + resolve(operation, pathValues...) : URI
@@ -170,10 +170,10 @@ package "ai" as AiPkg {
 }
 
 package "coding-agent-cli：配置" as ConfigPkg {
-  class CampusMateClientProperties <<record，改造>> {
+  class CampusMateProperties <<record，由 CampusMateClientProperties 改名>> {
     + baseUrl : UpstreamOrigin
   }
-  class CampusMcpClientProperties <<record，待实现，暂定名>> {
+  class CampusMcpProperties <<record，待实现>> {
     + baseUrl : UpstreamOrigin
   }
   class "OutboundHttpProperties" as HttpOptions <<record，待实现>> {
@@ -184,7 +184,7 @@ package "coding-agent-cli：配置" as ConfigPkg {
   }
 }
 
-package "coding-agent-cli：upstream 包（暂定）" as UpstreamPkg {
+package "coding-agent-cli：upstream 包" as UpstreamPkg {
   class CampusMateClient <<Spring 单例，待实现>> {
     - origin : UpstreamOrigin
     + getAgentRuntime(agentId) : AgentRuntime
@@ -197,11 +197,11 @@ package "coding-agent-cli：upstream 包（暂定）" as UpstreamPkg {
     + queryTools(toolIds) : List<MateToolMeta>
     + executeTool(toolId, args, credentials) : String
   }
-  class UpstreamHttpSender <<包内可见，待实现，暂定名>> {
+  class UpstreamHttpSender <<包内可见，待实现>> {
     - httpClient : HttpClient
     ~ send(origin, operation, pathValues, body, headers) : JsonNode
   }
-  class UpstreamCallException <<待实现，暂定名>> {
+  class UpstreamCallException <<待实现>> {
     + operation : UpstreamOperation
     + kind : FailureKind
     + resCode : String（仅非 2xx 时解析）
@@ -228,10 +228,10 @@ UpstreamOperation <|.. CampusMcpOperation
 UpstreamOrigin --> UpstreamOperation : 按目录生成地址
 CampusMateProvider --> UpstreamOrigin : 校验 Mate 地址
 CampusMateProvider --> CampusMateOperation : MODEL_CHAT
-CampusMateClientProperties --> UpstreamOrigin : 启动时校验
-CampusMcpClientProperties --> UpstreamOrigin : 启动时校验
-CampusMateClient --> CampusMateClientProperties : Mate 地址
-CampusMcpClient --> CampusMcpClientProperties : CampusMCP 地址
+CampusMateProperties --> UpstreamOrigin : 启动时校验
+CampusMcpProperties --> UpstreamOrigin : 启动时校验
+CampusMateClient --> CampusMateProperties : Mate 地址
+CampusMcpClient --> CampusMcpProperties : CampusMCP 地址
 CampusMateClient --> CampusMateOperation
 CampusMcpClient --> CampusMcpOperation
 CampusMateClient --> UpstreamHttpSender
@@ -249,7 +249,7 @@ legend bottom
   发送统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；成败只看 HTTP 状态，resCode 只进日志。
   只有 CampusMateClient、CampusMcpClient 两个客户端；UpstreamHttpSender 包内可见，业务代码看不到。客户端只抛 UpstreamCallException，调用方按设计文档 3.3 节转换成本模块错误。
   模型推理保留自己的连接（见 Model 专题第 5 节），共用 Mate 目录与地址类；超时用 @Value 读取同一组 campusclaw.outbound 配置（ai 模块不依赖 coding-agent-cli）。
-  删除：MateServiceClient、MateToolClient、HttpMateToolClient、MateAccessTokenClient、MateRestUtil、CampusMateClientProperties.Endpoints（待实现）。
+  删除：MateServiceClient、MateToolClient、HttpMateToolClient、MateAccessTokenClient、MateRestUtil、CampusMateClientProperties.Endpoints（改名为 CampusMateProperties 时删除，待实现）。
 endlegend
 @enduml
 
