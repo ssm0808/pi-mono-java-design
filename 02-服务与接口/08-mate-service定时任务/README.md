@@ -6,12 +6,12 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.6.0 |
-| 更新日期 | 2026-10-20 |
+| 文档版本 | 1.7.0 |
+| 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
 | 源码基线 | Claw：pi-mono-java main `ead67eba`（见 [§8.1](#source-evidence)）；mate-service 源码未核验，本文不指定物理表名和既有组件的真实类名 |
-| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.69.0；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
+| 主基线 | [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) 0.70.0；Claude Managed Agents 的做法引用 Claw 主设计已登记的核对结果（2026-10-08，公开 Beta），本文未重新核对 |
 
 ## 评审记录
 
@@ -27,7 +27,7 @@
 
 | # | 问题 | 建议 | 影响 | 负责人 |
 |---|---|---|---|---|
-| <a id="m1"></a>M1 | 接口配置的任务谁能看到和管理 | 首版只有创建者可见、可管理；不做同组织共享，也不提供管理员视图 | [§4.2.4](#visibility) 的可见范围；Claw [T10](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t10)（Claw 是否加 userId） | 产品与 Mate |
+| <a id="m1"></a>M1 | 接口配置的任务谁能看到和管理 | 首版只有创建者可见、可管理；不做同组织共享，也不提供管理员视图 | [§4.2.4](#visibility) 的可见范围；Claw [T10](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t10)（已关闭：Claw 任务保存 user_id） | 产品与 Mate |
 | <a id="m2"></a>M2 | 每个用户最多能有多少个接口配置的任务 | 每用户 20 个，部署可配置；对话中创建的任务不计入，Claw 已限制每个会话一个启用中的任务 | [§3.3](#create-sequence) 配额检查 | 产品 |
 | <a id="m3"></a>M3 | Session 归属登记接口的路径与报文 | 采用 [§4.4.2](#session-ownership) 的两个 runtime 路径 | 关闭 Claw [T7](../../01-总体架构/08-CampusClaw定时任务/README.md#todo-t7) 中登记接口部分；确定后 Claw 实现 HTTP 适配 | Mate 与 Claw |
 | <a id="m4"></a>M4 | Mate 写归属失败时留下的无主任务如何处理 | 无主任务登记一律拒绝，因此不会运行业务；对账任务 10 分钟后经 Claw 删除 | [§3.7](#reconciliation) | Mate |
@@ -122,7 +122,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | 管理接口自己定义资源，还是与 Claw 一一对应？ | Claude 控制台与 API 直接操作同一个 Deployment 资源 | 页面已按 Claw 契约设计（M07 场景09）；两套字段会产生转换和不一致 | 10 个管理接口与 Claw 路径、字段一一对应，请求原样转发；Mate 只做可见性与配额检查、归属记录和资源投影 | Claw 契约变化时 Mate 要同步；页面直接受 Claw 字段约束 |
-| D2 | “任务属于谁”存在哪里？ | Claude 以 workspace 为边界，无用户归属 | Claw 不保存用户（Claw D9）；用户、组织与权限都在 Mate | Mate 保存任务归属；列表从 Claw 拉取全部页后按归属过滤 | 读取量随任务总数增长；任务量大后改为 Claw 按用户查询（Claw T10） |
+| D2 | “任务属于谁”存在哪里？ | Claude 以 workspace 为边界，无用户归属 | 用户、组织与权限都在 Mate；列表若由 Mate 拉取 Claw 全部记录再过滤，读取量随全部用户的任务增长 | Mate 保存接口任务的归属（配额与登记用）；Claw 任务上保存创建者 user_id，列表与 Run 列表由 Mate 带当前用户 ID 查询，Claw 筛选分页（Claw [D9](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)，2026-10-21 确定） | 接口任务的 user_id 在 Mate 与 Claw 各存一份，都在创建时写入且不可修改 |
 | D3 | Mate 先记录归属还是先调用 Claw 创建？ | 无可对照实现 | Mate 与 Claw 之间没有分布式事务；Claw 创建接口没有幂等键 | 先调用 Claw，拿到任务 ID 后再写 Mate `t_schedule`；配额在调用前按行数统计，不加锁；写入 `t_schedule` 失败与普通接口一样返回 500，不同步补偿删除，Claw 残留交给对账 | 并发创建可能比上限多出几个；Mate 写入失败或结果未知时，Claw 会短时留下无主任务，靠登记拒绝与对账兜底 |
 | D4 | 浏览器看到的会话标识用什么？ | Claude 直接返回 session_id | Mate 对外只暴露 Chat/chatId，不暴露 Runtime 的 sessionId（[通用对话 API §1](../07-mate-service通用对话API/README.md#1-接口与权威来源)） | Mate 把 Schedule 与 Run 中的 sessionId 投影为 chatId；接口配置的任务在登记时建立 Chat 映射 | 映射暂时查不到时 chatId 为 null，页面显示“结果入口准备中” |
 | D5 | 无主任务怎样避免以统一账号运行业务？ | 无可对照实现 | 统一账号权限大；无主任务没有人能看到或管理 | 登记接口对 `t_schedule` 中没有记录的任务一律拒绝，Claw 因此不受理；对账任务 10 分钟后经 Claw 删除 | 无主任务在被删除前到点会产生一条失败 Run（`session_creation_rejected_error`），删除任务时随之删除 |
@@ -256,21 +256,23 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 ### 3.4 列表与可见性（UC2、UC5）
 
-Claw 首版不按用户过滤（Claw [D9](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)），Mate 自行过滤和分页：
+Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)），Mate 不再拉取全部页过滤：
 
-1. 把 name、agentId、status 筛选原样转给 Claw，以 `limit=200` 从 page 1 拉到 `nextPage` 为 null。
-2. 按 id 去重，按 [§4.2.4](#visibility) 保留当前用户可见的任务。Claw 的顺序（updatedAt DESC、id ASC）在过滤后保持不变，不重新排序。
-3. 按请求的 page/limit（与 Claw 相同：page 默认 1，limit 默认 50、范围 1～200）切页，返回 `{schedules, total, nextPage}`；total 是过滤后当前用户可见的匹配任务数，不使用 Claw 返回的 total（那是全部用户的总数）。
+1. 浏览器的 query 原样转给 Claw，Mate 追加 `userId=当前用户 ID`；浏览器不传 userId，传了也被当前用户覆盖。
+2. Claw 按 userId 与筛选条件查询、排序（updatedAt DESC、id ASC）并分页，返回 `{schedules, total, nextPage}`。
+3. Mate 只做 [§4.2.3](#resource-projection) 的投影，schedules、total、nextPage 原样返回。
+
+接口创建的任务和对话中创建的任务都带 user_id，所以一次查询就包含两种任务，Mate 不再按 Chat 映射判断对话任务的归属。
 
 Run 查询：
 
 | 请求 | 处理 |
 |---|---|
-| 带 scheduleId 的列表 | 先检查该任务可见，不可见返回空页（total 为 0）；可见则把全部 query 原样转给 Claw 单次查询并投影，total 直接用 Claw 返回的值 |
-| 不带 scheduleId 的列表 | 拉取 Claw 全部页（其余筛选原样转发），只保留可见任务的 Run，再按 page/limit 切页，total 为过滤后的数量；顺序保持 Claw 的 createdAt DESC、id DESC |
+| 带 scheduleId 的列表 | 先按 [§3.5](#detail-write) 检查该任务可见，不可见返回空页（total 为 0）；可见则把 query 与当前用户 ID 一起转给 Claw，直接返回 Claw 的分页与 total |
+| 不带 scheduleId 的列表 | 把 query 与当前用户 ID 一起转给 Claw，Claw 按所属任务的 user_id 筛选并分页，直接返回 Claw 的分页与 total；顺序为 Claw 的 createdAt DESC、id DESC |
 | 详情 | 读取 Claw Run，再检查其 scheduleId 对应任务可见；不可见返回 404 `SCHEDULE_RUN_NOT_FOUND` |
 
-跨页拉取期间有并发修改时可能重复或遗漏，与 Claw 普通翻页的限制相同。
+翻页期间有并发修改时可能重复或遗漏，与 Claw 普通翻页的限制相同。
 
 <a id="detail-write"></a>
 
@@ -278,7 +280,7 @@ Run 查询：
 
 详情、更新、删除、立即运行、暂停、取消暂停都先做可见性检查，不可见直接返回 404，不调用 Claw。
 
-- **可见性判断**：先查 `t_schedule`，有记录且 user_id 为当前用户即可见；没有记录时读取 Claw 详情，sessionId 非空（对话中创建的任务）且该会话对应的 Chat 属于当前用户才可见。
+- **可见性判断**：先查 `t_schedule`，有记录且 user_id 为当前用户即可见；没有记录时读取 Claw 详情，userId 等于当前用户才可见（对话中创建的任务，user_id 由 Claw 在创建时写入）。
 - **修改 agentId**：对话中创建的任务不能改 agentId（Claw 拒绝）。
 - **删除**：Claw 返回成功后删除 `t_schedule` 中的记录；Claw 返回 404 时同样删除记录并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留。
 - **立即运行**：接口配置的任务会在这次请求中触发 Claw 回调登记，Mate 的管理请求不得持有会阻塞登记的锁。对话中创建的任务立即运行时，Claw 在关联会话追加一轮，会话正忙则 Run 记为 `session_busy_error`。
@@ -358,14 +360,14 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | 操作 | Mate 方法与路径 | 对应 Claw 接口 | Mate 额外处理 |
 |---|---|---|---|
 | 创建 | POST `/schedules` | POST `/schedules` | 配额；Claw 创建成功后写 `t_schedule`（[§3.3](#create-sequence)） |
-| 列表 | GET `/schedules` | GET `/schedules`（拉取全部页） | 按可见范围过滤后自行分页（[§3.4](#list-visibility)） |
+| 列表 | GET `/schedules` | GET `/schedules` | 追加当前用户 ID，分页与 total 由 Claw 完成（[§3.4](#list-visibility)） |
 | 详情 | GET `/schedules/{scheduleId}` | GET `/schedules/{scheduleId}` | 可见性检查 |
 | 部分更新 | POST `/schedules/{scheduleId}` | POST `/schedules/{scheduleId}` | 可见性检查 |
 | 删除 | DELETE `/schedules/{scheduleId}` | DELETE `/schedules/{scheduleId}` | 可见性检查；成功后删除 `t_schedule` 中的记录 |
 | 立即运行 | POST `/schedules/{scheduleId}/run` | POST `/schedules/{scheduleId}/run` | 可见性检查；Run 投影 |
 | 暂停 | POST `/schedules/{scheduleId}/pause` | POST `/schedules/{scheduleId}/pause` | 可见性检查 |
 | 取消暂停 | POST `/schedules/{scheduleId}/unpause` | POST `/schedules/{scheduleId}/unpause` | 可见性检查 |
-| Run 列表 | GET `/schedule-runs` | GET `/schedule-runs`（指定任务时单次，否则拉取全部页） | 可见性过滤 |
+| Run 列表 | GET `/schedule-runs` | GET `/schedule-runs` | 追加当前用户 ID；指定任务时先检查可见性 |
 | Run 详情 | GET `/schedule-runs/{runId}` | GET `/schedule-runs/{runId}` | 按所属任务检查可见性 |
 
 路径和资源名与 Claw 一致。创建、列表与详情接口的完整定义见 [§4.2.6](#create-schedule-api)～[§4.2.8](#get-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
@@ -379,6 +381,7 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | Claw 字段 | Mate 字段 | 规则 |
 |---|---|---|
 | Schedule.sessionId | Schedule.chatId | 接口配置的任务为 null；对话中创建的任务为关联会话的 chatId |
+| Schedule.userId | 不返回 | 只用于 Claw 筛选与 Mate 判断可见性；浏览器只能看到自己的任务，不需要这个字段 |
 | Run.sessionId | Run.chatId | 受理成功时为登记时建立的 chatId（对话中创建的任务为原 Chat）；受理失败为 null；映射暂时查不到时为 null，页面显示“结果入口准备中”，不能因此再次运行 |
 
 其余字段（id、scheduleId、agentId、triggerContext、error、status、pausedReason、schedule、metadata、时间）原样返回。scheduleId 与 runId 是 Claw 生成的不透明 ID，Mate 不另造公共 ID。
@@ -390,7 +393,7 @@ Mate 原样返回 Claw 的 Schedule 与 Run，只替换会话标识：
 | 检查 | 规则 |
 |---|---|
 | 权限 | Mate 框架按用户 access-token 统一检查，本设计不另做功能权限与 Agent 使用权限判断 |
-| 可见范围 | 接口配置的任务：`t_schedule` 中该任务的 user_id 为当前用户；对话中创建的任务：关联 Chat 属于当前用户（[M1](#m1)） |
+| 可见范围 | 任务的创建者是当前用户（[M1](#m1)）：接口配置的任务看 `t_schedule.user_id`，对话中创建的任务看 Claw 资源的 userId；列表直接按当前用户查询 Claw |
 | 不可见 | 一律按不存在处理：详情与写操作返回 404 `SCHEDULE_NOT_FOUND`，Run 详情返回 404 `SCHEDULE_RUN_NOT_FOUND`，列表中不出现 |
 | 用户权限变化 | 只在管理操作时由框架检查；用户失去权限或离职后，已保存的任务仍按统一账号运行（Claw [D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)） |
 
@@ -413,11 +416,11 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.2.6 创建定时任务
 
-`POST /mate-service/v1/schedules`。用户在页面上配置“工作日 08:00 汇总园区设备告警”这类任务，Mate 检查配额后把请求体原样转发给 Claw，Claw 创建成功后记录归属，返回投影后的完整任务；处理顺序见 [§3.3](#create-sequence)。请求、两种成功响应和全部错误的示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [01-create-schedule.json](接口契约/操作/01-create-schedule.json)，各接口的 HTML 都用 `render_schedule_api.py` 生成，正文不维护第二套 JSON。
+`POST /mate-service/v1/schedules`。用户在页面上配置“工作日 08:00 汇总园区设备告警”这类任务，Mate 检查配额后把请求体转发给 Claw 并写入当前用户 ID，Claw 创建成功后记录归属，返回投影后的完整任务；处理顺序见 [§3.3](#create-sequence)。请求、两种成功响应和全部错误的示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [01-create-schedule.json](接口契约/操作/01-create-schedule.json)，各接口的 HTML 都用 `render_schedule_api.py` 生成，正文不维护第二套 JSON。
 
 本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验（[§4.2.1](#management-api)）。
 
-**请求体**：JSON，字段与 Claw [§4.3](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同，Mate 原样转发，不增删字段，校验由 Claw 完成。
+**请求体**：JSON，除 userId 外字段与 Claw [§4.3](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同。Mate 原样转发，只在请求体中写入 `userId=当前用户 ID`，浏览器传入的 userId 被覆盖，不能代他人创建；其余校验由 Claw 完成。
 
 | 字段 | 必填 | 规定 |
 |---|---|---|
@@ -450,14 +453,14 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.2.7 读取任务列表
 
-`GET /mate-service/v1/schedules`。页面按名称、Agent 和状态查看当前用户能看到的任务，包括接口创建的任务和在自己对话中创建的任务（[§4.2.4](#visibility)）。Mate 把筛选条件转给 Claw 拉取全部页，过滤后自行分页，处理顺序见 [§3.4](#list-visibility)。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [02-list-schedules.json](接口契约/操作/02-list-schedules.json)。本接口不定义请求头，无请求体。
+`GET /mate-service/v1/schedules`。页面按名称、Agent 和状态查看当前用户能看到的任务，包括接口创建的任务和在自己对话中创建的任务（[§4.2.4](#visibility)）。Mate 把 query 转给 Claw 并追加当前用户 ID，分页与 total 由 Claw 完成，处理顺序见 [§3.4](#list-visibility)。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [02-list-schedules.json](接口契约/操作/02-list-schedules.json)。本接口不定义请求头，无请求体。
 
-**query**：分页参数由 Mate 校验，筛选参数原样转给 Claw 校验，规则与 Claw [§4.4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同。筛选条件以 AND 组合；重复参数或未知参数返回 400 `SCHEDULE_REQUEST_INVALID`。
+**query**：全部原样转给 Claw 校验，规则与 Claw [§4.4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同；Mate 只追加 userId。筛选条件以 AND 组合；重复参数或未知参数返回 400 `SCHEDULE_REQUEST_INVALID`。
 
 | query | 校验方 | 规定 |
 |---|---|---|
-| page | Mate | 可选正整数，默认 1；是普通页码，不是游标 |
-| limit | Mate | 可选，1～200，默认 50；越界拒绝，不静默截断 |
+| page | Claw | 可选正整数，默认 1；是普通页码，不是游标 |
+| limit | Claw | 可选，1～200，默认 50；越界拒绝，不静默截断 |
 | name | Claw | 可选；去首尾空白后 1～256 个字符，按名称包含匹配，大小写敏感，% 和 _ 按字面量 |
 | agentId | Claw | 可选；按 Agent 精确匹配，合法但无匹配时返回空页 |
 | status | Claw | 可选；`active` 或 `paused`，省略时两种都返回 |
@@ -467,8 +470,8 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 | 字段 | 规定 |
 |---|---|
 | schedules | 当前页任务，每项与创建、详情相同，是 [§4.2.3](#resource-projection) 投影后的完整任务：接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat；顺序沿用 Claw 的 updatedAt 从新到旧、id 升序 |
-| total | 当前用户可见、且与筛选条件匹配的任务总数，不受 page/limit 影响；由 Mate 过滤后统计，不使用 Claw 返回的 total |
-| nextPage | 有下一页时为 page+1，否则为 null；不返回 page 或 limit |
+| total | 当前用户创建、且与筛选条件匹配的任务总数，不受 page/limit 影响；直接使用 Claw 返回的值 |
+| nextPage | 有下一页时为 page+1，否则为 null；不返回 page 或 limit；直接使用 Claw 返回的值 |
 | 空结果 | 无匹配或超出末页时 `schedules:[]`、`nextPage:null`，total 照常返回（无匹配为 0），不返回 404 或 204 |
 
 翻页期间任务被修改、删除或新建，后续页可能重复或遗漏；页面修改筛选条件或 limit 后从第 1 页重读。
@@ -477,9 +480,9 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 | HTTP / resCode | 条件 | 中 / 英 |
 |---|---|---|
-| 400 / SCHEDULE_REQUEST_INVALID | page、limit 越界或格式非法（Mate）；name、agentId、status 非法，参数重复或未知（Claw） | 定时任务请求无效。 / Invalid schedule request. |
+| 400 / SCHEDULE_REQUEST_INVALID | page、limit、name、agentId、status 越界或非法，参数重复或未知（Claw） | 定时任务请求无效。 / Invalid schedule request. |
 | 500 / SCHEDULE_READ_FAILED | Claw 中有记录损坏或投影失败，不伪装成空列表 | 读取定时任务失败。 / Failed to read the schedule. |
-| 500 / Mate 通用错误码 | Mate 读取 `t_schedule` 或 Chat 映射失败 | 沿用 Mate 通用文案 |
+| 500 / Mate 通用错误码 | Mate 读取 Chat 映射（投影 chatId）失败 | 沿用 Mate 通用文案 |
 | 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败或超时；读取无副作用，可直接重试 | 定时任务服务暂不可用，请稍后重试。 / The schedule service is temporarily unavailable. Please try again later. |
 
 <a id="get-schedule-api"></a>
@@ -501,7 +504,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 | 400 / SCHEDULE_REQUEST_INVALID | scheduleId 格式非法或带了 query 参数（Claw） | 定时任务请求无效。 / Invalid schedule request. |
 | 404 / SCHEDULE_NOT_FOUND | 任务不存在、已删除或对当前用户不可见，三种情况结果相同 | 定时任务不存在或不可访问。 / Schedule not found or not accessible. |
 | 500 / SCHEDULE_READ_FAILED | Claw 中的记录损坏或投影失败，不转成 404 | 读取定时任务失败。 / Failed to read the schedule. |
-| 500 / Mate 通用错误码 | Mate 读取 `t_schedule` 或 Chat 映射失败 | 沿用 Mate 通用文案 |
+| 500 / Mate 通用错误码 | Mate 读取 `t_schedule` 或 Chat 映射（投影 chatId）失败 | 沿用 Mate 通用文案 |
 | 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败或超时；可直接重试 | 定时任务服务暂不可用，请稍后重试。 / The schedule service is temporarily unavailable. Please try again later. |
 
 <a id="mate-to-claw"></a>
@@ -658,7 +661,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 #### 5.2.2 容量与限流
 
-列表与不带 scheduleId 的 Run 列表每次拉取 Claw 全部页，读取量随任务总数和 Run 总数增长；每页 200 条。**【缺口】** 容量目标、单用户与全局请求限流、全量拉取的上限与压测计划。任务量增长后改由 Claw 按用户查询（Claw T10）。
+列表与 Run 列表按当前用户由 Claw 分页查询，每次请求读取一页，读取量只与该用户的任务和 Run 数有关。**【缺口】** 容量目标、单用户与全局请求限流与压测计划。
 
 #### 5.2.3 监控告警
 
@@ -728,6 +731,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-10-21 | 列表改为由 Claw 按用户查询（D2，Claw D9）：§3.4、§4.2.7 中 Mate 追加当前用户 ID，分页与 total 直接用 Claw 返回的值，不再拉取全部页；Run 列表同样转发当前用户 ID；创建时写入 userId；对话任务的可见性改看 Claw 资源的 userId；投影不返回 userId；§5.2.2 删除全量拉取的容量缺口。 |
 | 1.6.0 | 2026-10-20 | 新增 §4.2.8 详情接口的完整定义：路径参数、200 响应、双语错误表，示例由接口 HTML 展示。 |
 | 1.5.1 | 2026-10-20 | 任务列表与 Run 列表的 result 增加 total：当前用户可见且匹配筛选的总数，由 Mate 过滤后统计（指定 scheduleId 的 Run 列表直接用 Claw 的 total）；Claw 列表同步增加 total（Claw 主设计 0.69.0）。 |
 | 1.5.0 | 2026-10-20 | 新增 §4.2.7 列表接口的完整定义：query 与校验方、200 响应与空结果、双语错误表，示例由接口 HTML 展示。 |

@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.22.0 · 日期：2026-10-15 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.23.0 · 日期：2026-10-21 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -90,11 +90,11 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 
 ### 3.1 Mate 与 Claw 的身份边界
 
-**当前目标：用户、组织、租户、资源归属与权限由 Mate 维护，Claw 不保存这些信息或其引用副本。** Claw 保存 Schedule、Run、Session 和 execution 的技术标识、内容及执行状态；Mate 保存这些资源标识与用户、管理范围、授权政策的关联。资源独立存续不要求 Claw 复制用户归属。
+**当前目标：用户、组织、租户、资源归属与权限由 Mate 维护，Claw 不保存这些信息或其引用副本；唯一例外是 `t_schedule.user_id`，只用于按用户列出任务。** Claw 保存 Schedule、Run、Session 和 execution 的技术标识、内容及执行状态；Mate 保存这些资源标识与用户、管理范围、授权政策的关联。资源独立存续不要求 Claw 复制用户归属。
 
 - Claw 的 Session、Schedule、Run、DTO、Mapper、执行上下文及通用 Runtime 均不保存 `scope_ref` / `scopeRef`、`session_owner_ref` / `sessionOwnerRef`；Schedule 的 `operator_ref` / `operatorRef` 同步移出。不能改名为 tenant、owner、subject 或藏入 JSON 延续相同职责。
 - Mate 对会话读取、继续对话、停止、删除以及任务管理执行当前权限检查。Claw 校验可信服务来源、具体操作和资源约束，再检查自己的业务状态；缺少或失效的 Mate 授权结果时拒绝，不退化为任意内部调用均可访问。单个资源授权不能扩展到其他资源。
-- 任务/Run 列表的可见范围由 Mate 决定，Claw 不得自己推导。首版（2026-10-13 评审确定）由 Mate 拉取 Claw 的全部存续记录后按用户过滤、排序和分页，Claw 不接收获准集合、不保存 userId；读取量随全部记录增长。Claw 增加 userId 列为待定 T10。
+- 任务/Run 列表按任务创建者筛选（2026-10-21 确定，替代 2026-10-13 的“Mate 拉取全部后过滤”）：`t_schedule.user_id` 保存创建者，创建后不可修改；Mate 查询时传入当前用户，Claw 按它筛选、分页并返回 total。user_id 只是筛选条件，不作为授权依据；Session、Run 不保存用户，详情与写操作的可见性仍由 Mate 判断。结构见[定时任务设计 §3.2.2](../01-总体架构/08-CampusClaw定时任务/README.md#t_schedule)。
 - 定时任务不保存授权引用或凭据引用：用户权限只在配置任务时由 Mate 检查，运行时统一账号的 access-token 由 Mate 按批次签发，Claw 不落库。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
 - PR 中的扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户；两者已随扫描协调表和启动权一并目标撤销。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
 
@@ -770,6 +770,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.23.0 | 2026-10-21 | §3.1 增加例外：`t_schedule.user_id` 保存任务创建者，任务与 Run 列表由 Claw 按用户筛选，替代 Mate 拉取全部后过滤。 |
 | 1.22.0 | 2026-10-15 | t_skill_usage.entry_point 的 Subagent 来源值改为 SUBAGENT，约束同步改名。 |
 | 1.21.0 | 2026-10-15 | 定时任务两张表的结构移入定时任务设计 §3.2，§5 只保留入口。 |
 | 1.20.0 | 2026-10-14 | §5.4 受理行与主设计 §3.5、D10 对齐：手动运行允许 paused，删除“授权有效”。 |
