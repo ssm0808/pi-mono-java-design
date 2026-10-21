@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusMate 定时任务管理 API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -58,7 +58,7 @@
         "status": "200",
         "tabLabel": "200 · 列表",
         "label": "OK",
-        "summary": "每项与创建、详情相同，是把 sessionId 换成 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。total 是当前用户创建且匹配筛选的任务总数，不受分页影响；total 与 nextPage 直接使用 Claw 返回的值。",
+        "summary": "每项与创建、详情相同，是把 sessionId 改名为 chatId 的完整任务；接口创建的任务 chatId 为 null，对话中创建的任务为原 Chat。按 updatedAt 从新到旧、id 升序排列。没有更多任务时 nextPage 为 null；超出末页或无匹配返回空数组，不返回 404。total 是当前用户创建且匹配筛选的任务总数，不受分页影响；total 与 nextPage 直接使用 Claw 返回的值。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store"
@@ -169,7 +169,7 @@
         "status": "500",
         "tabLabel": "500 · SCHEDULE_READ_FAILED",
         "label": "Internal Server Error",
-        "summary": "Claw 中有任务记录损坏或投影失败，不伪装成空列表。Mate 读取 Chat 映射（投影 chatId）失败时与其他接口一样返回 Mate 通用 500。",
+        "summary": "Claw 中有任务记录损坏或投影失败，不伪装成空列表。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",

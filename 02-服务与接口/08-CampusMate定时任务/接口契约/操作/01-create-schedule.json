@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusMate 定时任务管理 API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -9,7 +9,7 @@
     "method": "POST",
     "path": "/schedules",
     "summary": "创建定时任务",
-    "description": "当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 把请求体与用户的 access-token 转发给 Claw，Claw 用 token 查出创建者并检查配额后保存；Mate 不写本地记录，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "description": "当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 把请求体与用户的 access-token 转发给 Claw，Claw 用 token 查出创建者并检查配额后保存；Mate 不写本地记录，返回把 sessionId 改名为 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
     "parameters": [],
     "requestBody": {
       "required": true,
