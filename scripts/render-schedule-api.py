@@ -100,7 +100,8 @@ def response(status, summary, body=None, key=None, label='OK', base_headers=None
 def bilingual_errors(section, allowed=None):
     result = []
     labels = {'400': 'Bad Request', '401': 'Unauthorized', '403': 'Forbidden',
-              '404': 'Not Found', '409': 'Conflict', '500': 'Internal Server Error',
+              '404': 'Not Found', '409': 'Conflict', '422': 'Unprocessable Entity',
+              '500': 'Internal Server Error',
               '503': 'Service Unavailable'}
     for table in tables(section):
         if table['columns'][0] != 'HTTP / resCode' or len(table['columns']) != 3:
@@ -164,10 +165,19 @@ def build_models(claw):
                         '使用创建返回的原 ID，不按名称定位；精确格式沿企业 ID 契约校准。')
     no_body = {'required': False, 'description': '无请求体；不接收业务查询参数。'}
     manage_error_codes = {row['bodies']['zh-CN']['resCode']: row for row in bilingual_errors(source['4.10.'])}
-    not_found_response = response(404, '目标不存在、已删除或不在当前可见范围。', not_found,
+    not_found_response = response(404, '目标不存在、已删除或不属于当前用户。', not_found,
                                   'SCHEDULE_NOT_FOUND', 'Not Found')
     not_found_response['bodies']['en-US'] = {'resCode': not_found['resCode'],
                                           'resMsg': 'Schedule not found or not accessible.'}
+    auth_response = copy.deepcopy(manage_error_codes['SCHEDULE_AUTH_REQUIRED'])
+    auth_response['summary'] = '缺少 access-token，或用户查询接口拒绝该 token；不读写任务。'
+    quota_response = response(422, '该用户接口配置的任务数已达上限；对话中创建的任务不计入，不写入。',
+                              {'resCode': 'SCHEDULE_QUOTA_EXCEEDED',
+                               'resMsg': '定时任务数量已达上限，请删除不再需要的任务后再创建。'},
+                              'SCHEDULE_QUOTA_EXCEEDED', 'Unprocessable Entity')
+    quota_response['bodies']['en-US'] = {
+        'resCode': 'SCHEDULE_QUOTA_EXCEEDED',
+        'resMsg': 'You have reached the maximum number of schedules. Delete schedules you no longer need and try again.'}
     models = []
     busy_en = copy.deepcopy(busy)
     for table in tables(source['4.7.']):
@@ -180,38 +190,40 @@ def build_models(claw):
         details = common_rules + contract_sections(source, numbers) + shared_errors
         models.append(model(key, method, route, name, purpose, params, body,
                             success + (errors or []), details,
-                            user_token=key in ('CreateSchedule', 'ListSchedules', 'ListScheduleRuns')))
+                            user_token=True))
 
     add('CreateSchedule', 'POST', '/schedules', '创建任务配置',
         '保存园区告警汇总任务的 Agent、prompt 和时间规则，返回完整配置及计划摘要。保存不立即运行；有效 Cron 登记自动计划。',
         [], {'required': True, 'contentType': 'application/json', 'description': '创建任务配置。字段与默认值见下方规则。', 'example': create},
         [response(201, '返回完整 Schedule；不创建 Session。', schedule, base_headers={
             'Location': '/campusclaw-service/v1/schedules/' + schedule['result']['id']})],
-        ['3.', '3.1.', '3.3.', '3.4.', '3.6.', '3.7.', '4.1.', '4.1.1.', '4.2.', '5.'])
+        ['3.', '3.1.', '3.3.', '3.4.', '3.6.', '3.7.', '4.1.', '4.1.1.', '4.2.', '5.'],
+        [auth_response, quota_response])
     queries = [parameter('query', row[0], False, row[1], row[1]) for row in tables(source['4.4.'])[0]['rows']]
     add('ListSchedules', 'GET', '/schedules', '查询任务列表',
         '按名称、Agent 和状态查找当前可见的任务，分页返回与详情同形的完整配置。',
         queries, {'required': False, 'description': '无请求体。响应示例对应 page=1、limit=1、status=active。'},
-        [response(200, '当前查询还有后续记录，nextPage=2。', listing)], ['4.4.'])
+        [response(200, '当前查询还有后续记录，nextPage=2。', listing)], ['4.4.'], [auth_response])
     add('GetSchedule', 'GET', '/schedules/{scheduleId}', '查询任务详情',
         '读取任务当前完整配置与计划摘要；具体运行的受理结果和业务结果分别从 Run、Session 读取。',
         [path_id], no_body, [response(200, '复用创建成功的完整资源形状；此处展示同一示例配置。', schedule)],
-        ['4.3.'], [not_found_response])
+        ['4.3.'], [auth_response, not_found_response])
     add('UpdateSchedule', 'POST', '/schedules/{scheduleId}', '部分更新任务配置',
         '提交需要改变的字段，服务端合并最新配置并原子保存，返回完整资源；修改不触发运行。',
         [path_id], {'required': True, 'contentType': 'application/json', 'description': '至少提供一个可写字段；省略保持、null 按字段规则处理。',
                     'example': update, 'examples': [{'label': '清除自动计划', 'description': '只清除规则，不暂停任务、不运行、不取消在途。', 'value': clear}]},
         [response(200, '原子更新后返回完整配置。', updated)], ['4.5.'],
-        [response(400, '字段校验失败；不部分保存。', invalid_rule, 'SCHEDULE_RULE_INVALID', 'Bad Request')])
+        [response(400, '字段校验失败；不部分保存。', invalid_rule, 'SCHEDULE_RULE_INVALID', 'Bad Request'),
+         auth_response, not_found_response])
     add('DeleteSchedule', 'DELETE', '/schedules/{scheduleId}', '删除任务配置',
         '删除任务及其全部 Run，停止未来受理，返回最后配置的一次回执；已生成 Session 保留并独立管理。',
         [path_id], {'required': False, 'description': '无业务查询、无请求体；非空正文（含 {}）返回400。'},
         [response(200, '完整 Schedule 删除回执；之后配置和对应 Run 详情404，列表排除。', deleted)],
         ['4.6.'], bilingual_errors(source['4.6.']))
     action_codes = {
-        'run': ['SCHEDULE_REQUEST_INVALID', 'SCHEDULE_AUTH_REQUIRED', 'SCHEDULE_RUN_FORBIDDEN', 'SCHEDULE_NOT_FOUND', 'SCHEDULE_RUN_FAILED', 'SCHEDULE_SERVICE_UNAVAILABLE'],
-        'pause': ['SCHEDULE_REQUEST_INVALID', 'SCHEDULE_AUTH_REQUIRED', 'SCHEDULE_MANAGE_FORBIDDEN', 'SCHEDULE_NOT_FOUND', 'SCHEDULE_PAUSE_FAILED', 'SCHEDULE_SERVICE_UNAVAILABLE'],
-        'unpause': ['SCHEDULE_REQUEST_INVALID', 'SCHEDULE_AUTH_REQUIRED', 'SCHEDULE_MANAGE_FORBIDDEN', 'SCHEDULE_NOT_FOUND', 'SCHEDULE_ACTIVATION_REJECTED', 'SCHEDULE_UNPAUSE_FAILED', 'SCHEDULE_SERVICE_UNAVAILABLE'],
+        'run': ['SCHEDULE_REQUEST_INVALID', 'SCHEDULE_AUTH_REQUIRED', 'SCHEDULE_NOT_FOUND', 'SCHEDULE_RUN_FAILED', 'SCHEDULE_SERVICE_UNAVAILABLE'],
+        'pause': ['SCHEDULE_REQUEST_INVALID', 'SCHEDULE_AUTH_REQUIRED', 'SCHEDULE_NOT_FOUND', 'SCHEDULE_PAUSE_FAILED', 'SCHEDULE_SERVICE_UNAVAILABLE'],
+        'unpause': ['SCHEDULE_REQUEST_INVALID', 'SCHEDULE_AUTH_REQUIRED', 'SCHEDULE_NOT_FOUND', 'SCHEDULE_ACTIVATION_REJECTED', 'SCHEDULE_UNPAUSE_FAILED', 'SCHEDULE_SERVICE_UNAVAILABLE'],
     }
     for action, key, name, purpose, number, successes in [
         ('run', 'RunSchedule', '立即运行任务', '使用已保存配置发起一次真实运行，返回已记录的 Session 受理结果；不等待业务完成。', '4.7.',
@@ -231,16 +243,16 @@ def build_models(claw):
     run_queries = [parameter('query', row[0], False, row[1], row[1])
                    for table in tables(source['4.11.']) if table['columns'][0] == '列表query' for row in table['rows']]
     run_list = {'resCode': '0', 'resMsg': 'success', 'result': {'runs': [run['result']], 'nextPage': None}}
-    run_missing = response(404, 'Run或所属任务不存在、已删除或不可见。',
+    run_missing = response(404, 'Run或所属任务不存在、已删除，或所属任务不属于当前用户。',
                            {'resCode': 'SCHEDULE_RUN_NOT_FOUND', 'resMsg': '定时运行不存在或不可访问。'},
                            'SCHEDULE_RUN_NOT_FOUND', 'Not Found')
     run_missing['bodies']['en-US'] = {'resCode': 'SCHEDULE_RUN_NOT_FOUND', 'resMsg': 'Schedule run not found or not accessible.'}
     for key, route, name, params, value, note, errors in [
         ('ListScheduleRuns', '/schedule-runs', '查询运行列表', run_queries, run_list,
-         '按原文 runs/nextPage 结构投影完整 Run 示例；示例仅有一条记录，无后续页。', []),
+         '按原文 runs/nextPage 结构投影完整 Run 示例；示例仅有一条记录，无后续页。', [auth_response]),
         ('GetScheduleRun', '/schedule-runs/{runId}', '查询运行详情',
          [parameter('path', 'runId', True, '服务端原 ID；大小写敏感、不复用', '独立的 Run 标识。')], run,
-         '复用立即运行的完整八字段 Run 示例；业务结果仍从 Session 读取。', [run_missing]),
+         '复用立即运行的完整八字段 Run 示例；业务结果仍从 Session 读取。', [auth_response, run_missing]),
     ]:
         add(key, 'GET', route, name, '读取已确定的运行受理结果；Run与Session各自执行当前授权，查询不启动或取消执行。',
             params, {'required': False, 'description': '无请求体；列表支持所列筛选，详情不接收业务query。'},

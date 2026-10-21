@@ -215,7 +215,7 @@ endlegend
 ' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a；2026-10-08 拉取 main（未变化）。
 ' 源码：modules/cron/src/main/java/com/campusclaw/cron/store/CronStore.java saveUnsafe（旧文件持久化）。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepare（不是只读管理检查）。
-' 表达方式：Mate 发起请求并提供授权；定时任务管理校验并保存；存储提交。
+' 表达方式：Mate 发起请求并转发用户的 access-token；定时任务管理查出用户、检查配额、校验并保存；存储提交。
 ' 设计原因：管理检查不准备也不执行 Agent Session。
 ' 目标：待实现；任务内容为纯文本 prompt，不保存凭据引用。
 ' 表达方式：只画正常流程；失败与恢复规则见 README.md 第 5.2.1 节。
@@ -230,9 +230,11 @@ participant "定时任务管理" as Schedule
 database "存储" as Store
 autonumber
 activate Mate
-Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则
-Schedule -> Schedule : 校验输入和时间规则
-Schedule -> Store ++ : 提交新的启用配置\n含下次计划时间
+Mate -> Schedule ++ : 创建任务：Agent、任务内容和可选规则\n转发用户的 access-token
+Schedule -> Schedule : 用 access-token 查出用户 ID\n校验输入和时间规则
+Schedule -> Store ++ : 统计该用户接口配置的任务数
+return 未达上限
+Schedule -> Store ++ : 提交新的启用配置\n含创建者 user_id 与下次计划时间
 return 已提交的配置
 return 201 + 已保存的配置\n及未来计划时间
 deactivate Mate
@@ -261,9 +263,9 @@ participant "定时任务管理" as Schedule
 database "存储" as Store
 autonumber
 activate Mate
-Mate -> Schedule ++ : 立即运行已保存的任务
-Schedule -> Schedule : 核验目标任务
-Schedule -> Store ++ : 读取当前任务并预留一个手动 Run\n检查共用任务槽位；不改自动计划
+Mate -> Schedule ++ : 立即运行已保存的任务\n转发用户的 access-token
+Schedule -> Schedule : 用 access-token 查出用户 ID\n核验目标任务
+Schedule -> Store ++ : 锁定任务并复查属于该用户\n预留一个手动 Run，检查共用任务槽位；不改自动计划
 return 已预留的 Run
 ref over Schedule, Store
   共用受理流程
@@ -304,7 +306,7 @@ autonumber
 [-> Schedule ++ : 受理一个已预留的 Run
 == 登记独立归属 ==
 Schedule -> Schedule : 固定本次 Run 拟建的 Session ID
-Schedule -> Mate ++ : 按资源 ID 登记 Session 归属\nClaw 不提供用户、租户或 owner
+Schedule -> Mate ++ : 登记 Session 归属\n传资源 ID 与任务的 userId，不传租户或 owner
 return 归属已持久登记
 == 只准备、不执行 ==
 Schedule -> Runtime ++ : 准备 Agent、模型和 CRON 上下文\n沿用固定的 Session ID；不执行业务
@@ -328,7 +330,7 @@ end note
 ' Java 基线：553dcd5e2ff682f9684810a043b442b37a02e54a，main，拉取日期 2026-10-05。
 ' 源码：modules/cron/src/main/java/com/campusclaw/cron/CronService.java createJob。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/RuntimeExecutionPersistenceService.java acceptMessage。
-' 映射：Mate 同时是运营人员的管理入口，以及配置授权、会话归属和统一账号 access-token 的提供方；Mate 内部处理待定。
+' 映射：Mate 同时是运营人员的管理入口（检查功能权限并转发用户的 access-token），以及会话归属和统一账号 access-token 的提供方；任务归属以 Claw 任务的 user_id 为准。
 ' 已确认：Claw 侧逻辑经评审人 2026-10-12 确认。
 ' 粒度：参与者统一为服务级。Claw = coding-agent 服务，含定时任务管理、到期分发、受理协调和既有 Session 运行时；GaussDB = 调度与 Session 存储。
 ' 粒度：Claw 内部组件之间的协作只在详细时序图中展开。
@@ -348,9 +350,9 @@ autonumber
 == 配置定时任务 ==
 Operator -> Mate ++ : 配置定时任务（每天 22:00 视频巡逻检查）
 activate Operator
-note right of Mate : Mate 内部处理待定（评审 Todo T8）
-Mate -> Claw ++ : 创建该定时任务
-Claw -> Store ++ : 保存该定时任务
+Mate -> Claw ++ : 创建该定时任务（转发用户的 access-token）
+Claw -> Claw : 查出用户并检查该用户的任务数
+Claw -> Store ++ : 保存该定时任务（含创建者 user_id）
 return 已保存的定时任务
 return 定时任务及下次运行时间
 return 返回已生效的定时任务及下次运行时间
@@ -359,7 +361,7 @@ deactivate Operator
 [-> Claw ++ : 到达计划时间（每天 22:00）
 Claw -> Store ++ : 记录本次运行
 return 运行记录
-Claw -> Mate ++ : 登记新会话的归属
+Claw -> Mate ++ : 登记新会话的归属（含任务的 userId）
 return 会话归属
 Claw -> Store ++ : 保存新会话及任务内容
 return 新会话
@@ -372,7 +374,8 @@ deactivate Claw
 == 查看巡逻结果 ==
 Operator -> Mate ++ : 查看巡逻结果
 activate Operator
-Mate -> Claw ++ : 查询运行记录及对应会话
+Mate -> Claw ++ : 查询运行记录及对应会话（转发用户的 access-token）
+Claw -> Claw : 查出用户，只返回该用户任务的运行记录
 Claw -> Store ++ : 读取运行记录及会话
 return 运行记录及会话内容
 return 运行记录、巡逻结论及工具证据
