@@ -420,7 +420,7 @@ end note
 ' 目标：待实现；对话中通过 Cron 工具创建定时任务，到点在同一对话中运行，之后在该对话查看结果。
 ' 源码证据：superheromeZzh/pi-mono-java PR #332 codex/scheduled-task-backend 0e8c75f8 的 tool/cron/CronTool.java 只有 list、status、runs，写动作待实现。
 ' 证据：M06 chat-events-design.md 的同一 Session 只允许一个 active execution；工具确认沿用普通对话的确认交互。
-' 设计原因：任务关联当前会话，归属随会话，不经 Mate 授权与归属登记；创建需用户确认；会话正忙时本次跳过。
+' 设计原因：任务关联当前会话，归属随会话，不经 Mate 授权与归属登记；创建前用本轮 access-token 查询用户 ID 写入任务，供列表按用户筛选（README D9、§4.8.3，接口提供方待补充）；创建需用户确认；会话正忙时本次跳过。
 ' 粒度：参与者统一为服务级。Mate = mate-service；Claw = coding-agent 服务；GaussDB = Claw 数据库。
 ' 表达方式：只画正常流程；会话忙、拒绝确认与删除会话的规则见 README.md 第 3.12、3.13 节与第 5.2.1 节。
 title 对话中创建视频巡逻检查任务并在该对话中运行
@@ -438,13 +438,15 @@ User -> Mate ++ : 发送消息（每天 22:00 做视频巡逻检查，结果发�
 activate User
 Mate -> Claw ++ : 提交用户消息
 Claw -> Claw : 模型调用 Cron 工具创建任务\n校验规则并算出接下来的运行时间
+Claw -> Mate ++ : 用本轮 access-token 查询当前用户 ID
+return 用户 ID
 return 请求用户确认
 return 展示确认内容（任务内容、规则、接下来的运行时间）
 deactivate User
 User -> Mate ++ : 确认创建
 activate User
 Mate -> Claw ++ : 提交工具确认
-Claw -> Db ++ : 锁定会话，核对本会话任务数\n保存任务并关联本会话
+Claw -> Db ++ : 锁定会话，核对本会话任务数\n保存任务（含创建者 user_id）并关联本会话
 return 已保存的任务
 Claw -> Claw : 工具结果交给模型生成回复
 return 回复（任务已创建，下次运行时间）

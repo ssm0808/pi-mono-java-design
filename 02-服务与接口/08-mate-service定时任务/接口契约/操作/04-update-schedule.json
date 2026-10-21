@@ -1,0 +1,292 @@
+{
+  "api": {
+    "title": "mate-service 定时任务管理 API",
+    "version": "1.8.0",
+    "basePath": "/mate-service/v1",
+    "visibility": "Public · 待评审 · 待实现"
+  },
+  "operation": {
+    "method": "POST",
+    "path": "/schedules/{scheduleId}",
+    "summary": "部分更新定时任务",
+    "description": "用户修改已有定时任务的时间规则、描述、任务内容或 Agent，只提交要改的字段。Mate 先检查任务对当前用户可见，再把请求体原样转给 Claw 合并保存，返回把 sessionId 换成 chatId 的完整任务。修改不触发运行。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "scheduleId",
+        "required": true,
+        "schema": "string, schedule-{32 位十六进制}",
+        "description": "创建或列表返回的任务 ID，原样传回，不按名称查找，不自行构造；格式非法由 Claw 返回 400"
+      }
+    ],
+    "requestBody": {
+      "required": true,
+      "contentType": "application/json",
+      "description": "规则与 Claw 部分更新接口相同，Mate 原样转发、不增删。省略的字段保持原值，至少提交一个字段。name、agentId、prompt 提交 null 拒绝；description 提交 null 或空白清除；schedule 整体替换，提交 null 清除自动计划但不暂停，timezone 省略时为 Asia/Shanghai；metadata 逐键合并，键的值为 null 删除该键，顶层 null 拒绝。对话中创建的任务不能换 Agent。不得传入 chatId、sessionId、userId 或 type、id、status、pausedReason、createdAt、updatedAt、lastRunAt、upcomingRunsAt 等只读字段，未知字段同样拒绝。",
+      "example": {
+        "description": "汇总前一日告警并跟进未关闭工单",
+        "schedule": {
+          "type": "cron",
+          "expression": "0 0 9 * * MON-FRI",
+          "timezone": "Asia/Shanghai"
+        },
+        "metadata": {
+          "purpose": "alarm-follow-up"
+        }
+      }
+    },
+    "responses": [
+      {
+        "id": "200-ok",
+        "status": "200",
+        "tabLabel": "200 · 已更新",
+        "label": "OK",
+        "summary": "返回合并保存后的完整任务，与创建、详情相同。示例把 08:00 改为 09:00 并新增描述，metadata 中未提交的 parkCode 保留。配置有变化时 updatedAt 更新；暂停中的任务修改后仍为 paused。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "接口创建的任务": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "type": "schedule",
+              "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
+              "name": "工作日园区告警汇总",
+              "description": "汇总前一日告警并跟进未关闭工单",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "chatId": null,
+              "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
+              "schedule": {
+                "type": "cron",
+                "expression": "0 0 9 * * MON-FRI",
+                "timezone": "Asia/Shanghai",
+                "lastRunAt": null,
+                "upcomingRunsAt": [
+                  "2026-10-05T01:00:00Z",
+                  "2026-10-06T01:00:00Z",
+                  "2026-10-07T01:00:00Z",
+                  "2026-10-08T01:00:00Z",
+                  "2026-10-09T01:00:00Z"
+                ]
+              },
+              "status": "active",
+              "pausedReason": null,
+              "createdAt": "2026-10-04T02:00:00Z",
+              "updatedAt": "2026-10-04T02:30:00Z",
+              "metadata": {
+                "parkCode": "park-east",
+                "purpose": "alarm-follow-up"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "400-schedule-name-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_NAME_INVALID",
+        "label": "Bad Request",
+        "summary": "name 为 null、空白或超长。Claw 校验，错误码原样返回，不保存任何修改。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_NAME_INVALID",
+            "resMsg": "定时任务名称无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_NAME_INVALID",
+            "resMsg": "Invalid schedule name."
+          }
+        }
+      },
+      {
+        "id": "400-schedule-prompt-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_PROMPT_INVALID",
+        "label": "Bad Request",
+        "summary": "prompt 为 null、非字符串或空白。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_PROMPT_INVALID",
+            "resMsg": "定时任务内容无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_PROMPT_INVALID",
+            "resMsg": "Invalid schedule prompt."
+          }
+        }
+      },
+      {
+        "id": "400-schedule-rule-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_RULE_INVALID",
+        "label": "Bad Request",
+        "summary": "schedule 不是 cron 对象或表达式非法。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_RULE_INVALID",
+            "resMsg": "定时规则无效，请使用合法的 Spring 六字段 Cron 表达式。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_RULE_INVALID",
+            "resMsg": "Invalid schedule rule. Use a valid Spring six-field Cron expression."
+          }
+        }
+      },
+      {
+        "id": "400-schedule-timezone-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_TIMEZONE_INVALID",
+        "label": "Bad Request",
+        "summary": "timezone 不是有效的 IANA 名称。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_TIMEZONE_INVALID",
+            "resMsg": "定时时区无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_TIMEZONE_INVALID",
+            "resMsg": "Invalid schedule timezone."
+          }
+        }
+      },
+      {
+        "id": "400-schedule-request-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_REQUEST_INVALID",
+        "label": "Bad Request",
+        "summary": "请求体为空对象或 JSON 非法；description、agentId、metadata 不合规；对话中创建的任务换 Agent；传入 chatId、sessionId、userId、只读或未知字段。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "定时任务请求无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "Invalid schedule request."
+          }
+        }
+      },
+      {
+        "id": "404-schedule-not-found",
+        "status": "404",
+        "tabLabel": "404 · SCHEDULE_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "任务不存在、已删除，或对当前用户不可见，三种情况结果相同；Mate 判断不可见时不调用 Claw。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_NOT_FOUND",
+            "resMsg": "定时任务不存在或不可访问。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_NOT_FOUND",
+            "resMsg": "Schedule not found or not accessible."
+          }
+        }
+      },
+      {
+        "id": "422-schedule-policy-rejected",
+        "status": "422",
+        "tabLabel": "422 · SCHEDULE_POLICY_REJECTED",
+        "label": "Unprocessable Entity",
+        "summary": "新的 Cron 规则超出部署频率策略，由 Claw 判断。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_POLICY_REJECTED",
+            "resMsg": "定时任务超出部署策略。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_POLICY_REJECTED",
+            "resMsg": "The schedule exceeds the deployment policy."
+          }
+        }
+      },
+      {
+        "id": "500-schedule-update-failed",
+        "status": "500",
+        "tabLabel": "500 · SCHEDULE_UPDATE_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Claw 内部处理失败，没有保存任何修改。Mate 读取 t_schedule 或 Chat 映射失败时返回 Mate 通用 500。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_UPDATE_FAILED",
+            "resMsg": "更新定时任务失败。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_UPDATE_FAILED",
+            "resMsg": "Failed to update the schedule."
+          }
+        }
+      },
+      {
+        "id": "503-schedule-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · SCHEDULE_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Claw 不可达、证书校验失败，或结果未知（超时、断连）。Mate 不自动重试，页面先读取详情核对修改是否已保存。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "定时任务服务暂不可用，请刷新后确认修改是否已保存。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "The schedule service is temporarily unavailable. Refresh to check whether your changes were saved."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "部分更新接口待评审",
+    "promptPrefix": "更新 POST /mate-service/v1/schedules/{scheduleId}",
+    "promptSuffix": "保持与 mate-service 定时任务设计 §4.2 和 Claw 部分更新接口同步。"
+  }
+}
