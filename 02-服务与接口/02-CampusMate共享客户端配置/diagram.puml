@@ -170,10 +170,6 @@ package "coding-agent-cli：配置" as ConfigPkg {
     + requestTimeout : Duration
     + maxResponseBytes : int
   }
-  class MateToolProperties <<改造>> {
-    + enabled : boolean
-    + executeTimeout : Duration
-  }
 }
 
 package "coding-agent-cli：同步请求通道" as ChannelPkg {
@@ -187,7 +183,6 @@ package "coding-agent-cli：同步请求通道" as ChannelPkg {
     + pathValues : List<String>
     + body : String
     + headers : Map<String, String>
-    + timeout : Duration
   }
   class CampusMateCallException <<待实现>> {
     + kind : FailureKind
@@ -229,7 +224,6 @@ CampusMateRequest --> CampusMateOperation
 MateServiceClient --> CampusMateHttpClient
 HttpMateToolClient --> CampusMateHttpClient
 MateAccessTokenClient --> CampusMateHttpClient
-HttpMateToolClient ..> MateToolProperties : 工具执行超时
 
 legend bottom
   通道统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；成败只看 HTTP 状态，resCode 只进日志。
@@ -256,7 +250,7 @@ participant "Mate 调用通道" as Channel
 participant "Mate" as Mate
 [-> Exec ++ : 执行工单工具
 Exec -> ToolClient ++ : 执行工具（工具标识、参数、本次凭据）
-ToolClient -> Channel ++ : 发送工具执行请求（工具执行超时）
+ToolClient -> Channel ++ : 发送工具执行请求
 Channel -> Channel : 按接口目录生成地址（编码路径变量）
 Channel -> Mate ++ : 执行工具（本次凭据）
 return 统一响应
