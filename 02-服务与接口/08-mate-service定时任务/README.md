@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.7.0 |
+| 文档版本 | 1.8.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -370,7 +370,7 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | Run 列表 | GET `/schedule-runs` | GET `/schedule-runs` | 转发 access-token；指定任务时先检查可见性 |
 | Run 详情 | GET `/schedule-runs/{runId}` | GET `/schedule-runs/{runId}` | 按所属任务检查可见性 |
 
-路径和资源名与 Claw 一致。创建、列表与详情接口的完整定义见 [§4.2.6](#create-schedule-api)～[§4.2.8](#get-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
+路径和资源名与 Claw 一致。创建、列表、详情与部分更新接口的完整定义见 [§4.2.6](#create-schedule-api)～[§4.2.9](#update-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
 
 <a id="resource-projection"></a>
 
@@ -506,6 +506,47 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 | 500 / SCHEDULE_READ_FAILED | Claw 中的记录损坏或投影失败，不转成 404 | 读取定时任务失败。 / Failed to read the schedule. |
 | 500 / Mate 通用错误码 | Mate 读取 `t_schedule` 或 Chat 映射（投影 chatId）失败 | 沿用 Mate 通用文案 |
 | 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败或超时；可直接重试 | 定时任务服务暂不可用，请稍后重试。 / The schedule service is temporarily unavailable. Please try again later. |
+
+<a id="update-schedule-api"></a>
+
+#### 4.2.9 部分更新定时任务
+
+`POST /mate-service/v1/schedules/{scheduleId}`。用户把“工作日园区告警汇总”从 08:00 改到 09:00，或改描述、任务内容、Agent。Mate 先按 [§3.5](#detail-write) 检查可见性，不可见直接返回 404、不调用 Claw；可见则把请求体原样转给 Claw，Claw 在一个事务内合并并保存，Mate 投影后返回完整任务。Mate 不改 `t_schedule`，任务 ID 与创建者都不变；修改不触发运行。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [04-update-schedule.json](接口契约/操作/04-update-schedule.json)。本接口不定义请求头，不转发 access-token，没有 query 参数。
+
+| 参数 | 规定 |
+|---|---|
+| path.scheduleId | 必填；创建或列表返回的任务 ID，原样传回，不按名称查找；格式由 Claw 校验 |
+
+**请求体**：JSON 非空对象，规则与 Claw [§4.4.5](../../01-总体架构/08-CampusClaw定时任务/README.md#update-schedule-review) 相同，Mate 原样转发，校验由 Claw 完成。只提交要改的字段，省略的字段保持原值；至少提交一个字段。
+
+| 字段 | 提交新值 | 提交 null |
+|---|---|---|
+| name | 去首尾空白后 1～256 个字符，允许重名 | 拒绝 |
+| description | 最多 2048 个字符 | 清除；空字符串和空白同样清除 |
+| agentId | 只校验格式，之后的运行使用新 Agent，不改历史 Run；对话中创建的任务不能换 Agent | 拒绝 |
+| prompt | 整体替换，去首尾空白后非空 | 拒绝 |
+| schedule | 整体替换为 `{type:"cron", expression, timezone}`；timezone 省略时为 Asia/Shanghai，不沿用旧值 | 清除自动计划，任务只能手动运行；不暂停任务 |
+| metadata | 逐键合并：新键加入、同名键覆盖，键的值为 null 时删除该键，未提交的键保留 | 拒绝 |
+| chatId、sessionId、userId 与只读字段 | 不得传入 | 传入 chatId、sessionId、userId、type、id、status、pausedReason、时间字段或其他未知字段，返回 400 `SCHEDULE_REQUEST_INVALID` |
+
+**成功响应**：HTTP 200，`Cache-Control: no-store`。result 与创建、详情相同，是 [§4.2.3](#resource-projection) 投影后的完整任务。配置有变化时 updatedAt 更新，提交的值与原值相同则不变；暂停中的任务修改后仍为 paused，暂停原因不变；schedule 非空时按新规则重新计算 upcomingRunsAt，lastRunAt 保留。
+
+**并发与结果未知**：不使用版本号，两个页面同时修改时各字段按后提交的值保存，不返回冲突。超时或断连时返回 503，Mate 不自动重试；页面先读取详情核对，再决定是否重新提交，规则同 Claw [§4.5](../../01-总体架构/08-CampusClaw定时任务/README.md#reliable-write-flow)。
+
+**错误**
+
+| HTTP / resCode | 条件 | 中 / 英 |
+|---|---|---|
+| 400 / SCHEDULE_NAME_INVALID | name 为 null、空白或超长 | 定时任务名称无效。 / Invalid schedule name. |
+| 400 / SCHEDULE_PROMPT_INVALID | prompt 为 null、非字符串或空白 | 定时任务内容无效。 / Invalid schedule prompt. |
+| 400 / SCHEDULE_RULE_INVALID | schedule 不是 cron 对象或表达式非法 | 定时规则无效，请使用合法的 Spring 六字段 Cron 表达式。 / Invalid schedule rule. Use a valid Spring six-field Cron expression. |
+| 400 / SCHEDULE_TIMEZONE_INVALID | timezone 不是有效的 IANA 名称 | 定时时区无效。 / Invalid schedule timezone. |
+| 400 / SCHEDULE_REQUEST_INVALID | 请求体为空对象或 JSON 非法；description、agentId、metadata 不合规；对话中创建的任务换 Agent；传入 chatId、sessionId、userId、只读或未知字段 | 定时任务请求无效。 / Invalid schedule request. |
+| 404 / SCHEDULE_NOT_FOUND | 任务不存在、已删除或对当前用户不可见 | 定时任务不存在或不可访问。 / Schedule not found or not accessible. |
+| 422 / SCHEDULE_POLICY_REJECTED | 新的 Cron 规则超出部署频率策略 | 定时任务超出部署策略。 / The schedule exceeds the deployment policy. |
+| 500 / SCHEDULE_UPDATE_FAILED | Claw 内部处理失败，没有保存任何修改 | 更新定时任务失败。 / Failed to update the schedule. |
+| 500 / Mate 通用错误码 | Mate 读取 `t_schedule` 或 Chat 映射失败 | 沿用 Mate 通用文案 |
+| 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败，或结果未知（超时、断连）；不自动重试 | 定时任务服务暂不可用，请刷新后确认修改是否已保存。 / The schedule service is temporarily unavailable. Refresh to check whether your changes were saved. |
 
 <a id="mate-to-claw"></a>
 
@@ -732,6 +773,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.0 | 2026-10-21 | 新增 §4.2.9 部分更新接口的完整定义：可写字段与 null 规则、200 响应、并发与结果未知、双语错误表，示例由接口 HTML 展示。 |
 | 1.7.0 | 2026-10-21 | 列表改为由 Claw 按用户查询（D2，Claw D9）：创建、列表与 Run 列表把用户的 access-token 原样转给 Claw，由 Claw 查出用户 ID 后写入或筛选（修改 1.4.1 的“不转发 access-token”）；§3.4、§4.2.7 不再拉取全部页，分页与 total 直接用 Claw 返回的值；创建请求不得带 userId；对话任务的可见性改看 Claw 资源的 userId；投影不返回 userId；§5.2.2 删除全量拉取的容量缺口。 |
 | 1.6.0 | 2026-10-20 | 新增 §4.2.8 详情接口的完整定义：路径参数、200 响应、双语错误表，示例由接口 HTML 展示。 |
 | 1.5.1 | 2026-10-20 | 任务列表与 Run 列表的 result 增加 total：当前用户可见且匹配筛选的总数，由 Mate 过滤后统计（指定 scheduleId 的 Run 列表直接用 Claw 的 total）；Claw 列表同步增加 total（Claw 主设计 0.69.0）。 |
