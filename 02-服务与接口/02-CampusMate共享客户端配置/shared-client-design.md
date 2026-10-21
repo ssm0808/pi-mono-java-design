@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.2.0 |
+| 文档版本 | 0.3.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
 | 设计状态 | 待实现。路径目录、共享短请求通道和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil` 等现状见 [§8.2](#source-evidence) |
@@ -25,7 +25,7 @@
 |---|---|---|---|
 | T1 | 确认公司部署流水线没有覆盖任何 `CAMPUSMATE_*_PATH*` 环境变量；若有，按 [D1 代价](#key-decisions)评估 | Lotus | [D1](#key-decisions) |
 | T2 | 已确认（2026-10-21，Lotus）：Mate 用 HTTP 状态表达成败，非 2xx 即失败，业务失败只带 `resCode`、`resMsg`，没有 `result`。通道只按 HTTP 状态判定成败，不检查 `resCode`，与实现仓 `b0f45547` 的决定一致 | Lotus | [§3.3](#short-request-sequence) |
-| T3 | 确认短请求超时统一为 30 秒：工具发现从 60 秒收紧，定时取 token 从 5 秒放宽 | Lotus | [§5.3](#compatibility) |
+| T3 | 已确认（2026-10-21，Lotus）：短请求 10 秒、工具执行 60 秒、模型推理 600 秒，均可配置 | Lotus | [§7.1](#config-items) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
 | T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
 
@@ -53,7 +53,7 @@
 | R1 | 部署只需配置 Mate 服务地址，新增一个 Mate 接口不新增配置项或环境变量 | 约束 | 用户要求；推导，需确认 |
 | R2 | 同一种调用失败（不可达、超时、非 2xx、响应过大、响应无效）在所有短请求上按同一规则判定 | 稳定性 | 用户"五花八门"；[§8.2](#source-evidence) 中三套不同判定 |
 | R3 | 所有 Mate 请求只能发往 `campusmate.base-url` 指定的服务，路径不能改道到其他主机 | 安全 | 沿用 ADR-0026 |
-| R4 | 超时按调用类型配置，工具执行可以单独调整 | 稳定性 | 推导，需确认 |
+| R4 | 超时按调用类型分三组并均可配置：短请求 10 秒、工具执行 60 秒、模型推理 600 秒 | 稳定性 | 用户确认（T3） |
 | R5 | 不改变任何 Mate 接口的方法、路径、请求头、请求体和响应体 | 约束 | 沿用 ADR-0026 |
 | R6 | 发现请求不携带业务凭据；工具执行只携带本次执行的凭据快照 | 安全 | 沿用 [README §1](README.md) |
 
@@ -254,7 +254,7 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 | 变化 | 现状 | 目标 | 影响 |
 |---|---|---|---|
 | 路径配置 | 7 个 `campusmate.endpoints.*` 键和 `CAMPUSMATE_*_PATH*` 变量 | 删除，写进代码 | 已设置的变量被忽略；与默认值相同时无行为变化（T1） |
-| 短请求超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 短请求统一 30 秒；工具执行 60 秒可配 | 发现收紧，取 token 放宽（T3） |
+| 短请求超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 短请求统一 10 秒；工具执行 60 秒可配；模型推理 600 秒不变 | Runtime 读取从 30 秒、工具发现从 60 秒收紧到 10 秒，取 token 从 5 秒放宽到 10 秒（T3）；Mate 慢于 10 秒的读取会开始失败，【缺口】没有 Mate 实际耗时数据 |
 | `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 全部不检查，成败只看 HTTP 状态 | Mate 非 2xx 即失败（T2 已确认），行为不变 |
 | HTTP 状态 | Runtime 要求 2xx；取 token 要求 200；`MateRestUtil` 不检查 | 统一要求 2xx | 工具发现和执行遇到非 2xx 时更早失败 |
 | 响应上限 | 只有 Runtime 限制 4 MiB | 所有短请求限制 4 MiB | 工具结果超过 4 MiB 时失败；【缺口】未核验现有工具结果大小 |
@@ -279,7 +279,7 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 
 ### 6.4 QA 流程
 
-【缺口】与 Mate 联调覆盖 7 个接口各一次成功调用和一次非 2xx 失败，以及 T3 的行为变化确认。
+【缺口】与 Mate 联调覆盖 7 个接口各一次成功调用和一次非 2xx 失败，以及 Agent、Skill 较多时读取能否在 10 秒内完成。
 
 ## 7. 基建规范
 
@@ -291,9 +291,10 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 |---|---|---|---|---|
 | `campusmate.base-url` | `CAMPUSMATE_BASE_URL` | 通用模块无默认值；公司镜像 `https://localhost:8591`（ADR-0042） | 规则不变，见 [README §5](README.md) | Mate 服务地址 |
 | `campusmate.http.connect-timeout` | `CAMPUSMATE_HTTP_CONNECT_TIMEOUT` | `PT10S` | 正数 | 短请求连接超时（新增，取代 `campusmate.runtime.connect-timeout`） |
-| `campusmate.http.request-timeout` | `CAMPUSMATE_HTTP_REQUEST_TIMEOUT` | `PT30S` | 正数 | 读取、查询、取 token 的单次超时（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
+| `campusmate.http.request-timeout` | `CAMPUSMATE_HTTP_REQUEST_TIMEOUT` | `PT10S` | 正数 | 读取、查询、取 token 的单次超时（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
 | `campusmate.http.max-response-bytes` | `CAMPUSMATE_HTTP_MAX_RESPONSE_BYTES` | `4194304` | 正整数 | 所有短请求的响应上限（新增，取代 `campusmate.runtime.max-response-bytes`） |
 | `campusmate.tool.execute-timeout` | `CAMPUSMATE_TOOL_EXECUTE_TIMEOUT` | `PT60S` | 正数 | 工具执行单次超时（新增，取代写死的 60 秒） |
+| `campusmate.model.response-timeout` | `CAMPUSMATE_MODEL_RESPONSE_TIMEOUT` | `PT600S`（与现有 `PT10M` 相同） | 正数 | 模型流式推理超时（已有，不变） |
 
 删除的配置：`campusmate.endpoints.*` 全部 7 项及其环境变量；`campusmate.runtime.connect-timeout`、`request-timeout`、`max-response-bytes`；`campusclaw.schedule.access-token-timeout`。`campusmate.model.*`、`campusmate.runtime.agents-root`、`campusmate.tool.enabled` 不变。
 
@@ -349,6 +350,7 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.3.0 | 2026-10-21 | 超时分三组且均可配置：短请求 10 秒、工具执行 60 秒、模型推理 600 秒。 |
 | 0.2.0 | 2026-10-21 | 短请求成败只按 HTTP 状态判定，不检查 `resCode`。 |
 | 0.1.1 | 2026-10-21 | T2 注明统一检查 `resCode` 会推翻 2026-08-26 的既有决定，并给出不改变行为的备选。 |
 | 0.1.0 | 2026-10-21 | Mate 接口路径写进代码目录，短请求共用一个通道，超时按调用类型分组。 |
