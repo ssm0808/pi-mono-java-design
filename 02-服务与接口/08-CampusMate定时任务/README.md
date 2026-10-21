@@ -1,6 +1,6 @@
 # CampusMate 定时任务设计
 
-[服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [共享连接目录](../02-CampusMate共享客户端配置/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
+[服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
 
 本文是 Mate 侧定时任务唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织，集中维护 Mate 在定时任务中的全部职责：对浏览器提供的管理接口、调用 Claw 前后的处理、为 Claw 提供的两个接口以及定时会话登记的对账。Claw 侧的调度、受理、表结构和 HTTP 契约只在 [Claw 主设计](../../01-总体架构/08-CampusClaw定时任务/README.md)维护，本文引用不复制。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
@@ -428,7 +428,7 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | Mate → Claw | 10 个定时任务接口 `/campusclaw-service/v1/schedules…`、`/schedule-runs…` | [Claw §4.2](../../01-总体架构/08-CampusClaw定时任务/README.md#interface-list)；Mate 侧约定见 [§4.3](#mate-to-claw) | 待实现 |
 | Claw → Mate | 获取统一账号 access-token | [§4.4.1](#scheduled-access-token) | Claw 已实现调用方，Mate 待实现 |
 | Claw → Mate | Session 归属登记与核对 | [§4.4.2](#session-ownership) | Claw 端口已接入受理，HTTP 适配与 Mate 待实现 |
-| Claw → Mate | Agent runtime、Skill、工具查询、工具执行、模型调用 | [共享连接目录](../02-CampusMate共享客户端配置/README.md) | 普通对话已在用，定时任务不新增 |
+| Claw → Mate | Agent runtime、Skill、工具查询、工具执行、模型调用 | [CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md) | 普通对话已在用，定时任务不新增 |
 
 <a id="management-api"></a>
 
@@ -697,7 +697,7 @@ Accept-Language: zh-CN
 
 | 项 | 规定 |
 |---|---|
-| 路径 | 草案路径；Claw 用[共享连接目录](../02-CampusMate共享客户端配置/README.md)的 `campusmate.endpoints.scheduled-access-token-path` 配置，与其他调用 Mate 的路径放在一起，服务地址沿用 `campusmate.base-url` |
+| 路径 | 草案路径；Claw 把路径写在代码中的接口目录 `CampusMateOperation.SCHEDULED_ACCESS_TOKEN`（见[CampusMate 与 CampusMCP 客户端 §3.2](../02-CampusMate与CampusMCP客户端/README.md#data-model)），服务地址沿用 `campusmate.base-url` |
 | 请求体与参数 | 无请求体，无 query 参数；不传用户、任务、Session 或 Agent 标识 |
 | 调用方认证 | 由 Claw 到 Mate 的证书校验保证（[M5](#m5)），Claw 不附加服务凭据，Mate 不另做应用层校验 |
 
@@ -896,6 +896,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | 2.1.0 | 2026-10-21 | 基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId（D4）：资源投影只把 sessionId 字段改名为 chatId，值不变，Mate 读取任务与 Run 时不再按 sessionId 查 chatId；删除各接口“读取 Chat 映射失败”的 500 和 chatId 暂时查不到的情况；相关时序图去掉查 chatId 的步骤。登记与 Chat 映射不变。Claw 不再返回 userId，资源投影去掉“Schedule.userId 不返回”一行，时序图去掉“去掉 userId”。 |
+| 2.0.1 | 2026-10-21 | §4.8.1 的 Claw 侧 access-token 路径改指代码中的接口目录，上游客户端专题改名为“CampusMate 与 CampusMCP 客户端”。 |
 | 2.0.0 | 2026-10-21 | Mate 不再保存任务归属表 `t_schedule`（D2）：归属只在 Claw 任务的 user_id；10 个管理接口都转发用户的 access-token，可见性由 Claw 判断，不属于当前用户按不存在返回 404，两种任务都能查看和管理；配额移到 Claw 创建时统计（D3、M2）；登记请求增加 userId，Mate 按它建立 Chat 映射，不再因任务不在 Mate 而拒绝（D5、§4.4.2）；删除无主任务及其对账（M4 关闭、§3.7）；§3.2 只保留 `t_schedule_session`；相关时序图与接口示例同步。 |
 | 1.10.0 | 2026-10-21 | 新增 §4.2.10 删除接口的完整定义：200 删除回执、删除与保留的范围、重复删除与结果未知（可重发）、双语错误表，示例由接口 HTML 展示。 |
 | 1.9.0 | 2026-10-21 | 目录由 `08-mate-service定时任务` 改名为 `08-CampusMate定时任务`；详细时序改为每个接口一张：§3.4 拆为任务列表与 Run 列表，§3.5 拆为详情、部分更新、删除、立即运行、暂停、取消暂停与 Run 详情，新增 §3.8 获取统一账号 access-token；业务总览的消息与 access-token 转发对齐。接口与规则不变。 |

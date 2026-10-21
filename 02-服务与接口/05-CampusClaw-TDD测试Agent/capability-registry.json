@@ -31,7 +31,7 @@
       "07-前端设计",
       "03-数据与存储/02-Agent元数据GaussDB",
       "02-服务与接口/03-Model",
-      "02-服务与接口/02-CampusMate共享客户端配置",
+      "02-服务与接口/02-CampusMate与CampusMCP客户端",
       "02-服务与接口/01-CampusMate附件服务",
       "01-总体架构/04-CampusClaw命令系统/02-技能命令/README.md",
       "01-总体架构/04-CampusClaw命令系统/01-内置命令/README.md"
@@ -259,7 +259,7 @@
       "criticality": "P0",
       "maturity": "accepted",
       "coverageState": "partial",
-      "designRefs": ["02-服务与接口/02-CampusMate共享客户端配置/README.md", "02-服务与接口/03-Model/README.md"],
+      "designRefs": ["02-服务与接口/02-CampusMate与CampusMCP客户端/README.md", "02-服务与接口/03-Model/README.md"],
       "sourceEvidence": [
         "modules/ai/src/main/java/com/campusclaw/ai/provider/mate/MateServiceModelManagerProvider.java:MateServiceModelManagerProvider",
         "modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java:HttpMateToolClient"
@@ -320,7 +320,7 @@
       "criticality": "P0",
       "maturity": "implemented",
       "coverageState": "partial",
-      "designRefs": ["README.md", "02-服务与接口/02-CampusMate共享客户端配置/README.md"],
+      "designRefs": ["README.md", "02-服务与接口/02-CampusMate与CampusMCP客户端/README.md"],
       "sourceEvidence": [
         ".github/workflows/ci.yml:build",
         "pom.xml:project",
