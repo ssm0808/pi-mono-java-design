@@ -1,8 +1,8 @@
 # CampusClaw 定时任务设计
 
-[模块索引](../../README.md#module-index) · [接口 HTML 展示](schedule-api-review.html) · [Mate 侧设计](../../02-服务与接口/08-mate-service定时任务/README.md) · [架构对比 A14](../07-Agent架构对比/README.md#a14) · [源码与官方证据](source-evidence.md)
+[模块索引](../../README.md#module-index) · [接口 HTML 展示](schedule-api-review.html) · [Mate 侧设计](../../02-服务与接口/08-CampusMate定时任务/README.md) · [架构对比 A14](../07-Agent架构对比/README.md#a14) · [源码与官方证据](source-evidence.md)
 
-本文是定时任务模块唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织：待对齐事项在[评审 Todo](#review-todo)，两张表的结构在 [§3.2](#persistence-lifecycle)，HTTP 契约在 [§4](#interface)。Mate 侧的管理接口、调用 Claw 前后的处理和为 Claw 提供的两个接口统一在 [mate-service 定时任务设计](../../02-服务与接口/08-mate-service定时任务/README.md)维护，源码与基线核验记录在 [source-evidence.md](source-evidence.md)。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
+本文是定时任务模块唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织：待对齐事项在[评审 Todo](#review-todo)，两张表的结构在 [§3.2](#persistence-lifecycle)，HTTP 契约在 [§4](#interface)。Mate 侧的管理接口、调用 Claw 前后的处理和为 Claw 提供的两个接口统一在 [CampusMate 定时任务设计](../../02-服务与接口/08-CampusMate定时任务/README.md)维护，源码与基线核验记录在 [source-evidence.md](source-evidence.md)。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
@@ -34,7 +34,7 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 | 依赖 | 开发期做法 | 联调或上线前必须完成 |
 |---|---|---|
-| Mate 的 Session 归属登记与统一账号 access-token 两个接口（调用边界见 [§5.1](#security)，[Mate 侧设计 §4.4](../../02-服务与接口/08-mate-service定时任务/README.md#mate-for-claw)） | 按 `ScheduleAccessTokenProvider`、`ScheduleSessionRegistry` 编码，测试用桩实现 | Mate 实现接口，路径与 VO 定稿 |
+| Mate 的 Session 归属登记与统一账号 access-token 两个接口（调用边界见 [§5.1](#security)，[Mate 侧设计 §4.4](../../02-服务与接口/08-CampusMate定时任务/README.md#mate-for-claw)） | 按 `ScheduleAccessTokenProvider`、`ScheduleSessionRegistry` 编码，测试用桩实现 | Mate 实现接口，路径与 VO 定稿 |
 | 按 access-token 查询用户 ID 的接口（[§4.8.3](#resolve-user)），Cron 工具创建任务时使用 | 按 `ScheduleUserResolver` 编码，测试用桩实现 | 确定提供方、路径与响应字段 |
 | Claw 与 Mate 的服务鉴权 | Claw 与 Mate 互相调用都由证书校验保证调用方，应用层不另做服务认证；入站认证与出站凭据端口均已移除 | 无 |
 | Runtime 的事务内终态扩展点（[D11](#key-decisions)）、后台准备与非交互 Host 策略 | 属于 M06 改造；2026-10-14 确定终态扩展点随定时任务 PR #332 一起实现 | 随 PR #332 合入 Runtime |
@@ -46,9 +46,9 @@ Claw 端的配置接口、两张表、到期扫描与领取、原子受理、立
 
 | # | 问题 | 影响 | 首版做法 | 归属 |
 |---|---|---|---|---|
-| <a id="todo-t2"></a>T2 | 统一账号如何配置；access-token 有效期多长 | 有效期影响是否需要缓存 Token | Mate 新增接口见 [Mate 侧设计 §4.4](../../02-服务与接口/08-mate-service定时任务/README.md#mate-for-claw)；每批工具调用取一次 Token，不缓存。Claw 与 Mate 互相调用由证书校验保证调用方（2026-10-20 确认），不再是待定项 | Claw 与 Mate 共同 |
-| <a id="todo-t7"></a>T7 | Mate 任务配额准入与 Session 归属登记的内部契约 | 归属登记未定则受理流程无法联调 | 列表由 Claw 按任务的 user_id 直接查询（[D9](#key-decisions)）；归属登记保留在 Mate；对话中创建的任务按 sessionId 对应的对话判断归属（[§3.13](#chat-created-schedule)）；Mate 侧方案见 [Mate 侧设计](../../02-服务与接口/08-mate-service定时任务/README.md)，配额见 [M2](../../02-服务与接口/08-mate-service定时任务/README.md#m2)，登记接口见 [M3](../../02-服务与接口/08-mate-service定时任务/README.md#m3)，待评审确认 | Mate |
-| <a id="todo-t8"></a>T8 | Mate 管理入口在调用 Claw 前后的处理（权限、配额、任务与用户关联） | 只影响 Mate 侧；Claw 侧逻辑已定 | Claw 只接收可信服务调用；Mate 侧处理见 [Mate 侧设计 §4.2、§4.3](../../02-服务与接口/08-mate-service定时任务/README.md#management-api)，待评审确认 | Mate |
+| <a id="todo-t2"></a>T2 | 统一账号如何配置；access-token 有效期多长 | 有效期影响是否需要缓存 Token | Mate 新增接口见 [Mate 侧设计 §4.4](../../02-服务与接口/08-CampusMate定时任务/README.md#mate-for-claw)；每批工具调用取一次 Token，不缓存。Claw 与 Mate 互相调用由证书校验保证调用方（2026-10-20 确认），不再是待定项 | Claw 与 Mate 共同 |
+| <a id="todo-t7"></a>T7 | Mate 任务配额准入与 Session 归属登记的内部契约 | 归属登记未定则受理流程无法联调 | 列表由 Claw 按任务的 user_id 直接查询（[D9](#key-decisions)）；归属登记保留在 Mate；对话中创建的任务按 sessionId 对应的对话判断归属（[§3.13](#chat-created-schedule)）；Mate 侧方案见 [Mate 侧设计](../../02-服务与接口/08-CampusMate定时任务/README.md)，配额见 [M2](../../02-服务与接口/08-CampusMate定时任务/README.md#m2)，登记接口见 [M3](../../02-服务与接口/08-CampusMate定时任务/README.md#m3)，待评审确认 | Mate |
+| <a id="todo-t8"></a>T8 | Mate 管理入口在调用 Claw 前后的处理（权限、配额、任务与用户关联） | 只影响 Mate 侧；Claw 侧逻辑已定 | Claw 只接收可信服务调用；Mate 侧处理见 [Mate 侧设计 §4.2、§4.3](../../02-服务与接口/08-CampusMate定时任务/README.md#management-api)，待评审确认 | Mate |
 | <a id="todo-t9"></a>T9 | 实例宕机后执行卡在运行中：会话无法继续对话，任务一直被占用，后续计划全部遇忙跳过 | 需人工处置才能恢复 | 不自动恢复。候选方案（Runtime 通用能力，定时任务复用）：① 实例心跳表与执行所属实例，心跳超时约 30 秒后把执行标为中断、写入中断事件，中断终态走 D11 的同一终态提交，Run 随之结束；② 执行期写入与工具调用前检查执行未终止，防止恢复的旧实例继续执行；③ 工具调用携带幂等键（executionId + toolCallId），并在会话中显示中断时所在的工具调用 | Runtime |
 | <a id="todo-t11"></a>T11 | Agent 删除、启停用与定时任务的数据一致性：保存、受理、取消暂停时是否校验 Agent，Agent 不可用时任务如何处理 | 关联的 Agent 已删除或禁用时，自动运行每次失败在 Runtime 准备阶段，只留下失败 Run | 不校验 Agent 是否存在和启停用，正常受理；准备失败按通用错误记录 Run，不自动暂停（[D12](#key-decisions)） | Agent 管理与 Claw 共同 |
 
@@ -558,7 +558,7 @@ JSON 编码和省略值另核对 `modules/coding-agent-cli/src/main/java/com/cam
 
 **正常调用如何完成：** 固定拟建 Session ID，由 Mate 按资源 ID 登记 Session 归属（Claw 不提供用户、租户或 owner）→ Session 运行时只准备 Agent、模型和 CRON 上下文，不执行业务 → 一个短事务内复核任务、Run、时间和容量，创建 Session、首条消息、根执行并写入 Run 关联。
 
-本图只画正常受理。用户执行权限只在配置任务时由 Mate 检查，运行时不再查询。Mate 归属登记未确认和 Runtime 准备失败分别属于跨服务持久登记和本地准备，核对责任不同，处理见 [F4、F14](#failure-recovery)。Mate 登记与 Claw 受理之间没有跨库事务，详细规则见 [Mate 会话归属](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)。
+本图只画正常受理。用户执行权限只在配置任务时由 Mate 检查，运行时不再查询。Mate 归属登记未确认和 Runtime 准备失败分别属于跨服务持久登记和本地准备，核对责任不同，处理见 [F4、F14](#failure-recovery)。Mate 登记与 Claw 受理之间没有跨库事务，详细规则见 [Mate 会话归属](../../02-服务与接口/08-CampusMate定时任务/README.md#session-ownership)。
 
 准备成功只固定本次上下文，最终事务仍复核可变状态。Runtime 准备与既有 `AgentSessionFactory.create` 的内存对象装配有关，不等于已创建持久 Session，也不等于已发送模型请求。提交结果未知或存储不可用时不伪造确定回执，不执行、不重放。
 
@@ -718,7 +718,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 ## 4. 接口协议
 
-本章是 Claw 定时任务 HTTP 契约的唯一维护处，字段、报文、错误码与示例都在这里；可读版本见 [HTML 展示](schedule-api-review.html)，由 §7.3 的脚本从本章生成。Mate 侧的管理接口与新增的内部接口见 [mate-service 定时任务设计](../../02-服务与接口/08-mate-service定时任务/README.md)。
+本章是 Claw 定时任务 HTTP 契约的唯一维护处，字段、报文、错误码与示例都在这里；可读版本见 [HTML 展示](schedule-api-review.html)，由 §7.3 的脚本从本章生成。Mate 侧的管理接口与新增的内部接口见 [CampusMate 定时任务设计](../../02-服务与接口/08-CampusMate定时任务/README.md)。
 
 ### 4.1 业务结果与接口边界
 
@@ -763,7 +763,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 **列表按用户筛选（2026-10-21 确定，替代 2026-10-13 的“Mate 拉取全部后过滤”）。** 创建、任务列表与 Run 列表要求 `access-token` 请求头，由 Mate 原样转发用户的 token；Claw 用它调用户查询接口得到用户 ID（[§4.8.3](#resolve-user)），创建时写入任务，列表时按任务的 `user_id` 筛选后分页并返回 total。user_id 只是筛选条件，Claw 不据此授权；详情与写操作的可见性仍由 Mate 在调用前判断，查看单个任务的 Run 时 Mate 先确认该任务可见。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
 
-定时执行时 Claw 不再向 Mate 查询用户执行资格：用户权限只在配置任务时由 Mate 检查，运行时统一使用 Mate 配置的同一个账号取得 `access-token`（见 §4.4.2）；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)。除创建、任务列表与 Run 列表的 `access-token` 请求头外，不新增公共身份字段或自定义 Header；access-token 只用于查询用户 ID，不落库、不写日志。Claw 对 Mate 的全部调用见 [§5.1](#security)。
+定时执行时 Claw 不再向 Mate 查询用户执行资格：用户权限只在配置任务时由 Mate 检查，运行时统一使用 Mate 配置的同一个账号取得 `access-token`（见 §4.4.2）；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-CampusMate定时任务/README.md#session-ownership)。除创建、任务列表与 Run 列表的 `access-token` 请求头外，不新增公共身份字段或自定义 Header；access-token 只用于查询用户 ID，不落库、不写日志。Claw 对 Mate 的全部调用见 [§5.1](#security)。
 
 普通 JSON 成功使用 `resCode/resMsg/result`，包括删除成功的完整 Schedule 回执及立即运行的Run记录；Run.error描述已记录的受理结果，不把它混同于HTTP请求失败；失败仅返回 `resCode/resMsg`，保留真实 HTTP 状态。JSON 为 lowerCamelCase。配置响应为 `Cache-Control: no-store`；语言支持 zh-CN/en-US，缺省或不支持时回退 zh-CN，JSON 响应返回 Content-Language。scheduleId 由服务端生成、大小写敏感且不复用；示例中的 UUID 后缀不构成客户端可构造 ID 的许可。
 
@@ -1022,7 +1022,7 @@ Claude 的资源 type 固定为 deployment，Claw 改为 schedule 以匹配自�
 
 业务问题是“每天 08:00 自动读取园区告警时，凭什么身份调用业务服务”。创建任务的登录凭据可能早已过期；管理任务的权限也不自动等于调用告警、门禁或工单接口的权限。模型服务认证是第三个独立边界。
 
-定时任务配置不保存凭据引用，没有 credentialIds 字段。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，首版只支持 `access-token`。模型一次返回中有需要凭据的工具调用时，Claw 无入参向 Mate 取一次该账号的 `access-token`，本批共用，作为 `access-token` Header 透传给 Mate execute；不保存秘密、授权引用或凭据 ID。接口见 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-mate-service定时任务/README.md#scheduled-access-token)。请求中出现 credentialIds、vaultIds、credentialRefs 或原始 credentials 对象，按未知字段返回 400 `SCHEDULE_REQUEST_INVALID`。
+定时任务配置不保存凭据引用，没有 credentialIds 字段。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，首版只支持 `access-token`。模型一次返回中有需要凭据的工具调用时，Claw 无入参向 Mate 取一次该账号的 `access-token`，本批共用，作为 `access-token` Header 透传给 Mate execute；不保存秘密、授权引用或凭据 ID。接口见 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-CampusMate定时任务/README.md#scheduled-access-token)。请求中出现 credentialIds、vaultIds、credentialRefs 或原始 credentials 对象，按未知字段返回 400 `SCHEDULE_REQUEST_INVALID`。
 
 | 产品 | 资源关系 | 收益与代价 |
 |---|---|---|
@@ -1827,15 +1827,15 @@ Accept-Language: zh-CN
 
 | 接口 | 用途 | 哪种任务调用 | 何时调用 | Claw 状态 | Mate 状态 |
 |---|---|---|---|---|---|
-| 获取统一账号 access-token | 定时运行调用业务工具时使用的凭据 | 两种任务的定时运行 | 模型每批工具调用中，第一个需要凭据的工具执行前取一次 | PR #332 已实现（`MateAccessTokenClient`） | 待实现，定义见 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-mate-service定时任务/README.md#scheduled-access-token) |
-| Session 归属登记与核对 | 让 Mate 知道新 Session 属于哪个用户，之后用户才能读取、继续这个对话 | 只有接口配置的任务（`create_source = api`） | 每次运行受理前，新 Session 写入数据库之前 | PR #332 已定义接口并接入受理流程；默认实现返回服务不可用 | 待实现，草案见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)，路径与报文待确认（[M3](../../02-服务与接口/08-mate-service定时任务/README.md#m3)） |
+| 获取统一账号 access-token | 定时运行调用业务工具时使用的凭据 | 两种任务的定时运行 | 模型每批工具调用中，第一个需要凭据的工具执行前取一次 | PR #332 已实现（`MateAccessTokenClient`） | 待实现，定义见 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-CampusMate定时任务/README.md#scheduled-access-token) |
+| Session 归属登记与核对 | 让 Mate 知道新 Session 属于哪个用户，之后用户才能读取、继续这个对话 | 只有接口配置的任务（`create_source = api`） | 每次运行受理前，新 Session 写入数据库之前 | PR #332 已定义接口并接入受理流程；默认实现返回服务不可用 | 待实现，草案见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-CampusMate定时任务/README.md#session-ownership)，路径与报文待确认（[M3](../../02-服务与接口/08-CampusMate定时任务/README.md#m3)） |
 | 按 access-token 查询用户 ID | 创建时写入任务的 user_id，列表时按它筛选 | 两种任务 | 创建、任务列表与 Run 列表请求，以及 Cron 工具 create 校验之后、请求确认之前，每次一次 | 待实现（`ScheduleUserResolver`） | 提供方、路径与字段待补充，见 [§4.8.3](#resolve-user) |
 
 对话中创建的任务在用户自己的会话里追加一轮，会话归属不变，不登记；它的定时运行同样按批次取统一账号 access-token。
 
 #### 4.8.1 获取统一账号 access-token
 
-接口定义以 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-mate-service定时任务/README.md#scheduled-access-token) 为准，下表记录 Claw 的调用规则。
+接口定义以 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-CampusMate定时任务/README.md#scheduled-access-token) 为准，下表记录 Claw 的调用规则。
 
 | 项 | 内容 |
 |---|---|
@@ -1848,14 +1848,14 @@ Accept-Language: zh-CN
 
 #### 4.8.2 Session 归属登记与核对
 
-Claw 侧接口为 `ScheduleSessionRegistry`，两个操作都只传技术标识 `sessionId`、`scheduleId`、`runId`、`agentId`，不传用户、消息正文或凭据。Mate 侧对应的 HTTP 接口草案见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)。
+Claw 侧接口为 `ScheduleSessionRegistry`，两个操作都只传技术标识 `sessionId`、`scheduleId`、`runId`、`agentId`，不传用户、消息正文或凭据。Mate 侧对应的 HTTP 接口草案见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-CampusMate定时任务/README.md#session-ownership)。
 
 | 操作 | 何时调用 | 结果处理 |
 |---|---|---|
 | 登记 `registerSession` | 接口配置的任务每次运行：Claw 固定新 Session 的 ID 后、数据库事务外、准备 Runtime 之前 | Mate 返回与请求四个字段相同的登记即成功，继续受理；Mate 明确拒绝或返回不同登记时，本次不受理，Run 记为 `session_creation_rejected_error`；结果未知时转只读核对，不重发登记 |
 | 只读核对 `findSessionRegistration` | 登记结果未知时，在准备期限内反复核对 | 核对到相同登记即继续受理；期限内仍未知则本次不受理，Run 记为 `unknown_error`，不换新的 Session ID 重试 |
 
-Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标识），之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 侧设计 §3.6、§3.7](../../02-服务与接口/08-mate-service定时任务/README.md#registration-sequence) 和 [§5.2.1](#failure-recovery) 的 F14。
+Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标识），之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 侧设计 §3.6、§3.7](../../02-服务与接口/08-CampusMate定时任务/README.md#registration-sequence) 和 [§5.2.1](#failure-recovery) 的 F14。
 
 **当前限制。** Mate 尚未提供登记接口，Claw 的默认实现一律返回服务不可用。因此在 Mate 接口上线或部署方替换实现之前，接口配置的任务到点后会在准备期限内核对失败，Run 记为 `unknown_error`，不会运行；对话中创建的任务不受影响。
 
@@ -2067,7 +2067,7 @@ coding-agent 已直接依赖 agent-core、Jackson 和测试 Starter，Spring con
 
 ### 7.2 实施校准
 
-Mate 新增接口路径/VO 为 [Mate 侧设计](../../02-服务与接口/08-mate-service定时任务/README.md) 中的草案，待评审确认（M3），统一账号配置、Token 有效期与 Mate 归属登记需联调校准（T2）；DDL、原子受理、取消终态和多副本故障测试必须在实现阶段验证（T4）。完整 Maven 依赖树及 corporate NativeParent 尚未核验（T5），不把局部 POM 读取称为依赖审计完成。
+Mate 新增接口路径/VO 为 [Mate 侧设计](../../02-服务与接口/08-CampusMate定时任务/README.md) 中的草案，待评审确认（M3），统一账号配置、Token 有效期与 Mate 归属登记需联调校准（T2）；DDL、原子受理、取消终态和多副本故障测试必须在实现阶段验证（T4）。完整 Maven 依赖树及 corporate NativeParent 尚未核验（T5），不把局部 POM 读取称为依赖审计完成。
 
 <a id="html-maintenance"></a>
 
@@ -2138,7 +2138,7 @@ public void summarizeAlarms() {
 | 0.68.0 | 2026-10-20 | Claw 与 Mate 互相调用由证书校验保证调用方：删除入站 `MateServiceAuthenticator` 与 `ScheduleAccessResolver`，Claw 不再接收操作范围；取 access-token 不附加服务认证不再是风险，T2 只剩统一账号配置与 Token 有效期。 |
 | 0.67.1 | 2026-10-20 | §4.8.1 的 access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`，与其他调用 Mate 的路径集中配置。 |
 | 0.67.0 | 2026-10-20 | 为先跑通端到端，Claw 取统一账号 access-token 时暂不附加服务认证，出站凭据端口移除（pi-mono-java PR #372）；T2 记录该风险与补回条件，§4.8.1 与首版开发前提同步。 |
-| 0.66.0 | 2026-10-19 | Mate 侧设计集中到 [mate-service 定时任务设计](../../02-服务与接口/08-mate-service定时任务/README.md)（新增管理接口、调用 Claw 前后的处理、配额与对账，原 Mate 定时执行草案并入）；T2、T7、T8 与 §4.8 改为引用该文档；删除 §2.2 中已不存在的“Agent 启用校验”。 |
+| 0.66.0 | 2026-10-19 | Mate 侧设计集中到 [CampusMate 定时任务设计](../../02-服务与接口/08-CampusMate定时任务/README.md)（新增管理接口、调用 Claw 前后的处理、配额与对账，原 Mate 定时执行草案并入）；T2、T7、T8 与 §4.8 改为引用该文档；删除 §2.2 中已不存在的“Agent 启用校验”。 |
 | 0.65.0 | 2026-10-16 | 新增 §4.8，集中说明 Claw 调用 Mate 的两个接口及各自的调用时机、失败处理和实现状态。 |
 | 0.64.0 | 2026-10-16 | 对话中创建的任务改为每个会话最多一个启用中的任务，取代每会话 10 个的上限；Cron 工具确认沿用通用工具确认，修改前后对比由模型按工具描述在对话中说明。 |
 | 0.63.0 | 2026-10-16 | t_schedule_run 增加 status 字段显式保存 Run 阶段，不再由 finished_at、session_id、error_type 推出。 |

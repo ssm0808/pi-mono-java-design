@@ -98,7 +98,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - 定时任务不保存授权引用或凭据引用：用户权限只在配置任务时由 Mate 检查，运行时统一账号的 access-token 由 Mate 按批次签发，Claw 不落库。用户审计与租户配额在 Mate；Claw 保留技术执行审计、实例容量和任务互斥。
 - PR 中的扫描 `owner`、`schedule_start_owner` 表示执行实例，不是用户；两者已随扫描协调表和启动权一并目标撤销。`agent_id`、父子 Session/execution 关系同样是运行关联，不代替用户授权。
 
-正常定时受理先固定同次 Run 的拟建 Session ID，由 Mate 确认并持久登记该 ID 的归属，再执行 Claw 的同库受理；未确认归属不得启动模型或业务。Mate 关联失败或结果未知时不受理，先按固定 ID 只读核对，不另建会话或重放任务。Mate 已登记而 Claw 事务失败时，该关联不代表会话已存在，须按 Claw 权威状态核对后清理；未知提交不能直接清理。具体交接及生命周期由 [Mate 专项](../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)维护，接线**待实现**，不宣称跨库原子提交。
+正常定时受理先固定同次 Run 的拟建 Session ID，由 Mate 确认并持久登记该 ID 的归属，再执行 Claw 的同库受理；未确认归属不得启动模型或业务。Mate 关联失败或结果未知时不受理，先按固定 ID 只读核对，不另建会话或重放任务。Mate 已登记而 Claw 事务失败时，该关联不代表会话已存在，须按 Claw 权威状态核对后清理；未知提交不能直接清理。具体交接及生命周期由 [Mate 专项](../02-服务与接口/08-CampusMate定时任务/README.md#session-ownership)维护，接线**待实现**，不宣称跨库原子提交。
 
 删除 Schedule/Run 不删除 Mate 中已经建立的 Session 归属；Session 后续操作只依赖其自身关联和当前权限。删除 Session 成功后 Mate 才关闭其访问映射；响应丢失先核对。公共 Chat 映射可以稍后补齐，不能用它的异步完成代替受理前归属登记。
 
