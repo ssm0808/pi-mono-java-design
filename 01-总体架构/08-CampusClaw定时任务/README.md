@@ -193,7 +193,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | D6 | 删除任务时，运行记录、会话和在途执行怎么处理？ | Claude 采用归档；DSH 删除任务及投递历史，保留原 Session，不取消在途；辅助基线 OpenClaw 保留运行历史，操作者删除时请求取消 | 用户不想为了删任务再逐条清理运行记录；已生成的对话和园区业务结果要独立保留；取消在途执行可能留下半完成的业务操作 | 同删 Schedule 和 Run，保留 Session，不取消已受理执行，停止由 Session 入口单独发起 | 删除后无法再查启动失败和触发来源，尤其是没有生成 Session 的失败 |
 | D7 | 无人值守时遇到权限确认或提问怎么办？ | 无可对照实现（已登记基线没有定时场景下的交互处理） | 定时执行时没有人在线回答；默认批准会绕过园区业务权限 | 首版只支持无需人工交互的任务；Host 遇 ASK 时阻止业务调用并结束本次根执行 | 需要人工确认的任务暂时不能定时执行 |
 | D8 | 任务运行时使用 Agent 的哪个版本？ | Claude 在创建或显式更新 Deployment 时固定 Agent 版本 | 现有 Agent 目录没有可解析的历史定义，只保存一个版本号兑现不了版本固定 | 只关联 agentId，每次使用当时已发布的定义 | Agent 发布新版本后，后续运行行为可能改变，无法复现历史运行；这是能力缺口，不是字段简化 |
-| D9 | 任务列表和 Run 列表如何按用户过滤？ | Claude 按 workspace 范围列出，无用户级过滤 | 任务只有创建者可见；Mate 拉取全部记录再过滤时，每次列表的读取量随全部用户的任务与 Run 增长 | `t_schedule` 保存创建者 user_id，创建后不可修改；列表与 Run 列表按 userId 由 Claw 直接筛选、分页并返回 total。接口配置的任务由 Mate 在创建时给出 userId，对话中创建的任务由 Cron 工具用本轮请求的 access-token 查询（2026-10-21 确定，替代 2026-10-13 的“Mate 拉取全部后过滤”） | Claw 多保存一个用户标识；user_id 只用于筛选，不作为授权依据，用户权限仍由 Mate 检查；对话中创建任务多一次远端查询，查询失败则这次创建失败 |
+| D9 | 任务列表和 Run 列表如何按用户过滤？ | Claude 按 workspace 范围列出，无用户级过滤 | 任务只有创建者可见；Mate 拉取全部记录再过滤时，每次列表的读取量随全部用户的任务与 Run 增长 | `t_schedule` 保存创建者 user_id，创建后不可修改；列表与 Run 列表按 userId 由 Claw 直接筛选、分页并返回 total。用户 ID 统一由 Claw 用 access-token 调用户查询接口得到：创建、任务列表与 Run 列表增加 `access-token` 请求头，由 Mate 原样转发用户的 token；对话中由 Cron 工具使用本轮请求的 access-token（2026-10-21 确定，替代 2026-10-13 的“Mate 拉取全部后过滤”） | Claw 多保存一个用户标识，user_id 只用于筛选，不作为授权依据，用户权限仍由 Mate 检查；每次创建和列表请求多一次用户查询，查询接口不可用时这三个接口返回 503 |
 | D10 | 定时执行时没有用户请求，Claw 用什么权限调用业务工具？ | Claude 部署引用 workspace 范围的 Vault 凭据；普通对话由用户请求带 Header | 用户登录 Token 会过期，且没有确认过的刷新或代签接口；不能保存用户密码 | 用户权限只在配置时由 Mate 检查；运行时统一使用 Mate 配置的同一个账号，模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次 access-token（2026-10-13 评审确定） | 所有任务权限相同；创建者失去权限或离职后任务仍照常运行；每批工具调用多一次 Mate 请求 |
 | D11 | 执行结束后，Run 怎么知道并释放任务？ | 未核验各基线的同类机制 | 同一任务不并发，Run 不结束后续计划就全部遇忙跳过；实例可能在任意时刻失联 | 写根执行终态的同一数据库事务内，经 Runtime 通用终态扩展点结束本次 Run（按 execution_id 条件更新 finished_at）；不用提交后回调，也不轮询（2026-10-14 评审确定） | Runtime 需新增事务内扩展点；Run 需 execution_id 索引；实例宕机写不进终态时仍靠 T9 |
 | D12 | 运行失败要不要自动暂停任务？ | Claude 只对不可恢复的建 Session 错误（如 Agent、环境、Vault 已归档）首次即自动暂停，限流等临时错误只记失败 Run；DSH 投递失败只记日志、任务保持 active；pi、OpenCode 产品内无定时任务，Codex 调度器未开源（2026-10-14 核验，见[证据](source-evidence.md#auto-pause-baseline-evidence)） | 不改配置就必然再次失败的错误，继续每次触发只会产生无意义的失败记录；临时故障不应让任务停下来；业务执行失败的结论在 Session 里 | 首版不自动暂停：任何运行失败都只记录失败 Run，任务保持原状态；暂停只由人工发起，恢复需显式取消暂停，不补跑。Agent 是否存在和启停用暂不校验，正常受理，Agent 不可用时在 Runtime 准备阶段按通用错误失败；Agent 启停用与数据一致性另开设计（T11）（2026-10-15 评审确定，替代 2026-10-14 的 agent_unavailable_error 自动暂停） | 不采用旧 Cron 连续三次失败禁用；Agent 已删除或禁用时，自动运行每次都会失败并累积失败 Run，需要监控发现或人工暂停 |
@@ -295,7 +295,7 @@ CampusClaw 的基线集合为 Claude Managed Agents、Codex harness、OpenCode�
 | agent_id | VARCHAR(38) | 否 | — | 任务关联的 Agent 标识；接口配置的任务每次运行按它新建 Session，修改后只影响之后的运行；对话中创建的任务取关联会话的 Agent，不可修改 |
 | create_source | VARCHAR(16) | 否 | — | 创建来源，创建后不可修改：`api` 为通过接口配置的任务，每次运行新建 Session；`chat` 为对话中由 Cron 工具创建的任务，每次在 session_id 指向的会话中追加一轮，见 [§3.13](#chat-created-schedule) |
 | session_id | VARCHAR(40) | 是 | — | create_source 为 `chat` 时是创建任务的会话，此后不可修改；为 `api` 时为空 |
-| user_id | VARCHAR(512) | 否 | — | 创建任务的用户 ID，创建后不可修改；与 Mate 用户 ID 同值同长度。`api` 任务由 Mate 在创建时给出，`chat` 任务由 Cron 工具用本轮请求的 access-token 查询（[§4.8.3](#resolve-user)）。只用于列表筛选，不作为授权依据（[D9](#key-decisions)） |
+| user_id | VARCHAR(512) | 否 | — | 创建任务的用户 ID，创建后不可修改；与 Mate 用户 ID 同值同长度。创建时用 access-token 查询得到：`api` 任务取创建请求头的 access-token，`chat` 任务取本轮对话请求的 access-token（[§4.8.3](#resolve-user)）。只用于列表筛选，不作为授权依据（[D9](#key-decisions)） |
 | name | VARCHAR(256) | 否 | — | 任务名称 |
 | description | VARCHAR(2048) | 是 | — | 任务描述 |
 | prompt | TEXT | 否 | — | 纯文本任务内容，受理时作为新 Session 的首条用户消息，或关联会话中追加的用户消息提交 |
@@ -691,7 +691,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | agentId | 创建时指定，可修改 | 取该会话的 Agent，不可修改 |
 | 每次运行 | 新建 Session（[§3.9](#new-session-per-run)） | 在关联会话中追加一条用户消息并启动新的根执行 |
 | 会话正忙 | 不适用 | 本次跳过，记录 `session_busy_error` |
-| `t_schedule.user_id` | Mate 创建时给出 | Cron 工具用本轮 access-token 查询 |
+| `t_schedule.user_id` | 用创建请求头的 access-token 查询 | 用本轮对话请求的 access-token 查询 |
 | 归属 | Mate 任务归属（T7、T8）；新 Session 受理前登记归属（F14） | 随会话归属，不登记 |
 | 删除会话 | 不影响任务 | 同事务删除该会话关联的任务及其 Run |
 | 数量上限 | Mate 配额（Mate 侧待设计） | 每个会话最多一个启用中的任务，Claw 检查 |
@@ -761,9 +761,9 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 
 **身份与权限边界（当前目标）。** 本文所有“当前调用者、管理范围、可见范围、功能权限”的判断均由 Mate 维护并执行。Claw 不解析或保存 scope、owner、operator，只在任务上保存创建者 user_id 用于列表筛选（D9），不以本地字段比较决定用户权限；Mate 调用 Claw 的身份由证书校验保证，Claw 不做入站服务认证，也不接收 Mate 给出的操作范围；收到请求后只校验目标资源，再检查自己的输入、状态和事务条件。浏览器或模型提交的 ID 不能作为授权依据。
 
-**列表按用户筛选（2026-10-21 确定，替代 2026-10-13 的“Mate 拉取全部后过滤”）。** 任务列表与 Run 列表要求 userId，Claw 按任务的 `user_id` 筛选后分页并返回 total；Mate 传入当前用户，不再拉取全部页。userId 只是筛选条件：Claw 不验证它是否为真实用户，也不据此授权；详情与写操作的可见性仍由 Mate 在调用前判断，查看单个任务的 Run 时 Mate 先确认该任务可见。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
+**列表按用户筛选（2026-10-21 确定，替代 2026-10-13 的“Mate 拉取全部后过滤”）。** 创建、任务列表与 Run 列表要求 `access-token` 请求头，由 Mate 原样转发用户的 token；Claw 用它调用户查询接口得到用户 ID（[§4.8.3](#resolve-user)），创建时写入任务，列表时按任务的 `user_id` 筛选后分页并返回 total。user_id 只是筛选条件，Claw 不据此授权；详情与写操作的可见性仍由 Mate 在调用前判断，查看单个任务的 Run 时 Mate 先确认该任务可见。403/404 等用户侧语义保持；Mate 的拒绝与不可用分别映射到既有错误，不能把服务故障伪装成空列表。
 
-定时执行时 Claw 不再向 Mate 查询用户执行资格：用户权限只在配置任务时由 Mate 检查，运行时统一使用 Mate 配置的同一个账号取得 `access-token`（见 §4.4.2）；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)。除创建请求与列表查询中的 userId 外，不新增公共身份字段或自定义 Header。Claw 对 Mate 的全部调用见 [§5.1](#security)。
+定时执行时 Claw 不再向 Mate 查询用户执行资格：用户权限只在配置任务时由 Mate 检查，运行时统一使用 Mate 配置的同一个账号取得 `access-token`（见 §4.4.2）；业务凭据与服务认证分开。新 Session 在受理前由 Mate 独立登记归属，Schedule/Run 删除不删除该关联；完整规则见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)。除创建、任务列表与 Run 列表的 `access-token` 请求头外，不新增公共身份字段或自定义 Header；access-token 只用于查询用户 ID，不落库、不写日志。Claw 对 Mate 的全部调用见 [§5.1](#security)。
 
 普通 JSON 成功使用 `resCode/resMsg/result`，包括删除成功的完整 Schedule 回执及立即运行的Run记录；Run.error描述已记录的受理结果，不把它混同于HTTP请求失败；失败仅返回 `resCode/resMsg`，保留真实 HTTP 状态。JSON 为 lowerCamelCase。配置响应为 `Cache-Control: no-store`；语言支持 zh-CN/en-US，缺省或不支持时回退 zh-CN，JSON 响应返回 Content-Language。scheduleId 由服务端生成、大小写敏感且不复用；示例中的 UUID 后缀不构成客户端可构造 ID 的许可。
 
@@ -777,7 +777,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | description | 可选，最多 2048 个 Java 字符；创建省略默认 null，更新省略保持，空白或显式 null 清除；不附加到模型输入 |
 | agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，只校验格式，不校验 Agent 是否存在和启停用（T11）；当前用户能否使用该 Agent 由 Mate 在调用 Claw 前检查；只关联 Agent 身份，不保证固定历史版本；关联会话的任务不能修改 agentId |
 | sessionId | 只读；对话中由 Cron 工具创建的任务为关联的会话 ID，接口创建的任务为 null；创建和更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID`，见 §4.3.5 |
-| userId | 创建必填，之后只读；创建任务的用户 ID，去首尾空白后 1～512 个字符，由 Mate 传入当前用户，Claw 不校验用户是否存在；更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID`；对话中创建的任务由 Cron 工具查询填写（[§3.12](#cron-tool)）。只用于列表筛选，不作为授权依据（[D9](#key-decisions)） |
+| userId | 只读；创建任务的用户 ID，Claw 在创建时用 access-token 查询得到（[§4.8.3](#resolve-user)），之后不可修改；创建和更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID`。只用于列表筛选，不作为授权依据（[D9](#key-decisions)） |
 | prompt | 创建必填；纯文本字符串，去首尾空白后非空，否则返回400/SCHEDULE_PROMPT_INVALID；每次运行作为新 Session 的首条用户消息提交，关联会话的任务则追加到该会话；首版不支持附件，见 §4.3.6；不开放多条消息、system.message 或 user.define_outcome |
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §4.3.7 |
@@ -888,14 +888,13 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
 
 ### 4.4 创建、读取、更新与删除报文
 
-创建 `POST /campusclaw-service/v1/schedules`：
+创建 `POST /campusclaw-service/v1/schedules`。请求头必须带 `access-token`（Mate 原样转发用户的 token），Claw 用它查询用户 ID 写入任务的 userId，见 [§4.8.3](#resolve-user)：
 
 ```json
 {
   "name": "工作日园区告警汇总",
   "agentId": "agent-550e8400e29b41d4a716446655440000",
   "sessionId": null,
-  "userId": "user-7f3a9c2e",
   "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
   "schedule": {
     "type": "cron",
@@ -1078,25 +1077,25 @@ Claude 对应 `GET /v1/deployments/{deployment_id}`，同样返回完整配置�
 
 #### 4.4.4 读取任务列表（待实现）
 
-列表用于按名称、Agent 和状态找到任务，并直接取得任务配置。每个列表元素与详情 result 采用相同的完整资源，包含 prompt、description 和 metadata，不维护单独的摘要字段集合；这与 Claude 的完整 Deployment 元素取舍一致。只返回 userId 指定用户创建的任务。分页按现有 [ListEvents 权威契约](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json)及[数字分页规则](../01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码)收敛为普通整数 page/limit 和 nextPage；下文定义具体映射与筛选目标，待实现。
+列表用于按名称、Agent 和状态找到任务，并直接取得任务配置。每个列表元素与详情 result 采用相同的完整资源，包含 prompt、description 和 metadata，不维护单独的摘要字段集合；这与 Claude 的完整 Deployment 元素取舍一致。只返回请求头 access-token 对应的用户创建的任务。分页按现有 [ListEvents 权威契约](../01-CampusClaw多Agent运行时/事件契约/操作/02-list-session-events.json)及[数字分页规则](../01-CampusClaw多Agent运行时/chat-events-history-design.md#3-普通数字页码)收敛为普通整数 page/limit 和 nextPage；下文定义具体映射与筛选目标，待实现。
 
 ```http
-GET /campusclaw-service/v1/schedules?userId=user-7f3a9c2e&page=1&limit=1&status=active
+GET /campusclaw-service/v1/schedules?page=1&limit=1&status=active
+access-token: <当前用户的 access-token>
 Accept-Language: zh-CN
 ```
 
 | query | 规则 |
 |---|---|
-| userId | 必填；去首尾空白后 1～512 个字符，按任务的 user_id 精确匹配；Mate 传入当前用户；不提供跨用户列表；Claw 不校验用户是否存在，无匹配返回空页 |
 | page | 可选正整数，默认 1；1、2、3……是普通页码，不是游标或 Schedule ID；禁止 0、负数、非整数及超出支持范围的数值 |
 | limit | 沿用 ListEvents：可选正整数，默认 50，范围 1～200；表示本页最多任务数，越界拒绝，不静默截断；Service 应用默认值 |
 | name | 可选；去首尾空白后 1～256 个 Java 字符，按名称包含匹配；空值拒绝，省略不筛选。按字面量匹配，用户输入的 %/_ 不作为 SQL 通配符；按大小写敏感的字面量匹配，实现时固定对应数据库比较规则 |
 | agentId | 可选；格式复用 Agent ID 规则，按关联 ID 精确匹配；合法但无匹配任务时返回空页，不借查询探测 Agent 存在性 |
 | status | 可选单值精确匹配，小写；只允许 active/paused，省略时均可返回；不接受 archived/deleted |
 
-无请求体；认证、读取功能资格和语言与详情一致，不要求写入控制 Header。筛选条件以 AND 组合，不提供客户端 owner/scope、任意排序、metadata 查询或按凭据查询。重复标量、未知查询项及非法格式以 400 `SCHEDULE_REQUEST_INVALID` 拒绝。查询始终排除已删除记录；userId、删除过滤与业务筛选均先于分页；userId 只是筛选条件，Claw 不据此做权限判断（D9）。没有 includeArchived/includeDeleted 查询入口。
+无请求体；请求头必须带 `access-token`，用于查询用户 ID；读取功能资格和语言与详情一致，不要求写入控制 Header。筛选条件以 AND 组合，不提供客户端 owner/scope、任意排序、metadata 查询或按凭据查询。重复标量、未知查询项及非法格式以 400 `SCHEDULE_REQUEST_INVALID` 拒绝。查询始终排除已删除记录；用户筛选、删除过滤与业务筛选均先于分页；用户 ID 只是筛选条件，Claw 不据此做权限判断（D9）。没有 includeArchived/includeDeleted 查询入口。
 
-成功 HTTP 200，普通响应 Header 与详情一致。以下例子请求该用户 page=1、limit=1，当前查询共匹配 2 个任务，因此 total=2、nextPage=2：
+成功 HTTP 200，普通响应 Header 与详情一致。以下例子请求当前用户 page=1、limit=1，当前查询共匹配 2 个任务，因此 total=2、nextPage=2：
 
 ```json
 {
@@ -1141,7 +1140,7 @@ Accept-Language: zh-CN
 
 列表每项直接采用详情资源，不增加 agentName、nextRunAt、lastRunStatus 或执行结果。完整元素便于直接消费同一响应模型，也避免调用方为读取每条消息另发详情请求；代价是列表传输全部任务内容，需要限制页大小。result 包含 schedules、total 与 nextPage，不返回 page、limit 或额外 hasMore。total 是与本次筛选条件匹配的任务总数，不受 page/limit 影响，供页面显示总数和页数；它与当前页来自同一读取快照，翻页期间任务增删时不同页的 total 可能不同。读取完整元素不提供凭据或文件字节；列表中的配置是当次读取快照；编辑可重新读取详情确认内容，写入由数据库当前状态决定。
 
-userId 与业务筛选都先于分页；userId 由 Mate 传入当前用户，见 §4.2 身份与权限边界。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null。total 按同一筛选条件另做一次 COUNT，与整页配置及下一页判断在同一个可重复读事务内完成，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
+Claw 先用 access-token 查询用户 ID（[§4.8.3](#resolve-user)），用户筛选与业务筛选都先于分页，见 §4.2 身份与权限边界；缺少 access-token 或查询接口拒绝时返回 401，查询接口不可用时返回 503，不返回空列表。计算 offset=(page-1)*limit，查询前检查整数和乘法边界，溢出或不支持的数值返回 400。读取最多 limit+1 个匹配任务，额外一条仅用于判断下一页；响应最多 limit 条，有后续记录时 nextPage=page+1，否则为 null。total 按同一筛选条件另做一次 COUNT，与整页配置及下一页判断在同一个可重复读事务内完成，时间摘要共用本次计算时刻，不跨 HTTP 请求持有事务或快照。
 
 排序为 updatedAt DESC、id ASC，而 ListEvents 按已提交事件顺序从旧到新读取；只复用分页协议，不照搬事件顺序。运行摘要变化不更新 updatedAt，因此不会仅因一次自动启动改变任务排序。但任务配置可被编辑、删除，新任务会进入列表前部，不能借用事件只在尾部追加的稳定位置前提；并发翻页仍可能重复或遗漏，按 id 去重不能补回漏项。同一轮保持 limit 与筛选不变；修改它们或已知列表发生变更时从 page=1 重读，不将此接口作为可靠增量同步协议。
 
@@ -1153,7 +1152,7 @@ userId 与业务筛选都先于分页；userId 由 Mate 传入当前用户，见
 | 分页 | limit 默认 20、最多 100；page 为不透明游标，响应 data/next_page，末页 next_page:null | 参考 ListEvents 的整数 page/nextPage，limit 默认50、最多200；result 为 schedules/total/nextPage。保持 Claw 客户端风格，total 便于页面显示总数；代价是深页 OFFSET、每次多一次 COUNT 和并发翻页移动 |
 | 过滤 | agent_id、创建时间 gte/lte、status、include_archived；status 与 include_archived 不能组合 | 增加名称搜索，保留 agentId/status；暂不提供创建时间区间；已删除任务始终排除，不提供 includeArchived |
 | 顺序 | 本次公开页未声明默认排序、稳定快照或游标失效规则 | 显式 updatedAt DESC、id ASC，便于最近修改的任务靠前；仍有并发翻页限制 |
-| 身份 | Anthropic API 身份/workspace 边界 | 按 userId 只列该用户创建的任务；用户权限由 Mate 检查，Agent ID 与 metadata 不代替租户/园区授权 |
+| 身份 | Anthropic API 身份/workspace 边界 | 用 access-token 查出用户，只列该用户创建的任务；用户权限由 Mate 检查，Agent ID 与 metadata 不代替租户/园区授权 |
 
 官方证据为 2026-10-04 重读的[列表参考页](https://platform.claude.com/docs/en/api/http/beta/deployments/list)。Claude page 必须原样传回，不能把它当成数字页码；Claw 的 page 则明确是可按规则构造的正整数，nextPage 为整数或 null，两者同名但类型和语义不同。不依据 Claude 未声明内容推断其内部 SQL、索引或分页快照。
 
@@ -1717,7 +1716,7 @@ Accept-Language: zh-CN
 
 **Run与Session反向删除不对称。** 对话中创建的任务随关联会话一起删除，Run同时删除（§3.13）；接口配置的任务单独删除Session时保留仍存续任务的Run及原sessionId，不把过去的受理成功改成失败，不清空历史关联。Run读取不要求关联Session当前仍可读取；读取或删除Session始终执行其独立权限检查，404不能证明业务从未执行。
 
-**两个读取接口。** 两者均不接收请求体，使用 §4.2 的认证、语言及两字段HTTP错误包装，成功为200/ResultBean、Cache-Control:no-store。列表返回 userId 指定用户的存续任务的Run（按所属任务的 user_id 筛选），删除过滤先于分页；userId、scheduleId 不构成授权依据。
+**两个读取接口。** 两者均不接收请求体，使用 §4.2 的认证、语言及两字段HTTP错误包装，成功为200/ResultBean、Cache-Control:no-store。列表要求 `access-token` 请求头，返回该 token 对应用户的存续任务的Run（按所属任务的 user_id 筛选），删除过滤先于分页；用户 ID、scheduleId 不构成授权依据。
 
 | 操作 | 方法与路径 | result |
 |---|---|---|
@@ -1726,7 +1725,6 @@ Accept-Language: zh-CN
 
 | 列表query | 规则 |
 |---|---|
-| userId | 必填；去首尾空白后 1～512 个字符，按所属任务的 user_id 精确匹配；Mate 传入当前用户；不提供跨用户列表 |
 | page | 正整数，默认1，普通页码；拒绝0、负数、非整数及offset溢出 |
 | limit | 正整数，默认50，范围1～200；越界拒绝，不截断 |
 | scheduleId | 可选，服务端原ID精确匹配；省略查询该用户的所有任务；有效但不存在、已删除或不属于该用户的ID返回空列表，不泄露资源存在性 |
@@ -1779,7 +1777,7 @@ Accept-Language: zh-CN
 |---|---|
 | 400 `SCHEDULE_NAME_INVALID` / `SCHEDULE_PROMPT_INVALID` / `SCHEDULE_RULE_INVALID` / `SCHEDULE_TIMEZONE_INVALID` | 对应字段不合法 |
 | 400 `SCHEDULE_REQUEST_INVALID` | 非法 ID/查询参数；写入非法 JSON、错误类型/字段或空更新；DELETE 携带业务查询或非空正文 |
-| 401 `SCHEDULE_AUTH_REQUIRED` | 未通过 Claw 认证边界 |
+| 401 `SCHEDULE_AUTH_REQUIRED` | 创建、任务列表与 Run 列表缺少 `access-token`，或用户查询接口拒绝该 token |
 | 403 `SCHEDULE_MANAGE_FORBIDDEN` | 无任务管理功能权限 |
 | 403 `SCHEDULE_READ_FORBIDDEN` | 无任务读取功能权限；资源级不可见统一用 404 |
 | 403 `SCHEDULE_RUN_FORBIDDEN` | 无立即运行功能资格；不创建 Run |
@@ -1791,7 +1789,7 @@ Accept-Language: zh-CN
 | 500 `SCHEDULE_UPDATE_FAILED` | 更新内部处理失败，不返回部分成功；结果未知时读取当前状态核对 |
 | 500 `SCHEDULE_DELETE_FAILED` | 删除事务处理失败，不返回成功；提交结果不确定时允许有界重试同一 DELETE |
 | 500 `SCHEDULE_READ_FAILED` | 配置记录损坏、反序列化或安全投影失败；不得降为空成功 |
-| 503 `SCHEDULE_SERVICE_UNAVAILABLE` | 当前操作所需权威依赖不可用；读取仅依赖可信身份/可见范围、配置存储和本地时间计算，不因 Agent 或业务执行依赖不可用而失败 |
+| 503 `SCHEDULE_SERVICE_UNAVAILABLE` | 当前操作所需权威依赖不可用，包括创建与列表时用户查询接口不可用或超时；读取仅依赖可信身份/可见范围、配置存储和本地时间计算，不因 Agent 或业务执行依赖不可用而失败 |
 
 错误体固定只有 resCode/resMsg；按稳定错误码分支，不解析文案。字段错误按 name、description、agentId、prompt、schedule、metadata 的固定顺序返回首个错误；每个 Java enum、resCode、MessageSource key 同名。错误不泄露凭据、内部堆栈或用户消息；响应丢失不能据503或断网推断原请求未提交。
 
@@ -1825,13 +1823,13 @@ Accept-Language: zh-CN
 
 ### 4.8 Claw 调用 Mate 的接口
 
-定时任务里 Claw 主动调用三个接口：Mate 的统一账号 access-token 与 Session 归属登记，以及 Cron 工具创建任务时按 access-token 查询用户 ID。用户授权与配额准入都由 Mate 管理入口在调用 Claw 之前完成（T8）；Claw 不回调 Mate 做这些判断，也不保存授权引用，只在任务上保存创建者 user_id 用于列表筛选（D9）。Mate 调用 Claw 的接口见 [§4.2](#interface-list)。定时运行中 Agent 调用的 Mate 业务工具（工具定义查询、`tools/{toolId}/execute`）沿用普通对话的工具通道，不属于定时任务专用接口。
+定时任务里 Claw 主动调用三个接口：Mate 的统一账号 access-token 与 Session 归属登记，以及创建和列表时按用户的 access-token 查询用户 ID。用户授权与配额准入都由 Mate 管理入口在调用 Claw 之前完成（T8）；Claw 不回调 Mate 做这些判断，也不保存授权引用，只在任务上保存创建者 user_id 用于列表筛选（D9）。Mate 调用 Claw 的接口见 [§4.2](#interface-list)。定时运行中 Agent 调用的 Mate 业务工具（工具定义查询、`tools/{toolId}/execute`）沿用普通对话的工具通道，不属于定时任务专用接口。
 
 | 接口 | 用途 | 哪种任务调用 | 何时调用 | Claw 状态 | Mate 状态 |
 |---|---|---|---|---|---|
 | 获取统一账号 access-token | 定时运行调用业务工具时使用的凭据 | 两种任务的定时运行 | 模型每批工具调用中，第一个需要凭据的工具执行前取一次 | PR #332 已实现（`MateAccessTokenClient`） | 待实现，定义见 [Mate 侧设计 §4.4.1](../../02-服务与接口/08-mate-service定时任务/README.md#scheduled-access-token) |
 | Session 归属登记与核对 | 让 Mate 知道新 Session 属于哪个用户，之后用户才能读取、继续这个对话 | 只有接口配置的任务（`create_source = api`） | 每次运行受理前，新 Session 写入数据库之前 | PR #332 已定义接口并接入受理流程；默认实现返回服务不可用 | 待实现，草案见 [Mate 侧设计 §4.4.2](../../02-服务与接口/08-mate-service定时任务/README.md#session-ownership)，路径与报文待确认（[M3](../../02-服务与接口/08-mate-service定时任务/README.md#m3)） |
-| 按 access-token 查询用户 ID | 对话中创建的任务写入创建者 user_id | 只有对话中创建的任务（`create_source = chat`） | Cron 工具 create 通过校验之后、请求用户确认之前，每次一次 | 待实现（`ScheduleUserResolver`） | 提供方、路径与字段待补充，见 [§4.8.3](#resolve-user) |
+| 按 access-token 查询用户 ID | 创建时写入任务的 user_id，列表时按它筛选 | 两种任务 | 创建、任务列表与 Run 列表请求，以及 Cron 工具 create 校验之后、请求确认之前，每次一次 | 待实现（`ScheduleUserResolver`） | 提供方、路径与字段待补充，见 [§4.8.3](#resolve-user) |
 
 对话中创建的任务在用户自己的会话里追加一轮，会话归属不变，不登记；它的定时运行同样按批次取统一账号 access-token。
 
@@ -1865,16 +1863,17 @@ Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标
 
 #### 4.8.3 按 access-token 查询用户 ID
 
-对话中由 Cron 工具创建的任务没有 Mate 管理入口给出 userId，Claw 用本轮用户请求的 access-token 查询当前用户 ID，写入 `t_schedule.user_id`（[D9](#key-decisions)）。Claw 侧接口为 `ScheduleUserResolver`，待实现。
+Claw 需要知道“当前是哪个用户”的地方，统一用该用户的 access-token 调用户查询接口得到用户 ID：创建时写入 `t_schedule.user_id`，列表时按它筛选（[D9](#key-decisions)）。Claw 侧接口为 `ScheduleUserResolver`，待实现。
 
 | 项 | 内容 |
 |---|---|
-| 请求 | 本轮根执行快照中的 `access-token`（用户请求 Header，[§3.11](#session-credentials)）；提供方、路径与报文 **【缺口】** 待补充 |
+| 请求 | 用户的 `access-token`：管理接口取请求头（Mate 原样转发），Cron 工具取本轮根执行快照中的用户请求 Header（[§3.11](#session-credentials)）；提供方、路径与报文 **【缺口】** 待补充 |
 | 成功响应 | 当前用户 ID，与 Mate 用户 ID 同值，1～512 个字符；为空视为失败 |
-| 调用时机 | Cron 工具 create 通过全部校验之后、请求用户确认之前，每次创建一次；update、delete、pause、unpause、list、status、runs 不调用 |
-| 使用方式 | 用户 ID 写入任务，创建后不可修改；access-token 只用于这次查询，不落库，不写日志，不进入模型、事件或工具结果 |
-| 失败处理 | 快照没有 access-token、查询被拒绝、失败或结果未知时，不请求确认、不写入，按工具失败返回模型；不写入没有 user_id 的任务，不换其他凭据重试 |
-| 不调用的情况 | 定时运行的这一轮：根执行不是用户请求，没有用户的 access-token，create 不查询，直接按 [§3.10](#noninteractive) 结束本轮；接口配置的任务由 Mate 在创建请求中给出 userId |
+| 调用时机 | 创建、任务列表与 Run 列表每个请求一次，在读写数据库之前；Cron 工具 create 在通过全部校验之后、请求用户确认之前一次。详情、更新、删除、立即运行、暂停、取消暂停与 Cron 工具的其余动作不调用。不缓存 |
+| 使用方式 | 用户 ID 在创建时写入任务、之后不可修改，或作为本次列表的筛选条件；access-token 只用于这次查询，不落库，不写日志，不进入模型、事件或工具结果 |
+| 失败处理（HTTP 接口） | 缺少 access-token 或查询接口拒绝返回 401 `SCHEDULE_AUTH_REQUIRED`；查询失败、超时或结果未知返回 503 `SCHEDULE_SERVICE_UNAVAILABLE`；创建不写入，列表不返回空页 |
+| 失败处理（Cron 工具） | 快照没有 access-token、查询被拒绝、失败或结果未知时，不请求确认、不写入，按工具失败返回模型；不写入没有 user_id 的任务，不换其他凭据重试 |
+| 不调用的情况 | 定时运行的这一轮：根执行不是用户请求，没有用户的 access-token，Cron 工具 create 不查询，直接按 [§3.10](#noninteractive) 结束本轮 |
 
 ## 5. 架构指标
 
@@ -1883,7 +1882,7 @@ Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标
 ### 5.1 安全性
 
 - 用户、组织、租户、资源归属与权限由 Mate 维护并执行。Claw 只在任务上保存创建者 user_id 用于列表筛选，不解析或保存 scope、owner、operator，Mate 调用 Claw 由证书校验保证调用方，Claw 只校验目标资源，再检查自己的输入与状态，规则见[配置 身份与权限边界](#mate-access-boundary)。
-- 任务列表与 Run 列表由 Claw 按 userId 筛选和分页（D9）；userId 不作为授权依据，任务详情与写操作的可见性仍由 Mate 在调用前判断。
+- 创建、任务列表与 Run 列表用请求头的 access-token 查询用户 ID，任务列表与 Run 列表按它筛选和分页（D9）；access-token 只用于这次查询，不落库、不写日志；用户 ID 不作为授权依据，任务详情与写操作的可见性仍由 Mate 在调用前判断。
 - 用户权限只在配置任务时由 Mate 检查；运行时所有定时任务统一使用 Mate 配置的同一个账号，不再按用户查询执行资格（D10）。
 - 接口配置的任务新建的 Session 在受理前由 Mate 独立登记归属（[§4.8.2](#mate-calls)）；登记失败或结果未知时不启动，删除 Schedule/Run 不删除该归属。
 - 对话中创建的任务由 Cron 工具在用户自己的会话中创建，归属随会话，不经 Mate 授权；创建时用本轮请求的 access-token 查出 user_id，token 只用于这次查询，不落库、不进日志（[§4.8.3](#resolve-user)）；Cron 工具只能访问当前会话关联的任务，范围外按不存在处理；create、update、delete 须经用户确认，定时运行中无法确认即结束本轮（[§3.12](#cron-tool)、[§3.13](#chat-created-schedule)）。
@@ -1891,7 +1890,7 @@ Mate 按自己维护的任务与用户关联保存这条归属（用 user_id 标
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
 - Mate 公共展示边界（非本次 Claw 契约）：公共任务详情使用公共任务/Run 标识与 Chat 链接，Run 的内部 sessionId、executionId 不直接暴露；映射未完成显示“结果入口准备中”，不能重复触发任务。
-- **Claw 对 Mate 的调用边界（首版）。** Claw 只调用三个接口：Session 归属登记与核对、统一账号 access-token，以及 Cron 工具创建任务时按 access-token 查询用户 ID，接口、时机与失败处理集中见 [§4.8](#mate-calls)。用户授权、配额准入和任务与用户的关联由 Mate 管理入口在调用 Claw 之前完成（T8），Claw 不回调 Mate 做 authorize、resolve 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的 Mate 内部契约待实现（T7）。
+- **Claw 对 Mate 的调用边界（首版）。** Claw 只调用三个接口：Session 归属登记与核对、统一账号 access-token，以及创建和列表时按用户的 access-token 查询用户 ID，接口、时机与失败处理集中见 [§4.8](#mate-calls)。用户授权、配额准入和任务与用户的关联由 Mate 管理入口在调用 Claw 之前完成（T8），Claw 不回调 Mate 做 authorize、resolve 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；配额准入与归属登记的 Mate 内部契约待实现（T7）。
 
 ### 5.2 稳定性
 
@@ -2134,7 +2133,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.70.0 | 2026-10-21 | 列表改为按用户直接查询（D9，关闭 T10）：`t_schedule` 增加不可修改的 `user_id` 与索引 `(user_id, updated_at DESC, id)`；创建请求增加必填 userId，资源返回只读 userId；任务列表与 Run 列表增加必填 query userId，Mate 不再拉取全部页；Cron 工具创建任务时用本轮 access-token 查询用户 ID（§4.8.3，接口待补充）。 |
+| 0.70.0 | 2026-10-21 | 列表改为按用户直接查询（D9，关闭 T10）：`t_schedule` 增加不可修改的 `user_id` 与索引 `(user_id, updated_at DESC, id)`；创建、任务列表与 Run 列表增加 `access-token` 请求头，由 Claw 调用户查询接口得到用户 ID（§4.8.3，接口待补充），Mate 不再拉取全部页；Cron 工具创建任务时用本轮 access-token 查询；资源返回只读 userId；缺少或被拒绝的 token 返回 401，查询不可用返回 503。 |
 | 0.69.0 | 2026-10-20 | 任务列表与 Run 列表的 result 增加 total：与筛选条件匹配的总数，与当前页在同一个可重复读事务内 COUNT。 |
 | 0.68.0 | 2026-10-20 | Claw 与 Mate 互相调用由证书校验保证调用方：删除入站 `MateServiceAuthenticator` 与 `ScheduleAccessResolver`，Claw 不再接收操作范围；取 access-token 不附加服务认证不再是风险，T2 只剩统一账号配置与 Token 有效期。 |
 | 0.67.1 | 2026-10-20 | §4.8.1 的 access-token 路径配置改为 `campusmate.endpoints.scheduled-access-token-path`，与其他调用 Mate 的路径集中配置。 |

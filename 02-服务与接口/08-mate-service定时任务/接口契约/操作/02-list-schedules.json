@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/schedules",
     "summary": "读取定时任务列表",
-    "description": "页面按名称、Agent 和状态查看当前用户能看到的定时任务，包括接口创建的任务和在自己对话中创建的任务。Mate 把 query 转给 Claw 并追加当前用户 ID，分页与 total 由 Claw 完成。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "description": "页面按名称、Agent 和状态查看当前用户能看到的定时任务，包括接口创建的任务和在自己对话中创建的任务。Mate 把 query 与用户的 access-token 转给 Claw，Claw 查出当前用户后筛选，分页与 total 由 Claw 完成。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
     "parameters": [
       {
         "in": "query",
