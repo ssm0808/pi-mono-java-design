@@ -788,7 +788,7 @@ Cron 的 build 表示非计划执行模式；首版继续使用该入口的 base
 | description | 可选，最多 2048 个 Java 字符；创建省略默认 null，更新省略保持，空白或显式 null 清除；不附加到模型输入 |
 | agentId | 创建必填；复用 `ClawConstants.Agent.ID_REGEX`，只校验格式，不校验 Agent 是否存在和启停用（T11）；当前用户能否使用该 Agent 由 Mate 在调用 Claw 前检查；只关联 Agent 身份，不保证固定历史版本；关联会话的任务不能修改 agentId |
 | sessionId | 只读；对话中由 Cron 工具创建的任务为关联的会话 ID，接口创建的任务为 null；创建和更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID`，见 §4.3.5 |
-| userId | 只读；创建任务的用户 ID，Claw 在创建时用 access-token 查询得到（[§4.8.3](#resolve-user)），之后不可修改；创建和更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID`。是任务归属的唯一来源，Claw 按它筛选列表、判断单个任务归属（[D9](#key-decisions)） |
+| userId | 不返回，也不接收：创建任务的用户 ID 由 Claw 在创建时用 access-token 查询得到（[§4.8.3](#resolve-user)），存入 `t_schedule.user_id`，之后不可修改；只在 Claw 内部用于筛选列表、判断单个任务归属与统计配额（[D9](#key-decisions)），任何接口的响应都不含这个字段（2026-10-21 确定）；创建和更新请求传入即返回 400 `SCHEDULE_REQUEST_INVALID` |
 | prompt | 创建必填；纯文本字符串，去首尾空白后非空，否则返回400/SCHEDULE_PROMPT_INVALID；每次运行作为新 Session 的首条用户消息提交，关联会话的任务则追加到该会话；首版不支持附件，见 §4.3.6；不开放多条消息、system.message 或 user.define_outcome |
 | schedule | 可选；创建省略默认 null，更新省略保持；非空时只允许下表的 cron 对象，更新时整体替换 |
 | metadata | 可选字符串键值对象；创建省略为 {}；沿用 Claude 最多 16 对、键最多 64、值最多 512 个字符；不传给模型、不作为授权依据，详见 §4.3.7 |
@@ -899,7 +899,7 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
 
 ### 4.4 创建、读取、更新与删除报文
 
-创建 `POST /campusclaw-service/v1/schedules`。请求头必须带 `access-token`（Mate 原样转发用户的 token），Claw 用它查询用户 ID 写入任务的 userId，见 [§4.8.3](#resolve-user)。
+创建 `POST /campusclaw-service/v1/schedules`。请求头必须带 `access-token`（Mate 原样转发用户的 token），Claw 用它查询用户 ID 写入 `t_schedule.user_id`（不在响应中返回），见 [§4.8.3](#resolve-user)。
 
 <a id="create-quota"></a>
 
@@ -938,7 +938,6 @@ metadata 是可选的业务关联信息，例如 `{ "parkCode": "park-east", "pu
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
     "sessionId": null,
-    "userId": "user-7f3a9c2e",
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1127,7 +1126,6 @@ Accept-Language: zh-CN
         "description": null,
         "agentId": "agent-550e8400e29b41d4a716446655440000",
         "sessionId": null,
-        "userId": "user-7f3a9c2e",
         "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
         "schedule": {
           "type": "cron",
@@ -1244,7 +1242,6 @@ Accept-Language: zh-CN
     "description": "汇总前一日告警并跟进未关闭工单",
     "agentId": "agent-550e8400e29b41d4a716446655440000",
     "sessionId": null,
-    "userId": "user-7f3a9c2e",
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1357,7 +1354,6 @@ Cache-Control: no-store
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
     "sessionId": null,
-    "userId": "user-7f3a9c2e",
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1567,7 +1563,6 @@ Accept-Language: zh-CN
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
     "sessionId": null,
-    "userId": "user-7f3a9c2e",
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -1637,7 +1632,6 @@ Accept-Language: zh-CN
     "description": null,
     "agentId": "agent-550e8400e29b41d4a716446655440000",
     "sessionId": null,
-    "userId": "user-7f3a9c2e",
     "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
     "schedule": {
       "type": "cron",
@@ -2143,7 +2137,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.72.0 | 2026-10-21 | Mate 侧的 chatId 直接复用 sessionId（Mate D4），§5.1 的 Mate 公共展示边界同步：Mate 只把 sessionId 字段改名为 chatId，不再有“结果入口准备中”。Claw 接口不变。 |
+| 0.72.0 | 2026-10-21 | 任务资源不再返回 userId（§4.3）：创建者只存在 `t_schedule.user_id`，用于 Claw 内部的列表筛选、归属判断与配额，创建、列表、详情、更新与删除回执的示例同步去掉；Mate 侧的 chatId 直接复用 sessionId（Mate D4），§5.1 的 Mate 公共展示边界同步：Mate 只把 sessionId 字段改名为 chatId，不再有“结果入口准备中”。 |
 | 0.71.0 | 2026-10-21 | Mate 不再保存任务归属表 `t_schedule`，任务归属以 Claw `t_schedule.user_id` 为准（D9）：全部 10 个管理接口带 `access-token` 请求头，Claw 查出用户后按 user_id 判断归属，不属于当前用户的任务返回 404、写操作在锁内复查（§4.2 归属判断）；创建配额从 Mate 移到 Claw（§4.4，`campusclaw.schedule.max-api-schedules-per-user` 默认 20，422 `SCHEDULE_QUOTA_EXCEEDED`，对话中创建的任务不计入）；Session 归属登记请求增加 userId（§4.8.2）；删除已不可能出现的 403 功能资格错误。 |
 | 0.70.0 | 2026-10-21 | 列表改为按用户直接查询（D9，关闭 T10）：`t_schedule` 增加不可修改的 `user_id` 与索引 `(user_id, updated_at DESC, id)`；创建、任务列表与 Run 列表增加 `access-token` 请求头，由 Claw 调用户查询接口得到用户 ID（§4.8.3，接口待补充），Mate 不再拉取全部页；Cron 工具创建任务时用本轮 access-token 查询；资源返回只读 userId；缺少或被拒绝的 token 返回 401，查询不可用返回 503。 |
 | 0.69.0 | 2026-10-20 | 任务列表与 Run 列表的 result 增加 total：与筛选条件匹配的总数，与当前页在同一个可重复读事务内 COUNT。 |

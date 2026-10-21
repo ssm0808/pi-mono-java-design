@@ -62,7 +62,7 @@ Mate -> Claw ++ : POST /schedules（原样转发请求体与用户的 access-tok
 Claw -> Claw : 用 access-token 查出用户 ID，统计该用户接口配置的任务数（不加锁），\n未达上限则保存任务与 user_id
 alt Claw 返回 201
   Claw --> Mate : 定时任务（scheduleId）
-  Mate --> Operator : 201 定时任务（sessionId 改名为 chatId，去掉 userId）
+  Mate --> Operator : 201 定时任务（sessionId 改名为 chatId）
 else Claw 明确失败（带错误码）
   Claw --> Mate : 4xx / 5xx 错误码（达到上限为 422 SCHEDULE_QUOTA_EXCEEDED）
   Mate --> Operator : 原错误码
@@ -212,7 +212,7 @@ Mate -> Claw ++ : GET /schedules（原样转发 query 与用户的 access-token�
 Claw -> Claw : 用 access-token 查出用户 ID，\n按 user_id 与筛选条件分页并统计 total
 alt Claw 返回 200
   Claw --> Mate : schedules、total、nextPage
-  Mate --> Operator : 200 schedules、total、nextPage\n（sessionId 改名为 chatId，去掉 userId）
+  Mate --> Operator : 200 schedules、total、nextPage\n（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 4xx / 5xx 错误码
   Mate --> Operator : 原错误码
@@ -268,7 +268,7 @@ Mate -> Claw ++ : GET /schedules/{scheduleId}（原样转发，带用户的 acce
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404
 alt Claw 返回成功
   Claw --> Mate : 任务
-  Mate --> Operator : 200 任务（sessionId 改名为 chatId，去掉 userId）
+  Mate --> Operator : 200 任务（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码
   Mate --> Operator : 原错误码
@@ -298,7 +298,7 @@ Mate -> Claw ++ : POST /schedules/{scheduleId}（原样转发请求体，带用�
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404
 alt Claw 返回成功
   Claw --> Mate : 合并保存后的任务
-  Mate --> Operator : 200 任务（sessionId 改名为 chatId，去掉 userId）
+  Mate --> Operator : 200 任务（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码；字段错误
   Mate --> Operator : 原错误码
@@ -328,7 +328,7 @@ Mate -> Claw ++ : DELETE /schedules/{scheduleId}（带用户的 access-token）
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404；\n否则删除任务及其 Run
 alt Claw 返回成功
   Claw --> Mate : 删除回执
-  Mate --> Operator : 200 删除回执（sessionId 改名为 chatId，去掉 userId）
+  Mate --> Operator : 200 删除回执（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码
   Mate --> Operator : 原错误码；重复删除同样为 404

@@ -285,7 +285,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 | 步骤 | 规则 |
 |---|---|
 | 3 | 任务不存在、已删除或不属于当前用户，Claw 都返回 404 `SCHEDULE_NOT_FOUND` |
-| 4～5 | 返回时 sessionId 改名为 chatId（值不变，不查表），去掉 userId；接口定义见 [§4.2.8](#get-schedule-api) |
+| 4～5 | 返回时 sessionId 改名为 chatId（值不变，不查表）；接口定义见 [§4.2.8](#get-schedule-api) |
 
 <a id="update-sequence"></a>
 
@@ -468,12 +468,11 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 
 #### 4.2.3 资源投影
 
-Mate 原样返回 Claw 的 Schedule 与 Run，只把会话标识字段改名。基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId（[D4](#key-decisions)），所以值不变，Mate 不查表：
+Mate 原样返回 Claw 的 Schedule 与 Run，只把会话标识字段改名；Claw 不返回 userId（Claw [§4.3](../../01-总体架构/08-CampusClaw定时任务/README.md#schedule-fields)），Mate 也就不用去掉它。基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId（[D4](#key-decisions)），所以值不变，Mate 不查表：
 
 | Claw 字段 | Mate 字段 | 规则 |
 |---|---|---|
 | Schedule.sessionId | Schedule.chatId | 值不变：接口配置的任务为 null；对话中创建的任务为关联会话的 sessionId |
-| Schedule.userId | 不返回 | 只用于 Claw 筛选、判断归属与配额；浏览器只能看到自己的任务，不需要这个字段 |
 | Run.sessionId | Run.chatId | 值不变：受理成功时为本次的 sessionId（对话中创建的任务为原会话）；受理失败为 null |
 
 其余字段（id、scheduleId、agentId、triggerContext、error、status、pausedReason、schedule、metadata、时间）原样返回。scheduleId 与 runId 是 Claw 生成的不透明 ID，Mate 不另造公共 ID。
@@ -896,7 +895,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.1.0 | 2026-10-21 | 基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId（D4）：资源投影只把 sessionId 字段改名为 chatId，值不变，Mate 读取任务与 Run 时不再按 sessionId 查 chatId；删除各接口“读取 Chat 映射失败”的 500 和 chatId 暂时查不到的情况；相关时序图去掉查 chatId 的步骤。登记与 Chat 映射不变。 |
+| 2.1.0 | 2026-10-21 | 基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId（D4）：资源投影只把 sessionId 字段改名为 chatId，值不变，Mate 读取任务与 Run 时不再按 sessionId 查 chatId；删除各接口“读取 Chat 映射失败”的 500 和 chatId 暂时查不到的情况；相关时序图去掉查 chatId 的步骤。登记与 Chat 映射不变。Claw 不再返回 userId，资源投影去掉“Schedule.userId 不返回”一行，时序图去掉“去掉 userId”。 |
 | 2.0.0 | 2026-10-21 | Mate 不再保存任务归属表 `t_schedule`（D2）：归属只在 Claw 任务的 user_id；10 个管理接口都转发用户的 access-token，可见性由 Claw 判断，不属于当前用户按不存在返回 404，两种任务都能查看和管理；配额移到 Claw 创建时统计（D3、M2）；登记请求增加 userId，Mate 按它建立 Chat 映射，不再因任务不在 Mate 而拒绝（D5、§4.4.2）；删除无主任务及其对账（M4 关闭、§3.7）；§3.2 只保留 `t_schedule_session`；相关时序图与接口示例同步。 |
 | 1.10.0 | 2026-10-21 | 新增 §4.2.10 删除接口的完整定义：200 删除回执、删除与保留的范围、重复删除与结果未知（可重发）、双语错误表，示例由接口 HTML 展示。 |
 | 1.9.0 | 2026-10-21 | 目录由 `08-mate-service定时任务` 改名为 `08-CampusMate定时任务`；详细时序改为每个接口一张：§3.4 拆为任务列表与 Run 列表，§3.5 拆为详情、部分更新、删除、立即运行、暂停、取消暂停与 Run 详情，新增 §3.8 获取统一账号 access-token；业务总览的消息与 access-token 转发对齐。接口与规则不变。 |
