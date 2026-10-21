@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.4.0 |
+| 文档版本 | 0.5.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
 | 设计状态 | 待实现。路径目录、共享同步请求通道和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil` 等现状见 [§8.2](#source-evidence) |
@@ -27,6 +27,7 @@
 | T2 | 已确认（2026-10-21，Lotus）：Mate 用 HTTP 状态表达成败，非 2xx 即失败，业务失败只带 `resCode`、`resMsg`，没有 `result`。通道只按 HTTP 状态判定成败，不检查 `resCode`，与实现仓 `b0f45547` 的决定一致 | Lotus | [§3.3](#short-request-sequence) |
 | T3 | 已确认（2026-10-21，Lotus）：按传输方式分两组，同步 HTTP 请求 60 秒、模型 SSE 600 秒，均可配置 | Lotus | [§7.1](#config-items) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
+| T6 | 采纳后同步 [Model §5.6](../03-Model/README.md#http-transport-config) 的两个超时配置键为 `campusclaw.outbound.connect-timeout`、`campusclaw.outbound.sse.idle-timeout` | Claude | [§7.1](#config-items) |
 | T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
 
 ### 需求信息
@@ -158,7 +159,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 
 ![执行一次 Mate 工具](campusmate_short_request_sequence.svg)
 
-[原尺寸 SVG](campusmate_short_request_sequence.svg) · [PlantUML 源码](diagram.puml#L235)
+[原尺寸 SVG](campusmate_short_request_sequence.svg) · [PlantUML 源码](diagram.puml#L236)
 
 | 角色 | 映射 |
 |---|---|
@@ -172,7 +173,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 
 1. 请求未发出或未收到响应（连接失败、超时、中断）→ 失败类型"不可达"；
 2. HTTP 状态不是 2xx → 5xx 为"不可达"，4xx 为"被拒绝"；响应体能解析出 `resCode`、`resMsg` 时带上，只用于日志和错误映射；
-3. `Content-Length` 或实际读取超过 `campusmate.http.max-response-bytes` → "响应过大"；
+3. `Content-Length` 或实际读取超过 `campusclaw.outbound.http.max-response-bytes` → "响应过大"；
 4. 响应体不是 JSON 对象 → "响应无效"；
 5. 否则成功，返回 `result` 节点（可能为空），由业务客户端转换为 DTO；`result` 缺失或形状不符时由业务客户端判为"响应无效"，工具执行的空结果按空字符串返回。
 
@@ -258,7 +259,7 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 | `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 全部不检查，成败只看 HTTP 状态 | Mate 非 2xx 即失败（T2 已确认），行为不变 |
 | HTTP 状态 | Runtime 要求 2xx；取 token 要求 200；`MateRestUtil` 不检查 | 统一要求 2xx | 工具发现和执行遇到非 2xx 时更早失败 |
 | 响应上限 | 只有 Runtime 限制 4 MiB | 所有同步请求限制 4 MiB | 工具结果超过 4 MiB 时失败；【缺口】未核验现有工具结果大小 |
-| 配置键改名 | `campusmate.runtime.connect-timeout` 等 | `campusmate.http.*` | 环境变量改名，不做兼容双读（沿用 ADR-0035） |
+| 配置键改名 | `campusmate.runtime.connect-timeout`、`campusmate.model.connect-timeout`、`campusmate.model.response-timeout` 等 | `campusclaw.outbound.*` | 环境变量改名，不做兼容双读（沿用 ADR-0035） |
 
 ## 6. 质量保证
 
@@ -290,12 +291,14 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 | 配置键 | 环境变量 | 默认值 | 取值约束 | 用途 |
 |---|---|---|---|---|
 | `campusmate.base-url` | `CAMPUSMATE_BASE_URL` | 通用模块无默认值；公司镜像 `https://localhost:8591`（ADR-0042） | 规则不变，见 [README §5](README.md) | Mate 服务地址 |
-| `campusmate.http.connect-timeout` | `CAMPUSMATE_HTTP_CONNECT_TIMEOUT` | `PT10S` | 正数 | 同步请求连接超时（新增，取代 `campusmate.runtime.connect-timeout`） |
-| `campusmate.http.request-timeout` | `CAMPUSMATE_HTTP_REQUEST_TIMEOUT` | `PT60S` | 正数 | 所有同步 HTTP 请求的单次超时：读取 Agent 和 Skill、查询和执行工具、取定时 token（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
-| `campusmate.http.max-response-bytes` | `CAMPUSMATE_HTTP_MAX_RESPONSE_BYTES` | `4194304` | 正整数 | 所有同步请求的响应上限（新增，取代 `campusmate.runtime.max-response-bytes`） |
-| `campusmate.model.response-timeout` | `CAMPUSMATE_MODEL_RESPONSE_TIMEOUT` | `PT600S`（与现有 `PT10M` 相同） | 正数 | 模型流式推理超时（已有，不变） |
+| `campusclaw.outbound.connect-timeout` | `CAMPUSCLAW_OUTBOUND_CONNECT_TIMEOUT` | `PT10S` | 正数 | 建立连接的最长时间，同步与流式请求共用（新增，取代 `campusmate.runtime.connect-timeout`、`campusmate.model.connect-timeout`） |
+| `campusclaw.outbound.http.request-timeout` | `CAMPUSCLAW_OUTBOUND_HTTP_REQUEST_TIMEOUT` | `PT60S` | 正数 | 同步请求等待完整响应的最长时间：读取 Agent 和 Skill、查询和执行工具、取定时 token（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
+| `campusclaw.outbound.http.max-response-bytes` | `CAMPUSCLAW_OUTBOUND_HTTP_MAX_RESPONSE_BYTES` | `4194304` | 正整数 | 同步请求的响应上限（新增，取代 `campusmate.runtime.max-response-bytes`） |
+| `campusclaw.outbound.sse.idle-timeout` | `CAMPUSCLAW_OUTBOUND_SSE_IDLE_TIMEOUT` | `PT600S` | 正数 | 流式请求等待响应头、以及两条 SSE 事件之间的最长间隔，不限制总时长（新增，取代 `campusmate.model.response-timeout`，语义不变，见 [Model §5.6](../03-Model/README.md#http-transport-config)） |
 
-删除的配置：`campusmate.endpoints.*` 全部 7 项及其环境变量；`campusmate.runtime.connect-timeout`、`request-timeout`、`max-response-bytes`；`campusclaw.schedule.access-token-timeout`。`campusmate.model.*`、`campusmate.runtime.agents-root`、`campusmate.tool.enabled` 不变。
+传输参数按请求类型放在 `campusclaw.outbound` 下，不放在某个服务下：Mate 之后还会有 CampusMCP 等上游，各上游共用同一组超时和响应上限，`campusmate`、`campusmcp` 等服务树只保留服务地址和业务参数。与基线不同：Codex 把 `stream_idle_timeout_ms` 放在每个 `model_providers.<name>` 下，Anthropic SDK 把 `timeout` 放在每个客户端的 `ClientOptions` 里，都是先按服务再按类型；这里选择共用（产品约束：各上游同为园区内部服务，用户确认），代价是某个上游需要不同超时时，要再加服务级覆盖项，届时按 `<服务>.outbound.*` 覆盖全局值，首版不加。
+
+删除的配置：`campusmate.endpoints.*` 全部 7 项及其环境变量；`campusmate.runtime.connect-timeout`、`request-timeout`、`max-response-bytes`；`campusmate.model.connect-timeout`、`response-timeout`；`campusclaw.schedule.access-token-timeout`。`campusmate.model` 只剩模型业务参数（`api`、`reasoning`、并发许可）；`campusmate.runtime.agents-root`、`campusmate.tool.enabled` 不变。
 
 本节与 codex-style `design-doc-template` 7.1 中"调用某服务的路径放进该服务的路径目录"一条冲突：本设计不再有路径配置，路径进代码中的接口目录。采纳后按 T4 修改该规则。
 
@@ -349,6 +352,7 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.5.0 | 2026-10-21 | 传输参数按请求类型放到 `campusclaw.outbound` 下供各上游共用，流式超时改名 `sse.idle-timeout`。 |
 | 0.4.0 | 2026-10-21 | 超时按传输方式分两组：同步 HTTP 请求 60 秒、模型 SSE 600 秒，均可配置。 |
 | 0.3.1 | 2026-10-21 | 区分“同步请求”（经同一通道的全部非流式调用，含工具执行）与“查询请求”（10 秒超时分组）。 |
 | 0.3.0 | 2026-10-21 | 超时分三组且均可配置：查询请求 10 秒、工具执行 60 秒、模型推理 600 秒。 |

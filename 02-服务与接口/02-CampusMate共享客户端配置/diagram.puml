@@ -163,12 +163,12 @@ package "ai" as AiPkg {
 package "coding-agent-cli：配置" as ConfigPkg {
   class CampusMateClientProperties <<record，改造>> {
     + baseUrl : CampusMateOrigin
-    + http : Http
   }
-  class "CampusMateClientProperties.Http" as HttpOptions <<record，待实现>> {
+  class "OutboundHttpProperties" as HttpOptions <<record，待实现>> {
     + connectTimeout : Duration
-    + requestTimeout : Duration
-    + maxResponseBytes : int
+    + httpRequestTimeout : Duration
+    + httpMaxResponseBytes : int
+    + sseIdleTimeout : Duration
   }
 }
 
@@ -214,9 +214,9 @@ package "coding-agent-cli：业务客户端" as ClientPkg {
 CampusMateOperation <-- CampusMateOrigin : 按目录生成地址
 CampusMateProvider --> CampusMateOrigin : 校验地址
 CampusMateProvider --> CampusMateOperation : MODEL_CHAT
-CampusMateClientProperties *-- HttpOptions
 CampusMateClientProperties --> CampusMateOrigin : 启动时校验
-CampusMateHttpClient --> CampusMateClientProperties : 地址、超时、上限
+CampusMateHttpClient --> CampusMateClientProperties : 服务地址
+CampusMateHttpClient --> HttpOptions : 超时、上限
 CampusMateHttpClient ..> CampusMateRequest : 发送
 CampusMateHttpClient ..> CampusMateCallException : 失败时抛出
 CampusMateCallException *-- FailureKind
@@ -227,7 +227,8 @@ MateAccessTokenClient --> CampusMateHttpClient
 
 legend bottom
   通道统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；成败只看 HTTP 状态，resCode 只进日志。
-  模型推理保留自己的连接与超时（见 Model 专题第 5 节），只共用接口目录与地址。
+  模型推理保留自己的连接（见 Model 专题第 5 节），共用接口目录与地址；超时用 @Value 读取同一组 campusclaw.outbound 配置（ai 模块不依赖 coding-agent-cli）。
+  OutboundHttpProperties 绑定 campusclaw.outbound，按请求类型分组，供 CampusMate、CampusMCP 等上游共用。
   删除：MateRestUtil、CampusMateClientProperties.Endpoints（待实现）。
 endlegend
 @enduml
