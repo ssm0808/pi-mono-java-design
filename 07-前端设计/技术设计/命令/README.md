@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.19.0 |
+| 文档版本 | 1.20.0 |
 | 更新日期 | 2026-10-21 |
 | 本次前端修订基线 | 设计仓 `5fff2e0c0b6c418dc26b7a003569da49d1036e9c` |
 | Runtime 命令契约 | 清单、可选值与执行三个接口见[命令系统 §4.4](../../../01-总体架构/04-CampusClaw命令系统/README.md#command-interaction-flow)；对照实现 `pi-mono-java@628dca25a694d9d056b15f012e1223d68091ab66`，本文标“待实现”的行为在该提交中尚不存在 |
@@ -344,7 +344,7 @@ Help 文本中的使用场景只是展示内容，不可点击即发送；未来
 | Agent 配置服务暂不可用 / 503 AGENT_SERVICE_UNAVAILABLE（清单、可选值或新对话建会话，待实现） | Palette 或 Composer 内联 | 全部草稿 | 提示稍后重试；不自动重放，用户可手动重试 |
 | 技能不可用 / 422 SKILL_NOT_AVAILABLE | Composer 内联 | 全部命令草稿 | 说明该技能当前无法使用，刷新清单；仅显式重试 |
 | 事件服务繁忙 / 503 EVENT_SERVICE_UNAVAILABLE 或 RUNTIME_CAPACITY_EXCEEDED | Composer 内联 | 全部命令草稿 | 提示稍后重试；不自动重放，用户可手动再次执行 |
-| 技能受理写入失败 / 500 EVENT_ACCEPTANCE_FAILED | 结果区警告 | 全部命令草稿 | 提示受理失败；仅显式重试 |
+| 技能受理写入失败 / 500 EVENT_ACCEPTANCE_FAILED | Composer 内联 | 全部命令草稿 | 提示受理失败，文案与 503 EVENT_SERVICE_UNAVAILABLE 区分；技能结果不进入 Builtin 结果区（§7）；仅显式重试 |
 | Builtin 成功、GET Session 失败 | 状态区 | 已展示的结果文本 | 按会话读取失败重试 GET，不重放命令 |
 | POST 网络结果未知 | 结果区警告 | 命令草稿 | 按命令类别对账；禁止自动重试 |
 | 401/403 | 页面级认证/权限处理 | 遵循产品安全策略 | 跳转登录或展示无权限；不出现凭据输入表单 |
@@ -523,6 +523,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.20.0 | 2026-10-21 | 技能受理失败 500 EVENT_ACCEPTANCE_FAILED 改为 Composer 内联提示，与技能结果不进入结果区保持一致。 |
 | 1.19.0 | 2026-10-21 | 新增 503 AGENT_SERVICE_UNAVAILABLE 的处理；model 显示名由 Mate 补充，结果文本中的 `model:` 链接未替换时显示 modelId；自动标题不覆盖 /rename。 |
 | 1.18.0 | 2026-10-20 | 清单与可选值按 Agent 读取并支持新对话先建会话再执行，rename、model、thinking、mode 参数必填，Builtin 结果统一为 Markdown 文本并在成功后读取 Session，选项显示名由前端提供。 |
 | 1.17.0 | 2026-10-19 | 选项型命令改为在清单位置弹出可选值（参考 Codex 模型选择）：默认高亮当前值，上下键切换，回车、数字键或点击即执行；当前值不可选或运行中不高亮，执行即查询。 |
