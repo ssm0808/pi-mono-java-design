@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.7.1 |
+| 文档版本 | 0.7.2 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
 | 设计状态 | 待实现。两个上游（Mate、CampusMCP）的接口目录、`CampusMateClient` 与 `CampusMcpClient` 两个客户端和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil`、三个按业务划分的客户端等现状见 [§8.2](#source-evidence)。类名已定，见 [§8.4](#naming) |
@@ -23,7 +23,7 @@
 
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
-| T1 | 确认公司部署流水线没有覆盖任何 `CAMPUSMATE_*_PATH*` 环境变量；若有，按 [D1 代价](#key-decisions)评估 | Lotus | [D1](#key-decisions) |
+| T1 | 已确认（2026-10-21，Lotus）：部署不用环境变量，直接用公司镜像 `campusclaw/src/main/resources/application.properties` 的配置项。该文件第 39～45 行的 7 个路径值与代码默认值逐字相同，路径写进代码后行为不变 | Lotus | [D1](#key-decisions)、[§7.1](#config-items) |
 | T2 | 已确认（2026-10-21，Lotus）：Mate 用 HTTP 状态表达成败，非 2xx 即失败，业务失败只带 `resCode`、`resMsg`，没有 `result`。发送组件只按 HTTP 状态判定成败，不检查 `resCode`，与实现仓 `b0f45547` 的决定一致 | Lotus | [§3.3](#short-request-sequence) |
 | T3 | 已确认（2026-10-21，Lotus）：按传输方式分两组，同步 HTTP 请求 60 秒、模型 SSE 600 秒，均可配置 | Lotus | [§7.1](#config-items) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
@@ -108,7 +108,7 @@ Agent 服务依赖上游平台提供模型、Agent 定义、业务工具和定�
 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
-| D1 | 接口路径由部署配置，还是写在代码里？第二个上游的地址怎么给？ | Codex 的 `Provider` 只有 `base_url`、请求头和重试，每个接口客户端在代码里写死路径（`"models"`、`"memories/trace_summarize"`、`/responses`），唯一例外 `model_catalog_url` 是因为模型目录可能在另一个主机；Anthropic SDK 只暴露 `baseUrl`，各 Service 用 `addPathSegments("v1", "messages")` 写死；pi 的模型只有 `baseUrl` 和 `api`；OpenCode 的 Provider 设置只有 `baseURL` | 一个上游的接口都在同一主机，CampusMCP 是另一个主机（用户确认）；路径变化必然伴随请求或响应变化，Claw 本来就要发版；仓库内没有部署覆盖任何路径变量 | 路径写成 common 模块中每个上游一份的接口目录：`CampusMateOperation`（5 项）、`CampusMcpOperation`（2 项），都实现 `UpstreamOperation`（方法 + 路径模板）；配置每个上游只保留服务地址 `campusmate.base-url`、`campusmcp.base-url`，分别绑定到 `CampusMateProperties`、`CampusMcpProperties`。不学 Codex 的 `model_catalog_url` 给单个接口配完整 URL，因为 CampusMCP 是一个服务，接口会继续增加 | 改路径时 Claw 必须发版；退役 7 个路径配置键和环境变量，不做兼容双读；新增 `CAMPUSMCP_BASE_URL`，通用模块必须设置；若某环境需要不同网关前缀，要再加一个前缀配置（T1） |
+| D1 | 接口路径由部署配置，还是写在代码里？第二个上游的地址怎么给？ | Codex 的 `Provider` 只有 `base_url`、请求头和重试，每个接口客户端在代码里写死路径（`"models"`、`"memories/trace_summarize"`、`/responses`），唯一例外 `model_catalog_url` 是因为模型目录可能在另一个主机；Anthropic SDK 只暴露 `baseUrl`，各 Service 用 `addPathSegments("v1", "messages")` 写死；pi 的模型只有 `baseUrl` 和 `api`；OpenCode 的 Provider 设置只有 `baseURL` | 一个上游的接口都在同一主机，CampusMCP 是另一个主机（用户确认）；路径变化必然伴随请求或响应变化，Claw 本来就要发版；仓库内没有部署覆盖任何路径变量 | 路径写成 common 模块中每个上游一份的接口目录：`CampusMateOperation`（5 项）、`CampusMcpOperation`（2 项），都实现 `UpstreamOperation`（方法 + 路径模板）；配置每个上游只保留服务地址 `campusmate.base-url`、`campusmcp.base-url`，分别绑定到 `CampusMateProperties`、`CampusMcpProperties`。不学 Codex 的 `model_catalog_url` 给单个接口配完整 URL，因为 CampusMCP 是一个服务，接口会继续增加 | 改路径时 Claw 必须发版；退役 7 个路径配置键和环境变量，不做兼容双读；新增 `CAMPUSMCP_BASE_URL`，通用模块必须设置；若以后某环境需要不同网关前缀，要再加一个前缀配置（目前部署值与默认值相同，T1 已确认） |
 | D2 | 同步请求的发送、超时、响应上限和失败判定由谁负责？多个上游是否共用？ | Codex 的 `EndpointSession` 为一个 Provider 的所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 每个客户端一份 `ClientOptions`（`baseUrl`、`HttpClient`、默认 `Timeout`），所有 Service 共用，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块；工具执行带业务凭据，不能误发到另一个上游 | 两个上游客户端共用一个包内可见的发送组件 `UpstreamHttpSender`，它持有唯一的 JDK HttpClient 和 `campusclaw.outbound` 参数，统一拼地址、超时、响应上限，并只按 HTTP 状态判定成败（非 2xx 即失败，T2、T8）；每个客户端只持有自己上游的地址，只引用自己的接口目录。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用 Mate 目录和地址校验 | 现有三套失败判定合并成一套，工具执行和取 token 不再自行检查 `resCode`；若某个接口违反"非 2xx 即失败"，Claw 会把失败当成功；模型与同步请求仍是两条连接，不能共用连接池；某个上游需要不同超时时要另加覆盖项（[§7.1](#config-items)） |
 | D3 | 调用上游的客户端按上游划分，还是按业务划分？ | Anthropic SDK 每个服务一个客户端 `AnthropicClient`，按资源暴露 `messages()`、`models()` 等，调用方自己处理 `AnthropicServiceException`；Codex 按接口划分 `ModelsClient`、`MemoriesClient` 等，共用同一个 `EndpointSession` | 用户要求只保留 `CampusMateClient`、`CampusMcpClient`（R7）；三个调用方属于不同模块（M01、M03、M10），各自的失败要转换成本模块的错误：工具执行失败要变成给模型看的工具结果，定时 token 失败要区分"需要重新授权"和"服务不可用" | 按上游划分，与 Anthropic SDK 一致：`CampusMateClient` 提供读取 Agent 运行定义、Agent 绑定工具、Skill 和取定时 token 四个方法；`CampusMcpClient` 提供查询工具定义和执行工具两个方法。两个客户端只做请求组装和 DTO 转换，失败统一抛出 `UpstreamCallException`；转换成模块错误由调用方负责（[§3.3](#short-request-sequence) 转换表）。删除 `MateServiceClient`、`MateToolClient` 与 `HttpMateToolClient`、`MateAccessTokenClient`、`MateRestUtil` | 错误码转换分散到 4 个调用点（`AgentRuntimeManager`、`MateToolResolver`、`MateRemoteToolHandler`、定时 token 适配）；"先从 Mate 读绑定、再到 CampusMCP 查定义"的编排移到 `MateToolResolver`；`MateServiceClient` 中的 DTO（`AgentRuntime`、`SkillInfo`、`BoundTool` 等）要迁到客户端包，约 10 个文件改 import；`CampusMateClient` 的改动同时影响三个模块 |
 
@@ -267,7 +267,7 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 
 | 变化 | 现状 | 目标 | 影响 |
 |---|---|---|---|
-| 路径配置 | 7 个 `campusmate.endpoints.*` 键和 `CAMPUSMATE_*_PATH*` 变量 | 删除，写进代码 | 已设置的变量被忽略；与默认值相同时无行为变化（T1） |
+| 路径配置 | 7 个 `campusmate.endpoints.*` 键（公司镜像 `application.properties` 第 39～45 行）和对应环境变量 | 删除，写进代码 | 部署只用 `application.properties`，其中的值与默认值逐字相同，无行为变化（T1 已确认） |
 | 工具查询与执行的目标 | Mate `/mate-service/v1/runtime/tools/*` | CampusMCP `/mcp-service/v1/runtime/tools/*` | 部署必须能访问 CampusMCP；通用模块必须新设 `CAMPUSMCP_BASE_URL`，公司镜像有默认值 |
 | 超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 同步请求统一 60 秒可配；模型推理 600 秒不变 | 工具发现与执行不变；Runtime 读取从 30 秒、取 token 从 5 秒放宽到 60 秒（T3）。Mate 挂起时，会话准备和定时运行要等更久才判定失败 |
 | `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 全部不检查，成败只看 HTTP 状态 | Mate 非 2xx 即失败（T2 已确认），行为不变 |
@@ -319,7 +319,18 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 
 删除的配置：`campusmate.endpoints.*` 全部 7 项及其环境变量；`campusmate.runtime.connect-timeout`、`request-timeout`、`max-response-bytes`；`campusmate.model.connect-timeout`、`response-timeout`；`campusclaw.schedule.access-token-timeout`。`campusmate.model` 只剩模型业务参数（`api`、`reasoning`、并发许可）；`campusmate.runtime.agents-root`、`campusmate.tool.enabled` 不变。
 
-公司镜像 `application.properties` 新增一行 `campusmcp.base-url=${CAMPUSMCP_BASE_URL:https://matemcp-service.mate.svc.cluster.local:8592}`；通用模块 `application.yml` 新增 `campusmcp.base-url: ${CAMPUSMCP_BASE_URL}`，不给默认值，与 `campusmate.base-url` 一致。
+部署直接使用公司镜像 `campusclaw/src/main/resources/application.properties` 的配置项（T1），改造后该文件中与上游相关的部分如下，原第 39～45 行的 7 个路径键和第 47～48、53～55 行的超时键删除：
+
+```properties
+campusmate.base-url=${CAMPUSMATE_BASE_URL:https://localhost:8591}
+campusmcp.base-url=${CAMPUSMCP_BASE_URL:https://matemcp-service.mate.svc.cluster.local:8592}
+campusclaw.outbound.connect-timeout=${CAMPUSCLAW_OUTBOUND_CONNECT_TIMEOUT:PT10S}
+campusclaw.outbound.http.request-timeout=${CAMPUSCLAW_OUTBOUND_HTTP_REQUEST_TIMEOUT:PT60S}
+campusclaw.outbound.http.max-response-bytes=${CAMPUSCLAW_OUTBOUND_HTTP_MAX_RESPONSE_BYTES:4194304}
+campusclaw.outbound.sse.idle-timeout=${CAMPUSCLAW_OUTBOUND_SSE_IDLE_TIMEOUT:PT600S}
+```
+
+`${环境变量:默认值}` 沿用该文件现有写法：不设环境变量时就用冒号后的值，部署改这里的值即可。通用模块 `application.yml` 新增 `campusmcp.base-url: ${CAMPUSMCP_BASE_URL}`，不给默认值，与 `campusmate.base-url` 一致。
 
 本节与 codex-style `design-doc-template` 7.1 中"调用某服务的路径放进该服务的路径目录"一条冲突：本设计不再有路径配置，路径进代码中的接口目录。采纳后按 T4 修改该规则。
 
@@ -396,6 +407,7 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.7.2 | 2026-10-21 | T1 确认：部署只用公司镜像 `application.properties`，路径值与默认值相同；§7.1 给出改造后的配置片段。 |
 | 0.7.1 | 2026-10-21 | 命名定稿（T7）：`UpstreamHttpSender`、`UpstreamOrigin`、`CampusMateProperties`、`CampusMcpProperties`、`upstream` 包。 |
 | 0.7.0 | 2026-10-21 | 客户端按上游划分，只保留 `CampusMateClient`、`CampusMcpClient`，共用包内发送组件；错误码转换移到调用方；T8 三点确认，不考虑新旧版本并存和回滚。 |
 | 0.6.0 | 2026-10-21 | 新增上游 CampusMCP：工具定义查询和执行改走 `/mcp-service/v1/runtime/tools/*`，新增 `campusmcp.base-url`；接口目录按上游拆分，通道一个实现、每个上游一个实例；新增类名为暂定名（§8.4）。 |
