@@ -191,14 +191,13 @@ package "coding-agent-cli：短请求通道" as ChannelPkg {
   }
   class CampusMateCallException <<待实现>> {
     + kind : FailureKind
-    + resCode : String
+    + resCode : String（仅非 2xx 时解析）
   }
   enum FailureKind <<待实现>> {
     UNREACHABLE
     REJECTED
     TOO_LARGE
     INVALID
-    BUSINESS_FAILURE
   }
 }
 
@@ -233,7 +232,7 @@ MateAccessTokenClient --> CampusMateHttpClient
 HttpMateToolClient ..> MateToolProperties : 工具执行超时
 
 legend bottom
-  通道统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；resCode 非 "0" 为业务失败。
+  通道统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；成败只看 HTTP 状态，resCode 只进日志。
   模型推理保留自己的连接与超时（见 Model 专题第 5 节），只共用接口目录与地址。
   删除：MateRestUtil、CampusMateClientProperties.Endpoints（待实现）。
 endlegend
@@ -261,7 +260,7 @@ ToolClient -> Channel ++ : 发送工具执行请求（工具执行超时）
 Channel -> Channel : 按接口目录生成地址（编码路径变量）
 Channel -> Mate ++ : 执行工具（本次凭据）
 return 统一响应
-Channel -> Channel : 校验状态、大小与业务结果码
+Channel -> Channel : 校验 HTTP 状态与响应大小
 return 执行结果
 ToolClient -> ToolClient : 转换为工具结果
 return 工具结果

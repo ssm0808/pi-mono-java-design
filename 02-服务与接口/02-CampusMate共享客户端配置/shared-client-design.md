@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.1 |
+| 文档版本 | 0.2.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
 | 设计状态 | 待实现。路径目录、共享短请求通道和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil` 等现状见 [§8.2](#source-evidence) |
@@ -24,7 +24,7 @@
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
 | T1 | 确认公司部署流水线没有覆盖任何 `CAMPUSMATE_*_PATH*` 环境变量；若有，按 [D1 代价](#key-decisions)评估 | Lotus | [D1](#key-decisions) |
-| T2 | 确认通道对所有短请求统一检查 `resCode == "0"`。这会推翻实现仓 `b0f45547`（2026-08-26，`docs/designs/agent-skill-runtime.md` 3.1.0）"不按 resCode 预判、只校验 result 形状"的决定，该提交没有写原因；备选是通道只解析信封、不判定 `resCode`，由执行和取 token 两个客户端各自检查，现有行为不变 | Lotus | [§5.3](#compatibility) |
+| T2 | 已确认（2026-10-21，Lotus）：Mate 用 HTTP 状态表达成败，非 2xx 即失败，业务失败只带 `resCode`、`resMsg`，没有 `result`。通道只按 HTTP 状态判定成败，不检查 `resCode`，与实现仓 `b0f45547` 的决定一致 | Lotus | [§3.3](#short-request-sequence) |
 | T3 | 确认短请求超时统一为 30 秒：工具发现从 60 秒收紧，定时取 token 从 5 秒放宽 | Lotus | [§5.3](#compatibility) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
 | T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
@@ -51,7 +51,7 @@
 | 编号 | 需求 | 类型 | 来源 |
 |---|---|---|---|
 | R1 | 部署只需配置 Mate 服务地址，新增一个 Mate 接口不新增配置项或环境变量 | 约束 | 用户要求；推导，需确认 |
-| R2 | 同一种调用失败（不可达、超时、非 2xx、响应过大、响应无效、业务失败）在所有短请求上按同一规则判定 | 稳定性 | 用户"五花八门"；[§8.2](#source-evidence) 中三套不同判定 |
+| R2 | 同一种调用失败（不可达、超时、非 2xx、响应过大、响应无效）在所有短请求上按同一规则判定 | 稳定性 | 用户"五花八门"；[§8.2](#source-evidence) 中三套不同判定 |
 | R3 | 所有 Mate 请求只能发往 `campusmate.base-url` 指定的服务，路径不能改道到其他主机 | 安全 | 沿用 ADR-0026 |
 | R4 | 超时按调用类型配置，工具执行可以单独调整 | 稳定性 | 推导，需确认 |
 | R5 | 不改变任何 Mate 接口的方法、路径、请求头、请求体和响应体 | 约束 | 沿用 ADR-0026 |
@@ -102,7 +102,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | Mate 接口路径由部署配置，还是写在代码里？ | Codex 的 `Provider` 只有 `base_url`、请求头和重试，每个接口客户端在代码里写死路径（`"models"`、`"memories/trace_summarize"`、`/responses`），唯一例外 `model_catalog_url` 是因为模型目录可能在另一个主机；Anthropic SDK 只暴露 `baseUrl`，各 Service 用 `addPathSegments("v1", "messages")` 写死；pi 的模型只有 `baseUrl` 和 `api`；OpenCode 的 Provider 设置只有 `baseURL` | Mate 是唯一服务，所有接口同一主机（产品约束）；路径变化必然伴随请求或响应变化，Claw 本来就要发版；仓库内没有部署覆盖任何路径变量 | 路径写成 common 模块的接口目录 `CampusMateOperation`（方法 + 路径模板），配置只保留 `campusmate.base-url`；ai 和 cli 两个模块共用这份目录 | Mate 单独改路径时 Claw 必须发版；退役 7 个配置键和环境变量，不做兼容双读；若某环境需要不同网关前缀，要再加一个前缀配置（T1） |
-| D2 | 短请求的发送、超时、响应上限和失败判定由谁负责？ | Codex 的 `EndpointSession` 为所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 所有 Service 共用 `ClientOptions` 中的一个 `HttpClient` 和默认 `Timeout`，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块 | cli 模块新增一个短请求通道 `CampusMateHttpClient`，持有唯一的 JDK HttpClient，统一拼地址、超时、响应上限、HTTP 状态和 `resCode` 解包；业务客户端只做请求组装和结果转换。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用接口目录和地址校验 | 现有三套失败判定合并成一套，工具发现和 Runtime 读取会开始拒绝 `resCode` 非 0 的响应（T2）；模型与短请求仍是两条连接，不能共用连接池 |
+| D2 | 短请求的发送、超时、响应上限和失败判定由谁负责？ | Codex 的 `EndpointSession` 为所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 所有 Service 共用 `ClientOptions` 中的一个 `HttpClient` 和默认 `Timeout`，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块 | cli 模块新增一个短请求通道 `CampusMateHttpClient`，持有唯一的 JDK HttpClient，统一拼地址、超时、响应上限，并只按 HTTP 状态判定成败（Mate 非 2xx 即失败，T2）；业务客户端只做请求组装和结果转换。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用接口目录和地址校验 | 现有三套失败判定合并成一套，工具执行和取 token 不再自行检查 `resCode`；若某个 Mate 接口违反"非 2xx 即失败"，Claw 会把失败当成功；模型与短请求仍是两条连接，不能共用连接池 |
 | D3 | 业务客户端是合并成一个 Mate 客户端，还是按业务保留？ | Anthropic SDK 按资源保留 `MessageService`、`ModelService` 等，共用同一个 `ClientOptions`；Codex 按接口保留 `ModelsClient`、`MemoriesClient` 等，共用同一个 `EndpointSession` | 三个调用方属于不同模块（M01、M03、M10），各自的失败要转换成本模块的错误：工具执行失败要变成给模型看的工具结果，定时 token 失败要区分"需要重新授权"和"服务不可用" | 保留 `MateServiceClient`、`HttpMateToolClient`、`MateAccessTokenClient` 三个业务客户端，全部改用共享通道；删除 `MateRestUtil` | 新接口仍要选一个业务客户端或新建一个；通道的失败类型要映射到三套模块错误，直到 [M12 统一错误码](../../01-总体架构/09-CampusClaw异常与错误码/README.md)落地 |
 
 ## 3. 详细设计
@@ -112,7 +112,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
 | UC1 启动时校验服务地址 | BU1 | 部署人员启动服务 | 设置了 `CAMPUSMATE_BASE_URL` | 服务启动，地址规范化后供所有调用使用 | 地址非法时启动失败，不发任何请求；规则沿用 [README §5](README.md) |
-| UC2 发送短请求 | BU3、BU4 | 业务客户端 | 地址已校验 | 返回 Mate 统一响应中的 `result` | 超时、响应上限、HTTP 状态和 `resCode` 按同一规则判定 |
+| UC2 发送短请求 | BU3、BU4 | 业务客户端 | 地址已校验 | 返回 Mate 统一响应中的 `result` | 超时、响应上限和 HTTP 状态按同一规则判定 |
 | UC3 读取 Agent 运行定义 | BU4 | Runtime 准备运行目录 | — | 返回提示词、默认模型和绑定 Skill | 不携带业务凭据 |
 | UC4 读取 Skill | BU4 | Runtime 准备运行目录、Tool 装配 | — | 返回 Skill 文件或绑定工具 | 两个客户端读同一接口的不同字段 |
 | UC5 查询工具定义 | BU4 | Tool 装配 | — | 返回 Agent 或 Skill 绑定工具的定义 | 不携带业务凭据 |
@@ -171,20 +171,21 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 通道判定规则（替代现有三套判定）：
 
 1. 请求未发出或未收到响应（连接失败、超时、中断）→ 失败类型"不可达"；
-2. HTTP 状态不是 2xx → 5xx 为"不可达"，4xx 为"被拒绝"；
+2. HTTP 状态不是 2xx → 5xx 为"不可达"，4xx 为"被拒绝"；响应体能解析出 `resCode`、`resMsg` 时带上，只用于日志和错误映射；
 3. `Content-Length` 或实际读取超过 `campusmate.http.max-response-bytes` → "响应过大"；
 4. 响应体不是 JSON 对象 → "响应无效"；
-5. `resCode` 不是 `"0"` → "业务失败"，带上 `resCode`；
-6. 否则返回 `result` 节点，由业务客户端转换为 DTO。
+5. 否则成功，返回 `result` 节点（可能为空），由业务客户端转换为 DTO；`result` 缺失或形状不符时由业务客户端判为"响应无效"，工具执行的空结果按空字符串返回。
+
+成败只看 HTTP 状态，不检查 `resCode`：Mate 的业务失败用非 2xx 返回，只带 `resCode`、`resMsg`，没有 `result`（T2，用户确认）。这样只有一个判定依据，也与实现仓 `b0f45547`"不按 resCode 预判"的决定一致。
 
 业务客户端的转换：
 
-| 业务客户端 | 不可达 | 被拒绝 | 响应过大或无效 | 业务失败 |
-|---|---|---|---|---|
-| `MateServiceClient` | `MATE_REQUEST_FAILED` | `MATE_REQUEST_FAILED` | `MATE_RESPONSE_TOO_LARGE` / `MATE_RESPONSE_INVALID` | `MATE_RESPONSE_INVALID` |
-| `HttpMateToolClient` 发现 | 发现失败 | 发现失败 | `MateToolResponseException` | `MateToolResponseException` |
-| `HttpMateToolClient` 执行 | 工具结果 `isError=true` | 工具结果 `isError=true` | 工具结果 `isError=true` | 工具结果 `isError=true` |
-| `MateAccessTokenClient` | `SCHEDULE_SERVICE_UNAVAILABLE` | `SCHEDULE_AUTH_REQUIRED` | `SCHEDULE_SERVICE_UNAVAILABLE` | `SCHEDULE_SERVICE_UNAVAILABLE` |
+| 业务客户端 | 不可达 | 被拒绝 | 响应过大或无效 |
+|---|---|---|---|
+| `MateServiceClient` | `MATE_REQUEST_FAILED` | `MATE_REQUEST_FAILED` | `MATE_RESPONSE_TOO_LARGE` / `MATE_RESPONSE_INVALID` |
+| `HttpMateToolClient` 发现 | 发现失败 | 发现失败 | `MateToolResponseException` |
+| `HttpMateToolClient` 执行 | 工具结果 `isError=true` | 工具结果 `isError=true` | 工具结果 `isError=true` |
+| `MateAccessTokenClient` | `SCHEDULE_SERVICE_UNAVAILABLE` | `SCHEDULE_AUTH_REQUIRED` | `SCHEDULE_SERVICE_UNAVAILABLE` |
 
 工具执行给模型的文字保持现状 `Mate tool execution request failed`，不透出 `resMsg` 或内部异常（R5、M12 R4）。
 
@@ -226,7 +227,7 @@ Mate 接口的方法、路径和报文不变，列表见 [§3.2](#data-model)，
 | F1 | 服务地址非法 | 启动 | 未发生 | 部署人员 | 启动失败并输出配置项名 | 服务未启动，修正 `CAMPUSMATE_BASE_URL` 后重启 | — |
 | F2 | 读取或查询类短请求不可达、被拒绝、响应无效 | UC3～UC5、UC7 | 未发生（只读） | 业务客户端 | 按 §3.3 转换为本模块错误，不重试 | 本次请求失败，用户可重试 | 不区分 Mate 宕机和网络故障 |
 | F3 | 工具执行超时或连接中断 | UC6 | 未知 | Tool 客户端 | 返回 `isError=true` 的工具结果，不重试 | 模型看到执行失败，可提示用户核对园区工单是否已创建 | 不保证 Mate 侧没有执行 |
-| F4 | 工具执行返回 `resCode` 非 0 | UC6 | 已提交或未发生，由 Mate 决定 | Tool 客户端 | 返回 `isError=true` 的工具结果 | 模型看到执行失败 | 不透出失败原因 |
+| F4 | 工具执行被 Mate 拒绝（非 2xx，带 `resCode`） | UC6 | 已提交或未发生，由 Mate 决定 | Tool 客户端 | 返回 `isError=true` 的工具结果，`resCode` 只进日志 | 模型看到执行失败 | 不透出失败原因 |
 | F5 | 响应超过上限 | 任一短请求 | 只读请求未发生；工具执行未知 | 通道 | 停止读取并按"响应过大"失败 | 同 F2 或 F3 | — |
 
 #### 5.2.2 容量与限流
@@ -237,7 +238,7 @@ Mate 接口的方法、路径和报文不变，列表见 [§3.2](#data-model)，
 
 | 指标 | 为什么需要 | 告警条件 |
 |---|---|---|
-| 按操作和失败类型统计的短请求失败数 | D2 把三套判定合成一套后，T2 中新增的 `resCode` 失败要能看见 | 【缺口】阈值待定 |
+| 按操作和失败类型统计的短请求失败数 | D2 把三套判定合成一套后，各接口按状态码和 `resCode` 的失败分布要能看见 | 【缺口】阈值待定 |
 | 工具执行超时次数 | F3 的副作用未知，需要人工核对 | 【缺口】阈值待定 |
 
 【缺口】Claw 现有的指标上报方式未核验，首版先在通道统一打结构化日志字段（操作名、失败类型、耗时）。
@@ -254,7 +255,7 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 |---|---|---|---|
 | 路径配置 | 7 个 `campusmate.endpoints.*` 键和 `CAMPUSMATE_*_PATH*` 变量 | 删除，写进代码 | 已设置的变量被忽略；与默认值相同时无行为变化（T1） |
 | 短请求超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 短请求统一 30 秒；工具执行 60 秒可配 | 发现收紧，取 token 放宽（T3） |
-| `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 通道统一检查 | 发现和 Runtime 读取遇到 `resCode` 非 0 时从"按 result 解析"变为失败（T2） |
+| `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 全部不检查，成败只看 HTTP 状态 | Mate 非 2xx 即失败（T2 已确认），行为不变 |
 | HTTP 状态 | Runtime 要求 2xx；取 token 要求 200；`MateRestUtil` 不检查 | 统一要求 2xx | 工具发现和执行遇到非 2xx 时更早失败 |
 | 响应上限 | 只有 Runtime 限制 4 MiB | 所有短请求限制 4 MiB | 工具结果超过 4 MiB 时失败；【缺口】未核验现有工具结果大小 |
 | 配置键改名 | `campusmate.runtime.connect-timeout` 等 | `campusmate.http.*` | 环境变量改名，不做兼容双读（沿用 ADR-0035） |
@@ -278,7 +279,7 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 
 ### 6.4 QA 流程
 
-【缺口】与 Mate 联调覆盖 7 个接口各一次成功调用，以及 T2、T3 的行为变化确认。
+【缺口】与 Mate 联调覆盖 7 个接口各一次成功调用和一次非 2xx 失败，以及 T3 的行为变化确认。
 
 ## 7. 基建规范
 
@@ -348,5 +349,6 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.2.0 | 2026-10-21 | 短请求成败只按 HTTP 状态判定，不检查 `resCode`。 |
 | 0.1.1 | 2026-10-21 | T2 注明统一检查 `resCode` 会推翻 2026-08-26 的既有决定，并给出不改变行为的备选。 |
 | 0.1.0 | 2026-10-21 | Mate 接口路径写进代码目录，短请求共用一个通道，超时按调用类型分组。 |
