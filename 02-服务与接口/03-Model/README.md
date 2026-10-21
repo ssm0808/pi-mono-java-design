@@ -9,7 +9,7 @@
 | Chat 请求、响应、错误码和示例 | [Chat 接口说明](chat-api.html)，由 [chat-api.json](chat-api.json) 生成；输出额度由 Mate 控制，其他 Chat 行为保持 |
 | 用量表、事务与统计 | [用量持久化](usage.md) |
 | 固定源码基线、观察结果和实现差距 | [源码证据](source-evidence.md) |
-| 服务地址、路径、超时、并发上限配置和配置校验 | [共享客户端配置](../02-CampusMate共享客户端配置/README.md) |
+| 服务地址、路径、超时、并发上限配置和配置校验 | [CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md) |
 | 模型调用的连接、复用与并发 | 本文 [§5](#http-transport) |
 
 ## 1. 职责与全局结构
@@ -48,7 +48,7 @@ Claw 不查询或消费 maxTokens，不为普通 Chat 或摘要指定输出额�
 | 调用接口 | 保留 `AiProvider.id/auth/streamSimple` 及 `ApiProvider` 抽象；注册表只路由已解析 Model，不提供模型发现或可用性判断 |
 | 连接配置 | 读取统一的 `campusmate.*`；不使用 `Model.baseUrl/apiKey/headers` 覆盖部署地址、协议或请求头 |
 
-Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内部协议默认值、未注册值的启动失败规则，以及 URL/path 校验由[共享配置](../02-CampusMate共享客户端配置/README.md)维护。
+Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内部协议默认值、未注册值的启动失败规则，以及 URL/path 校验由[CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md)维护。
 
 <a id="provider-identity"></a>
 
@@ -253,7 +253,7 @@ JDK HttpClient 自带连接池：同一个 HttpClient 实例里，到同一地�
 
 ### 5.6 配置与超时
 
-新增五个配置键，由[共享客户端配置](../02-CampusMate共享客户端配置/README.md)统一维护，所有实例必须配置相同的值：
+新增五个配置键，由[CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md)统一维护，所有实例必须配置相同的值：
 
 | 配置键 | 默认值 | 含义 |
 |---|---|---|
@@ -359,7 +359,7 @@ Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库
 | S3 · 调用与依赖清理 | 移除 AI Service 的目录依赖；删除 Anthropic、OpenAI Completions、OpenAI Responses、Mistral 具体适配器及专属测试，按下表清理 SDK 并同步公司镜像 | 只内置 CampusMate，空 API 注册表可启动；新旧身份遵守 §3；公共消息、流、枚举与有消费者的工具不误删 |
 | S5 · 参数预览（PR 已实现） | 通用增量解析、身份快照、内部诊断及独立完整解析 | 每字符分片、嵌套数组/对象、Unicode、身份延迟/多工具交错、快照只读与隔离；预览超限不拒绝完整调用；重复键/尾随输入兼容；诊断不序列化 |
 | S6 · 连接与并发（待实现） | 按 [§5](#http-transport) 改用 JDK HttpClient、删除 Reactor Netty，新增 Redis 全局许可、降级许可与五个配置键，同步公司镜像 | §5.8 验收项全部通过；压测结果回填 §5.9 T3 |
-| S4 · 回归 | 验证 §4 映射与流生命周期、用量事务及[配置验收](../02-CampusMate共享客户端配置/README.md#10-验收标准) | 覆盖非文本本地拒绝、未知/可选字段、usage 缺失、流前/流后错误、并发隔离、取消与唯一终态；canonical 构建/测试和公司镜像编译通过 |
+| S4 · 回归 | 验证 §4 映射与流生命周期、用量事务及[配置验收](../02-CampusMate与CampusMCP客户端/README.md#63-自动化测试) | 覆盖非文本本地拒绝、未知/可选字段、usage 缺失、流前/流后错误、并发隔离、取消与唯一终态；canonical 构建/测试和公司镜像编译通过 |
 
 测试名称和能力注册表 selector 只在对应测试真实存在并执行后更新。受阻项按实际结果记录，不把设计确认记成实现通过。
 

@@ -557,7 +557,7 @@ Host 在首次发布调用事件（包括待确认调用）前固定展示名，
 ### 9.5 CampusMate 连接地址
 
 Mate Tool 的目标地址由
-[CampusMate 统一配置与 Endpoint 目录设计](../../02-服务与接口/02-CampusMate共享客户端配置/README.md)
+[CampusMate 与 CampusMCP 客户端设计](../../02-服务与接口/02-CampusMate与CampusMCP客户端/README.md)
 统一管理。`MateToolAutoConfiguration` 必须直接注入 `campusmate.base-url` 和
 `campusmate.endpoints.*`，不得再读取任何顶层 `mate.*` 或 `MATE_*` 应用变量。
 `HttpMateToolClient` 的四类请求与 Model Manager、受管 Runtime 共享 scheme、host、port

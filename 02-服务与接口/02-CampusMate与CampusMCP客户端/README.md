@@ -1,13 +1,15 @@
-# CampusMate 客户端收敛设计
+# CampusMate 与 CampusMCP 客户端设计
 
-[共享客户端配置](README.md) · [源码证据](source-evidence.md) · [PlantUML 源码](diagram.puml)
+[模块索引](../../README.md#module-index) · [Model](../03-Model/README.md) · [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md) · [mate-service 定时任务](../08-mate-service定时任务/README.md) · [源码证据](source-evidence.md) · [PlantUML 源码](diagram.puml)
+
+本文是 Claw 调用上游服务（CampusMate、CampusMCP）的唯一设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织：待对齐事项在[评审 Todo](#review-todo)，接口目录在 [§3.2](#data-model)，可配置项在 [§7.1](#config-items)。模型推理、Agent 运行目录、工具装配和定时任务的业务契约分别由 [Model](../03-Model/README.md)、[多 Agent 运行时](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)、[工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)、[mate-service 定时任务](../08-mate-service定时任务/README.md)维护，本文只管地址、路径、发送和失败判定。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.7.2 |
+| 文档版本 | 3.0.0 |
 | 更新日期 | 2026-10-21 |
-| 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
-| 设计状态 | 待实现。两个上游（Mate、CampusMCP）的接口目录、`CampusMateClient` 与 `CampusMcpClient` 两个客户端和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil`、三个按业务划分的客户端等现状见 [§8.2](#source-evidence)。类名已定，见 [§8.4](#naming) |
+| 模块 | M02 · Model（上游客户端专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
+| 设计状态 | 实现中：实现仓 [pi-mono-java#376](https://github.com/superheromeZzh/pi-mono-java/pull/376)（Draft，未合并）按本设计改造；合并前正文中的“待实现”保持不变。被替换的 `campusmate.endpoints`、`MateRestUtil`、三个按业务划分的客户端等旧实现见 [§8.2](#source-evidence) |
 | 源码基线 | Claw Java main `628dca25a694d9d056b15f012e1223d68091ab66`（2026-10-21 fetch） |
 | 主基线 | Codex main `d571eaf1f61d0d93a797506335a99a9950ffe37b`、Anthropic Java SDK main `85bfc1966a94862ec39477278430c3f8f5a0c3f6`，均于 2026-10-21 fetch；pi main `16f5f0af4d85ca583d045ceb5ed6d646fcaf7761`、OpenCode dev `dbe08ddc3c405168c679a3dac0029ef64787b7af` 作对照 |
 
@@ -28,7 +30,7 @@
 | T3 | 已确认（2026-10-21，Lotus）：按传输方式分两组，同步 HTTP 请求 60 秒、模型 SSE 600 秒，均可配置 | Lotus | [§7.1](#config-items) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
 | T6 | 采纳后同步 [Model §5.6](../03-Model/README.md#http-transport-config) 的两个超时配置键为 `campusclaw.outbound.connect-timeout`、`campusclaw.outbound.sse.idle-timeout` | Claude | [§7.1](#config-items) |
-| T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
+| T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md)；原共享配置主设计已在 3.0.0 并入本文 | Claude | 设计仓 AGENTS.md |
 | T7 | 已确认（2026-10-21，Lotus）：只保留 `CampusMateClient`、`CampusMcpClient` 两个客户端；其余名字按 [§8.4](#naming) 建议名确定 | Lotus | 2026-10-21 讨论 |
 | T8 | 已确认（2026-10-21，Lotus）：① 读取 Agent 和 Skill 绑定的工具仍走 Mate；② CampusMCP 两个接口的报文与原 Mate 工具接口相同，也用统一响应、非 2xx 即失败；③ 目前不考虑新旧版本并存和回滚到 Mate 旧工具接口 | Lotus | [§3.2](#data-model)、[§6.2](#rollback) |
 
@@ -60,7 +62,7 @@
 | R3 | 每个接口只能发往它所属上游的服务地址，路径不能改道到其他主机 | 安全 | 沿用 ADR-0026，扩展到多个上游 |
 | R4 | 超时按传输方式分两组并均可配置：同步 HTTP 请求 60 秒、模型 SSE 600 秒；各上游共用 | 稳定性 | 用户确认（T3） |
 | R5 | 工具定义查询和工具执行改发 CampusMCP 的新路径；其余接口的方法、路径不变；所有接口的请求头、请求体和响应体不变 | 约束 | 用户要求；报文不变已确认（T8） |
-| R6 | 发现请求不携带业务凭据；工具执行只携带本次执行的凭据快照，凭据随执行请求发往 CampusMCP | 安全 | 沿用 [README §1](README.md) |
+| R6 | 发现请求不携带业务凭据；工具执行只携带本次执行的凭据快照，凭据随执行请求发往 CampusMCP | 安全 | 沿用既有凭据边界，见 [§5.1](#security) |
 | R7 | 调用上游的客户端只保留 `CampusMateClient`、`CampusMcpClient` 两个，每个上游一个 | 约束 | 用户要求（2026-10-21） |
 
 ## 2. 整体方案
@@ -91,7 +93,7 @@ Agent 服务依赖上游平台提供模型、Agent 定义、业务工具和定�
 
 ![创建园区工单时 Claw 调用 Mate 和 CampusMCP](claw_mate_overall_sequence.svg)
 
-[原尺寸 SVG](claw_mate_overall_sequence.svg) · [PlantUML 源码](diagram.puml#L84)
+[原尺寸 SVG](claw_mate_overall_sequence.svg) · [PlantUML 源码](diagram.puml#L1)
 
 | 阶段 | 详细时序 |
 |---|---|
@@ -118,7 +120,7 @@ Agent 服务依赖上游平台提供模型、Agent 定义、业务工具和定�
 
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
-| UC1 启动时校验服务地址 | BU1 | 部署人员启动服务 | 设置了 `CAMPUSMATE_BASE_URL`、`CAMPUSMCP_BASE_URL` | 服务启动，两个地址规范化后分别供各自上游的调用使用 | 任一地址缺失或非法时启动失败，不发任何请求；两个地址用同一套规则，沿用 [README §5](README.md) |
+| UC1 启动时校验服务地址 | BU1 | 部署人员启动服务 | 设置了 `CAMPUSMATE_BASE_URL`、`CAMPUSMCP_BASE_URL` | 服务启动，两个地址规范化后分别供各自上游的调用使用 | 任一地址缺失或非法时启动失败，不发任何请求；两个地址用同一套规则，见 [§7.1](#base-url-rules) |
 | UC2 发送同步请求 | BU3、BU4 | 上游客户端 | 地址已校验 | 返回统一响应中的 `result`，转换为 DTO | 超时、响应上限和 HTTP 状态在两个上游按同一规则判定；只能发往接口所属上游 |
 | UC3 读取 Agent 运行定义 | BU4 | Runtime 准备运行目录 | — | 返回提示词、默认模型和绑定 Skill | 不携带业务凭据 |
 | UC4 读取 Skill | BU4 | Runtime 准备运行目录、Tool 装配 | — | 返回 Skill 文件和绑定工具 | 两处调用方共用 `CampusMateClient.getSkillInfo` 的同一个 DTO，不再各自解析 |
@@ -150,7 +152,7 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 
 ![上游客户端目标类图](campusmate_client_target_classes.svg)
 
-[原尺寸 SVG](campusmate_client_target_classes.svg) · [PlantUML 源码](diagram.puml#L121)
+[原尺寸 SVG](campusmate_client_target_classes.svg) · [PlantUML 源码](diagram.puml#L38)
 
 分层理由：
 
@@ -169,7 +171,7 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 
 ![执行一次 CampusMCP 工具](campusmate_short_request_sequence.svg)
 
-[原尺寸 SVG](campusmate_short_request_sequence.svg) · [PlantUML 源码](diagram.puml#L256)
+[原尺寸 SVG](campusmate_short_request_sequence.svg) · [PlantUML 源码](diagram.puml#L173)
 
 | 角色 | 映射 |
 |---|---|
@@ -207,7 +209,7 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 | 操作 | 上游 | 方法与路径 | 详细契约 |
 |---|---|---|---|
 | 模型推理 | Mate | `POST /mate-service/v1/LLM/chat` | [Model](../03-Model/README.md) |
-| Agent 与 Skill 读取 | Mate | `GET /mate-service/v1/agents/{agentId}`、`/runtime`、`/skill/query/{skillId}` | [README §3](README.md)、[源码证据 §2](source-evidence.md) |
+| Agent 与 Skill 读取 | Mate | `GET /mate-service/v1/agents/{agentId}`、`/runtime`、`/skill/query/{skillId}` | [多 Agent 运行时](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)、[源码证据](source-evidence.md) |
 | 工具查询与执行 | CampusMCP | `POST /mcp-service/v1/runtime/tools/query`、`/{toolId}/execute` | [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)；报文沿用原 Mate 接口（T8 已确认） |
 | 定时 token | Mate | `POST /mate-service/v1/runtime/scheduled-access-token` | [mate-service 定时任务](../08-mate-service定时任务/README.md#scheduled-access-token) |
 
@@ -215,12 +217,16 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 
 ## 5. 架构指标
 
+<a id="security"></a>
+
 ### 5.1 安全性
 
 - 所有请求地址由 `UpstreamOrigin.resolve(operation, ...)` 生成，调用方拿不到拼接入口，路径来自代码常量，不可能改道到其他主机（R3）。这比现状更强：现状的 `MateRestUtil.joinUrl` 不校验拼接后的路径。
 - 每个客户端只持有一个上游的地址、只引用该上游的接口目录；发送组件包内可见，业务代码无法拿它向任意地址发请求。Mate 的接口发不到 CampusMCP，反之亦然。
 - 路径变量按段编码，即使 ID 校验遗漏，也不会通过 `/` 或 `?` 改变目标接口。
 - 发现请求不传请求头快照，执行请求只传本次快照；发送组件日志只记录上游、操作名和失败类型，不记录请求头和响应体（沿用 `ExceptionRedactionUtils`）。
+- 业务凭据有两种来源，互不回退：普通 Session 只在工具执行时透传 POST Events 请求快照中已提供的 `X-HW-ID`、`Authorization`、`X-HW-APPKEY`、`access-token` 四项；定时执行只透传本批向 Mate 取得的统一账号 `access-token`。浏览器凭据不保存、不恢复，也不进入模型、Schedule.metadata、Session 事件、日志或数据库。
+- 服务间认证与业务凭据是两个边界：读取 Agent、Skill 和查询工具定义不转发业务请求头，不等于这些接口无需认证；Claw 调用方身份由证书校验保证，不借用浏览器 Token。
 - 信任边界变化：工具执行的凭据快照（含定时运行取到的统一账号 token）从此发往 CampusMCP，而不是 Mate。CampusMCP 必须与 Mate 同等可信；【缺口】未核对 CampusMCP 的鉴权方式，以及它的集群内证书能否被 JDK 默认信任库接受（Claw 现状不配置自定义 TLS）。
 
 ### 5.2 稳定性
@@ -308,16 +314,26 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 
 | 配置键 | 环境变量 | 默认值 | 取值约束 | 用途 |
 |---|---|---|---|---|
-| `campusmate.base-url` | `CAMPUSMATE_BASE_URL` | 通用模块无默认值；公司镜像 `https://localhost:8591`（ADR-0042） | 规则不变，见 [README §5](README.md) | Mate 服务地址 |
+| `campusmate.base-url` | `CAMPUSMATE_BASE_URL` | 通用模块无默认值；公司镜像 `https://localhost:8591`（ADR-0042） | 见 [服务地址规则](#base-url-rules) | Mate 服务地址 |
 | `campusmcp.base-url` | `CAMPUSMCP_BASE_URL` | 通用模块无默认值；公司镜像 `https://matemcp-service.mate.svc.cluster.local:8592` | 与 `campusmate.base-url` 同一套规则：绝对 HTTP(S) URI，只含 scheme、host、port | CampusMCP 服务地址，工具定义查询和工具执行发往这里（新增） |
 | `campusclaw.outbound.connect-timeout` | `CAMPUSCLAW_OUTBOUND_CONNECT_TIMEOUT` | `PT10S` | 正数 | 建立连接的最长时间，同步与流式请求共用（新增，取代 `campusmate.runtime.connect-timeout`、`campusmate.model.connect-timeout`） |
 | `campusclaw.outbound.http.request-timeout` | `CAMPUSCLAW_OUTBOUND_HTTP_REQUEST_TIMEOUT` | `PT60S` | 正数 | 同步请求等待完整响应的最长时间：读取 Agent 和 Skill、查询和执行工具、取定时 token（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
 | `campusclaw.outbound.http.max-response-bytes` | `CAMPUSCLAW_OUTBOUND_HTTP_MAX_RESPONSE_BYTES` | `4194304` | 正整数 | 同步请求的响应上限（新增，取代 `campusmate.runtime.max-response-bytes`） |
 | `campusclaw.outbound.sse.idle-timeout` | `CAMPUSCLAW_OUTBOUND_SSE_IDLE_TIMEOUT` | `PT600S` | 正数 | 流式请求等待响应头、以及两条 SSE 事件之间的最长间隔，不限制总时长（新增，取代 `campusmate.model.response-timeout`，语义不变，见 [Model §5.6](../03-Model/README.md#http-transport-config)） |
 
+<a id="base-url-rules"></a>
+
+服务地址规则（两个上游相同，由 `UpstreamOrigin` 在启动时校验，属于安全加固，防止某一调用改道到其他主机）：
+
+1. 必须是绝对 URI，scheme 只能是 `http` 或 `https`，必须有 host；
+2. 不允许 user-info、query、fragment，path 只能为空或 `/`；
+3. 规范化只去掉末尾 `/`，不改写 host 和 port；
+4. 通用模块必须显式提供；公司镜像按实现仓 ADR-0042 带默认值，不改变校验规则；
+5. 地址缺失或非法时启动失败，不发任何请求，错误信息带配置项名。
+
 传输参数按请求类型放在 `campusclaw.outbound` 下，不放在某个服务下：Mate 和 CampusMCP 两个上游共用同一组超时和响应上限，`campusmate`、`campusmcp` 服务树只保留服务地址和业务参数。工具执行仍用 60 秒同步请求超时，与改走 CampusMCP 前一致。与基线不同：Codex 把 `stream_idle_timeout_ms` 放在每个 `model_providers.<name>` 下，Anthropic SDK 把 `timeout` 放在每个客户端的 `ClientOptions` 里，都是先按服务再按类型；这里选择共用（产品约束：各上游同为园区内部服务，用户确认），代价是某个上游需要不同超时时，要再加服务级覆盖项，届时按 `<服务>.outbound.*` 覆盖全局值，首版不加。
 
-删除的配置：`campusmate.endpoints.*` 全部 7 项及其环境变量；`campusmate.runtime.connect-timeout`、`request-timeout`、`max-response-bytes`；`campusmate.model.connect-timeout`、`response-timeout`；`campusclaw.schedule.access-token-timeout`。`campusmate.model` 只剩模型业务参数（`api`、`reasoning`、并发许可）；`campusmate.runtime.agents-root`、`campusmate.tool.enabled` 不变。
+删除的配置：`campusmate.endpoints.*` 全部 7 项及其环境变量；`campusmate.runtime.connect-timeout`、`request-timeout`、`max-response-bytes`；`campusmate.model.connect-timeout`、`response-timeout`；`campusclaw.schedule.access-token-timeout`。`campusmate.model` 只剩模型业务参数（`api`、`reasoning`，以及待实现的全局并发许可，语义见 [Model §5.6](../03-Model/README.md#http-transport-config)）；`campusmate.runtime.agents-root`、`campusmate.tool.enabled` 不变。
 
 部署直接使用公司镜像 `campusclaw/src/main/resources/application.properties` 的配置项（T1），改造后该文件中与上游相关的部分如下，原第 39～45 行的 7 个路径键和第 47～48、53～55 行的超时键删除：
 
@@ -389,7 +405,7 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | # | 现名（或目标设计旧名） | 定名 | 理由 |
 |---|---|---|---|
-| N1 | 本文标题"CampusMate 客户端收敛设计" | 不变 | 专题目录与链接沿用 |
+| N1 | 专题目录“02-CampusMate共享客户端配置”、标题“CampusMate 客户端收敛设计” | 目录“02-CampusMate与CampusMCP客户端”、标题“CampusMate 与 CampusMCP 客户端设计” | 专题已覆盖两个上游，不再只是共享配置；用户 2026-10-21 要求改名 |
 | N2 | —（新增接口） | `UpstreamOperation` | 两个目录枚举的共同接口 |
 | N3 | `CampusMateOperation` | 不变，只剩 Mate 的 5 项 | 仍只属于 Mate |
 | N4 | —（新增） | `CampusMcpOperation` | 与 N3 成对 |
@@ -407,6 +423,7 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.0.0 | 2026-10-21 | 按评审模板把客户端收敛设计（下表 0.x）与原共享配置主设计（下表 1.0.0～2.14.0）合并为本专题唯一的 README，目录改名为“02-CampusMate与CampusMCP客户端”，删除已被取代的配置去重图。 |
 | 0.7.2 | 2026-10-21 | T1 确认：部署只用公司镜像 `application.properties`，路径值与默认值相同；§7.1 给出改造后的配置片段。 |
 | 0.7.1 | 2026-10-21 | 命名定稿（T7）：`UpstreamHttpSender`、`UpstreamOrigin`、`CampusMateProperties`、`CampusMcpProperties`、`upstream` 包。 |
 | 0.7.0 | 2026-10-21 | 客户端按上游划分，只保留 `CampusMateClient`、`CampusMcpClient`，共用包内发送组件；错误码转换移到调用方；T8 三点确认，不考虑新旧版本并存和回滚。 |
@@ -418,3 +435,24 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 | 0.2.0 | 2026-10-21 | 同步请求成败只按 HTTP 状态判定，不检查 `resCode`。 |
 | 0.1.1 | 2026-10-21 | T2 注明统一检查 `resCode` 会推翻 2026-08-26 的既有决定，并给出不改变行为的备选。 |
 | 0.1.0 | 2026-10-21 | Mate 接口路径写进代码目录，同步请求共用一个通道，超时按调用类型分组。 |
+| 2.14.0 | 2026-10-21 | 新增客户端收敛设计稿（即上表 0.x，3.0.0 并入本文）：路径写进代码目录、短请求共用一个通道、超时按调用类型分组（待评审）。 |
+| 2.13.1 | 2026-10-20 | 定时取 access-token 的调用方由证书校验保证，不再是暂缓的服务认证风险。 |
+| 2.13.0 | 2026-10-20 | 调用 Mate 的路径集中到 `campusmate.endpoints`：定时 access-token 路径改为 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`），目标路径目录共8项。 |
+| 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [mate-service 定时任务设计](../08-mate-service定时任务/README.md)，本专题改为链接。 |
+| 2.12.0 | 2026-10-16 | `campusmate.model` 新增 Redis 全局许可开关、模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
+| 2.11.0 | 2026-10-16 | 定时 access-token 路径改用代码中的 `campusclaw.schedule.access-token-path`，目标路径目录回到7项。 |
+| 2.10.0 | 2026-10-15 | 定时任务 Mate 实现类改名为 `MateScheduleSessionRegistry` 与 `MateAccessTokenClient`。 |
+| 2.9.0 | 2026-10-13 | 定时接口由上下文查询和凭据解析两项改为一项无入参 access-token 接口，目标路径共8项。 |
+| 2.8.0 | 2026-10-13 | M10 定时任务移除 credentialIds，凭据改由 Mate 按 Agent 绑定在运行时决定。 |
+| 2.7.2 | 2026-10-08 | 移除执行上下文与凭据HTML展示及生成入口，保留Markdown接口草案。 |
+| 2.7.1 | 2026-10-08 | 上下文查询与凭据解析新增独立HTML展示及同步检查入口。 |
+| 2.7.0 | 2026-10-05 | 目标目录增加定时上下文查询与凭据解析两项，并区分普通请求快照、服务认证和Mate执行授权。 |
+| 2.6.0 | 2026-09-19 | 模型窗口按新执行读取，输出额度归 Mate，配置迁移与 Chat 字段退役协同发布。 |
+| 2.5.0 | 2026-09-19 | 新增 Mate 模型能力查询 endpoint，删除统一 token 默认值并注明公司镜像地址例外。 |
+| 2.4.0 | 2026-09-14 | 以目标配置与客户端关系组织正文，将历史源码差距集中为证据专题并重排配置图。 |
+| 2.3.0 | 2026-09-14 | 目标 Provider 统一为 CampusMateProvider，沿用共享配置并保留旧提交源码证据。 |
+| 2.2.0 | 2026-08-27 | Metadata 发现不携带凭据，Tool 执行透传当前 execution 的四项调用 Header。 |
+| 2.1.0 | 2026-08-26 | 模型配置统一为 `campusmate.model` 与 `CAMPUSMATE_MODEL_*`。 |
+| 2.0.0 | 2026-08-26 | 统一 CampusMate 配置树与端点目录，归并重复的 Skill 查询路径。 |
+| 1.1.0 | 2026-08-26 | 将 `mate.innerGWSerive` 纳入共享 base URL，但仍保留顶层 `mate.endpoints`。 |
+| 1.0.0 | 2026-08-26 | 新增 CampusMate 统一 `campusmate.base-url` 设计。 |

@@ -691,7 +691,7 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 
 | 维度 | 结论 |
 |---|---|
-| 模块与主设计 | M02，关联 M01 执行准入；[Model 主设计 §5](../../02-服务与接口/03-Model/README.md#http-transport)唯一维护客户端、许可、连接复用和失败处理；配置键归[共享客户端配置](../../02-服务与接口/02-CampusMate共享客户端配置/README.md) |
+| 模块与主设计 | M02，关联 M01 执行准入；[Model 主设计 §5](../../02-服务与接口/03-Model/README.md#http-transport)唯一维护客户端、许可、连接复用和失败处理；配置键归[CampusMate 与 CampusMCP 客户端](../../02-服务与接口/02-CampusMate与CampusMCP客户端/README.md) |
 | 架构问题 | 多个 Agent 执行同时调用模型时，Claw 用什么 HTTP 客户端、怎样复用连接，以及怎样保证所有实例合计同时进行的模型调用不超过 100 个？ |
 | pi | OpenAI Completions 适配器每次 `stream` 新建 SDK 客户端，传输交给 Node `fetch`；没有模型请求并发上限、连接池配置或预热 |
 | Codex | HTTP 流式请求每次经 `build_api_transport` 构造 reqwest 客户端；每轮开始预热一条 Responses WebSocket（`generate=false`），本轮后续请求复用该连接与 `previous_response_id`；没有模型请求并发上限；`agent_max_threads` 默认 6，间接限制同时运行的 Agent 线程 |

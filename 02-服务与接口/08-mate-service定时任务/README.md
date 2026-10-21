@@ -1,12 +1,12 @@
 # mate-service 定时任务设计
 
-[服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [共享连接目录](../02-CampusMate共享客户端配置/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
+[服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
 
 本文是 Mate 侧定时任务唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织，集中维护 Mate 在定时任务中的全部职责：对浏览器提供的管理接口、调用 Claw 前后的处理、为 Claw 提供的两个接口以及归属对账。Claw 侧的调度、受理、表结构和 HTTP 契约只在 [Claw 主设计](../../01-总体架构/08-CampusClaw定时任务/README.md)维护，本文引用不复制。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.8.1 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -336,7 +336,7 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | Mate → Claw | 10 个定时任务接口 `/campusclaw-service/v1/schedules…`、`/schedule-runs…` | [Claw §4.2](../../01-总体架构/08-CampusClaw定时任务/README.md#interface-list)；Mate 侧约定见 [§4.3](#mate-to-claw) | 待实现 |
 | Claw → Mate | 获取统一账号 access-token | [§4.4.1](#scheduled-access-token) | Claw 已实现调用方，Mate 待实现 |
 | Claw → Mate | Session 归属登记与核对 | [§4.4.2](#session-ownership) | Claw 端口已接入受理，HTTP 适配与 Mate 待实现 |
-| Claw → Mate | Agent runtime、Skill、工具查询、工具执行、模型调用 | [共享连接目录](../02-CampusMate共享客户端配置/README.md) | 普通对话已在用，定时任务不新增 |
+| Claw → Mate | Agent runtime、Skill、工具查询、工具执行、模型调用 | [CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md) | 普通对话已在用，定时任务不新增 |
 
 <a id="management-api"></a>
 
@@ -580,7 +580,7 @@ Accept-Language: zh-CN
 
 | 项 | 规定 |
 |---|---|
-| 路径 | 草案路径；Claw 用[共享连接目录](../02-CampusMate共享客户端配置/README.md)的 `campusmate.endpoints.scheduled-access-token-path` 配置，与其他调用 Mate 的路径放在一起，服务地址沿用 `campusmate.base-url` |
+| 路径 | 草案路径；Claw 把路径写在代码中的接口目录 `CampusMateOperation.SCHEDULED_ACCESS_TOKEN`（见[CampusMate 与 CampusMCP 客户端 §3.2](../02-CampusMate与CampusMCP客户端/README.md#data-model)），服务地址沿用 `campusmate.base-url` |
 | 请求体与参数 | 无请求体，无 query 参数；不传用户、任务、Session 或 Agent 标识 |
 | 调用方认证 | 由 Claw 到 Mate 的证书校验保证（[M5](#m5)），Claw 不附加服务凭据，Mate 不另做应用层校验 |
 
@@ -773,6 +773,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.8.1 | 2026-10-21 | §4.8.1 的 Claw 侧 access-token 路径改指代码中的接口目录，上游客户端专题改名为“CampusMate 与 CampusMCP 客户端”。 |
 | 1.8.0 | 2026-10-21 | 新增 §4.2.9 部分更新接口的完整定义：可写字段与 null 规则、200 响应、并发与结果未知、双语错误表，示例由接口 HTML 展示。 |
 | 1.7.0 | 2026-10-21 | 列表改为由 Claw 按用户查询（D2，Claw D9）：创建、列表与 Run 列表把用户的 access-token 原样转给 Claw，由 Claw 查出用户 ID 后写入或筛选（修改 1.4.1 的“不转发 access-token”）；§3.4、§4.2.7 不再拉取全部页，分页与 total 直接用 Claw 返回的值；创建请求不得带 userId；对话任务的可见性改看 Claw 资源的 userId；投影不返回 userId；§5.2.2 删除全量拉取的容量缺口。 |
 | 1.6.0 | 2026-10-20 | 新增 §4.2.8 详情接口的完整定义：路径参数、200 响应、双语错误表，示例由接口 HTML 展示。 |
