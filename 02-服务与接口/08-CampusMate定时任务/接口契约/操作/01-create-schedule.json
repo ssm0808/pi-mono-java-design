@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusMate 定时任务管理 API",
-    "version": "1.11.0",
+    "version": "2.0.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -9,7 +9,7 @@
     "method": "POST",
     "path": "/schedules",
     "summary": "创建定时任务",
-    "description": "当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 检查配额后把请求体与用户的 access-token 转发给 Claw，Claw 用 token 查出创建者；创建成功后 Mate 记录任务归属，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "description": "当前用户在页面上配置一个定时任务，例如“工作日 08:00 汇总园区设备告警”。Mate 把请求体与用户的 access-token 转发给 Claw，Claw 用 token 查出创建者并检查配额后保存；Mate 不写本地记录，返回把 sessionId 换成 chatId 的完整任务。创建不立即运行，也不创建 Chat。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
     "parameters": [],
     "requestBody": {
       "required": true,
@@ -216,7 +216,7 @@
         "status": "422",
         "tabLabel": "422 · SCHEDULE_QUOTA_EXCEEDED",
         "label": "Unprocessable Content",
-        "summary": "当前用户通过接口创建的任务数已达上限（默认 20，部署可配置），Mate 在转发前判断，没有调用 Claw。",
+        "summary": "当前用户通过接口创建的任务数已达上限（默认 20，部署可配置），Claw 用转发的 access-token 查出用户后统计并判断，任务没有创建。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -260,7 +260,7 @@
         "status": "500",
         "tabLabel": "500 · SCHEDULE_CREATE_FAILED",
         "label": "Internal Server Error",
-        "summary": "Claw 内部处理失败，任务没有创建。Mate 自己写归属记录失败时与其他接口一样返回 Mate 通用 500，残留在 Claw 的任务对用户不可见，由对账清理。",
+        "summary": "Claw 内部处理失败，任务没有创建。Mate 不写本地记录。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
