@@ -87,9 +87,10 @@ endlegend
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolResolver.java listAgentTools。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateRemoteToolHandler.java callTool。
 ' 源码：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java。
-' 已观察行为：调用顺序与 Mate 接口已实现；目标：待实现的只是 Claw 内部的路径目录与共享通道，图中消息不变。
-' 设计原因：服务级总览只表达 Claw 与 Mate 的交互，Runtime、Tool、Provider 并入 Claw，在 3.3 节下钻。
-title 创建园区工单时 Claw 调用 Mate（BU4）
+' 已观察行为：调用顺序已实现，现状全部发往 Mate；目标：待实现，工具定义查询与执行改发 CampusMCP（用户 2026-10-21 确认路径）。
+' 推导：读取 Agent 与 Skill 绑定工具仍在 Mate（待确认 T8）。
+' 设计原因：服务级总览只表达 Claw 与两个上游的交互，Runtime、Tool、Provider 并入 Claw，在 3.3 节下钻。
+title 创建园区工单时 Claw 调用 Mate 和 CampusMCP（BU4）
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -98,6 +99,7 @@ autonumber
 actor "园区用户" as User
 participant "Claw" as Claw
 participant "Mate" as Mate
+participant "CampusMCP" as Mcp
 User -> Claw ++ : 请 Agent 创建园区工单
 activate User
 Claw -> Mate ++ : 读取 Agent 运行定义
@@ -105,12 +107,12 @@ return 提示词、默认模型及绑定 Skill
 Claw -> Mate ++ : 读取绑定 Skill 的文件
 return Skill 文件
 Claw -> Mate ++ : 读取 Agent 绑定的工具
-return 绑定工具列表
-Claw -> Mate ++ : 查询工具定义
+return 绑定工具标识
+Claw -> Mcp ++ : 按工具标识查询工具定义
 return 工单工具定义
 Claw -> Mate ++ : 请求模型推理（流式）
 return 调用工单工具的决定
-Claw -> Mate ++ : 执行工单工具（带本次凭据）
+Claw -> Mcp ++ : 执行工单工具（带本次凭据）
 return 工单创建结果
 return 返回工单处理结果
 deactivate User
@@ -122,10 +124,11 @@ deactivate User
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/util/MateRestUtil.java（待删除）。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java send（迁入通道）。
 ' 源码：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java validateChatPath（待删除）。
-' 目标：待实现；接口目录与地址放 common，同步请求通道放 coding-agent-cli，三个业务客户端只依赖通道。
+' 目标：待实现；每个上游一份接口目录，地址类放 common；同步请求通道放 coding-agent-cli，一个实现、每个上游一个实例。
 ' 依赖方向：common <- ai <- agent-core <- coding-agent-cli；ai 不依赖 coding-agent-cli，所以目录必须在 common。
 ' 基线：Codex Provider + EndpointSession；Anthropic Java SDK ClientOptions + 各 Service。
-title CampusMate 客户端：全局目标类图
+' 命名：Upstream*、CampusMcp* 为暂定名，见设计文档 8.4 节。
+title 上游客户端：全局目标类图（Mate + CampusMCP）
 skinparam backgroundColor white
 skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
@@ -134,20 +137,24 @@ skinparam nodesep 40
 skinparam ranksep 50
 
 package "common" as CommonPkg {
+  interface UpstreamOperation <<待实现，暂定名>> {
+    + method() : String
+    + pathTemplate() : String
+  }
   enum CampusMateOperation <<待实现>> {
     MODEL_CHAT
     AGENT_INFO
     AGENT_RUNTIME
     SKILL_INFO
+    SCHEDULED_ACCESS_TOKEN
+  }
+  enum CampusMcpOperation <<待实现，暂定名>> {
     TOOL_METADATA_QUERY
     TOOL_EXECUTE
-    SCHEDULED_ACCESS_TOKEN
-    + method() : String
-    + pathTemplate() : String
   }
-  class CampusMateOrigin <<待实现>> {
+  class UpstreamOrigin <<待实现，暂定名>> {
     - origin : URI
-    + {static} of(baseUrl) : CampusMateOrigin
+    + {static} of(configKey, baseUrl) : UpstreamOrigin
     + resolve(operation, pathValues...) : URI
   }
 }
@@ -162,7 +169,10 @@ package "ai" as AiPkg {
 
 package "coding-agent-cli：配置" as ConfigPkg {
   class CampusMateClientProperties <<record，改造>> {
-    + baseUrl : CampusMateOrigin
+    + baseUrl : UpstreamOrigin
+  }
+  class CampusMcpClientProperties <<record，待实现，暂定名>> {
+    + baseUrl : UpstreamOrigin
   }
   class "OutboundHttpProperties" as HttpOptions <<record，待实现>> {
     + connectTimeout : Duration
@@ -173,18 +183,24 @@ package "coding-agent-cli：配置" as ConfigPkg {
 }
 
 package "coding-agent-cli：同步请求通道" as ChannelPkg {
-  class CampusMateHttpClient <<Spring 单例，待实现>> {
+  class "UpstreamHttpClient<O>" as Channel <<待实现，暂定名>> {
     - httpClient : HttpClient
-    - origin : CampusMateOrigin
+    - origin : UpstreamOrigin
     + call(request) : JsonNode
   }
-  class CampusMateRequest <<record，待实现>> {
-    + operation : CampusMateOperation
+  object "campusMateHttpClient" as MateChannel <<Bean>> {
+    O = CampusMateOperation
+  }
+  object "campusMcpHttpClient" as McpChannel <<Bean>> {
+    O = CampusMcpOperation
+  }
+  class "UpstreamRequest<O>" as Request <<record，待实现，暂定名>> {
+    + operation : O
     + pathValues : List<String>
     + body : String
     + headers : Map<String, String>
   }
-  class CampusMateCallException <<待实现>> {
+  class UpstreamCallException <<待实现，暂定名>> {
     + kind : FailureKind
     + resCode : String（仅非 2xx 时解析）
   }
@@ -211,25 +227,32 @@ package "coding-agent-cli：业务客户端" as ClientPkg {
   }
 }
 
-CampusMateOperation <-- CampusMateOrigin : 按目录生成地址
-CampusMateProvider --> CampusMateOrigin : 校验地址
+UpstreamOperation <|.. CampusMateOperation
+UpstreamOperation <|.. CampusMcpOperation
+UpstreamOrigin --> UpstreamOperation : 按目录生成地址
+CampusMateProvider --> UpstreamOrigin : 校验 Mate 地址
 CampusMateProvider --> CampusMateOperation : MODEL_CHAT
-CampusMateClientProperties --> CampusMateOrigin : 启动时校验
-CampusMateHttpClient --> CampusMateClientProperties : 服务地址
-CampusMateHttpClient --> HttpOptions : 超时、上限
-CampusMateHttpClient ..> CampusMateRequest : 发送
-CampusMateHttpClient ..> CampusMateCallException : 失败时抛出
-CampusMateCallException *-- FailureKind
-CampusMateRequest --> CampusMateOperation
-MateServiceClient --> CampusMateHttpClient
-HttpMateToolClient --> CampusMateHttpClient
-MateAccessTokenClient --> CampusMateHttpClient
+CampusMateClientProperties --> UpstreamOrigin : 启动时校验
+CampusMcpClientProperties --> UpstreamOrigin : 启动时校验
+Channel --> HttpOptions : 超时、上限
+Channel ..> Request : 发送
+Channel ..> UpstreamCallException : 失败时抛出
+UpstreamCallException *-- FailureKind
+Request --> UpstreamOperation
+MateChannel ..> Channel : 实例
+McpChannel ..> Channel : 实例
+MateChannel --> CampusMateClientProperties : Mate 地址
+McpChannel --> CampusMcpClientProperties : CampusMCP 地址
+MateServiceClient --> MateChannel
+HttpMateToolClient --> MateChannel : 读绑定工具
+HttpMateToolClient --> McpChannel : 查询、执行工具
+MateAccessTokenClient --> MateChannel
 
 legend bottom
   通道统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；成败只看 HTTP 状态，resCode 只进日志。
-  模型推理保留自己的连接（见 Model 专题第 5 节），共用接口目录与地址；超时用 @Value 读取同一组 campusclaw.outbound 配置（ai 模块不依赖 coding-agent-cli）。
-  OutboundHttpProperties 绑定 campusclaw.outbound，按请求类型分组，供 CampusMate、CampusMCP 等上游共用。
-  删除：MateRestUtil、CampusMateClientProperties.Endpoints（待实现）。
+  两个通道 Bean 是同一个实现的两个实例，共用一个 JDK HttpClient 与 campusclaw.outbound 参数；泛型 O 限定每个实例只能发送本上游目录中的接口。
+  模型推理保留自己的连接（见 Model 专题第 5 节），共用 Mate 目录与地址类；超时用 @Value 读取同一组 campusclaw.outbound 配置（ai 模块不依赖 coding-agent-cli）。
+  删除：MateRestUtil、CampusMateClientProperties.Endpoints（待实现）。Upstream*、CampusMcp* 为暂定名（8.4 节）。
 endlegend
 @enduml
 
@@ -237,9 +260,9 @@ endlegend
 ' Java 基线：628dca25a694d9d056b15f012e1223d68091ab66；2026-10-21 拉取 main。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateRemoteToolHandler.java callTool。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java invokeTool、toToolResult。
-' 目标：待实现；HttpMateToolClient 改用 CampusMateHttpClient 发送，不再经过 MateRestUtil。
+' 已观察行为：现状经 MateRestUtil 发往 Mate；目标：待实现，HttpMateToolClient 改用 campusMcpHttpClient 发往 CampusMCP。
 ' 设计原因：超时、响应上限与失败判定只在通道生效，是本设计的独立边界，因此单列为参与者。
-title 执行一次 Mate 工具（UC6）
+title 执行一次 CampusMCP 工具（UC6）
 hide footbox
 skinparam backgroundColor white
 skinparam defaultFontSize 14
@@ -247,13 +270,13 @@ skinparam sequenceMessageAlign center
 autonumber
 participant "工具执行" as Exec
 participant "Tool 客户端" as ToolClient
-participant "Mate 调用通道" as Channel
-participant "Mate" as Mate
+participant "上游调用通道\n（CampusMCP 实例）" as Channel
+participant "CampusMCP" as Mcp
 [-> Exec ++ : 执行工单工具
 Exec -> ToolClient ++ : 执行工具（工具标识、参数、本次凭据）
 ToolClient -> Channel ++ : 发送工具执行请求
-Channel -> Channel : 按接口目录生成地址（编码路径变量）
-Channel -> Mate ++ : 执行工具（本次凭据）
+Channel -> Channel : 按 CampusMCP 接口目录生成地址（编码路径变量）
+Channel -> Mcp ++ : 执行工具（本次凭据）
 return 统一响应
 Channel -> Channel : 校验 HTTP 状态与响应大小
 return 执行结果
