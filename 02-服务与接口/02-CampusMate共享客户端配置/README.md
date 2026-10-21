@@ -11,7 +11,7 @@
 
 ## 1. 职责与目标配置
 
-本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。定时运行时 Claw 无入参向 Mate 获取统一账号 `access-token`，该接口与 Mate 侧其余定时任务设计统一在 [mate-service 定时任务设计](../08-mate-service定时任务/README.md#scheduled-access-token)维护；本专题只记录 Claw 侧路径配置 `campusmate.endpoints.scheduled-access-token-path`。
+本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。定时运行时 Claw 无入参向 Mate 获取统一账号 `access-token`，该接口与 Mate 侧其余定时任务设计统一在 [CampusMate 定时任务设计](../08-CampusMate定时任务/README.md#scheduled-access-token)维护；本专题只记录 Claw 侧路径配置 `campusmate.endpoints.scheduled-access-token-path`。
 
 Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 目标配置树。目标路径共8项，调用 Mate 的路径全部集中在 `campusmate.endpoints`，定时任务获取 access-token 的路径也在其中；当前源码已实现其中7项配置绑定，模型能力查询尚待实现，不能把目标目录等同于已发布服务。
 
@@ -226,7 +226,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 - [Model](../03-Model/README.md)：Chat 参数、SSE 与 Provider 身份。
 - [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)：发现与执行，以及 execution 凭据快照。
-- [mate-service 定时任务设计](../08-mate-service定时任务/README.md)：Mate 侧管理接口，以及为 Claw 提供的 access-token 与 Session 归属登记接口。
+- [CampusMate 定时任务设计](../08-CampusMate定时任务/README.md)：Mate 侧管理接口，以及为 Claw 提供的 access-token 与 Session 归属登记接口。
 - [源码证据](source-evidence.md)：客户端路径归属、历史重复项和服务端核验范围；[定时工程核验](../../01-总体架构/08-CampusClaw定时任务/source-evidence.md#schedule-engineering-evidence)记录本次实际读取范围。
 
 ## 12. 版本历史
@@ -235,7 +235,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 |---|---|---|
 | 2.13.1 | 2026-10-20 | 定时取 access-token 的调用方由证书校验保证，不再是暂缓的服务认证风险。 |
 | 2.13.0 | 2026-10-20 | 调用 Mate 的路径集中到 `campusmate.endpoints`：定时 access-token 路径改为 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`），目标路径目录共8项。 |
-| 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [mate-service 定时任务设计](../08-mate-service定时任务/README.md)，本专题改为链接。 |
+| 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [CampusMate 定时任务设计](../08-CampusMate定时任务/README.md)，本专题改为链接。 |
 | 2.12.0 | 2026-10-16 | `campusmate.model` 新增 Redis 全局许可开关、模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
 | 2.11.0 | 2026-10-16 | 定时 access-token 路径改用代码中的 `campusclaw.schedule.access-token-path`，目标路径目录回到7项。 |
 | 2.10.0 | 2026-10-15 | 定时任务 Mate 实现类改名为 `MateScheduleSessionRegistry` 与 `MateAccessTokenClient`。 |

@@ -1,0 +1,580 @@
+@startuml mate_schedule_overview
+' 目标：待实现；Mate 侧业务总览，从创建定时任务、一次自动运行到查看运行结果。
+' Claw 基线：pi-mono-java main ead67eba；Claw 侧规则以 01-总体架构/08-CampusClaw定时任务/README.md 0.66.0 为准。
+' mate-service 源码未核验；Mate 存储为逻辑记录，物理表由 Mate 实现决定。
+' 粒度：参与者为服务级；Mate 内部组件的协作见详细时序 mate_schedule_create 与 mate_session_registration。
+' 表达方式：只画正常流程；失败与恢复见 README.md 第 5.2.1 节。
+title Mate 管理定时任务：业务总览
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+== 创建定时任务 ==
+Operator -> Mate ++ : 创建定时任务（Agent、时间规则、任务内容）
+activate Operator
+Mate -> MateStore ++ : 统计该用户的任务数
+return 未达上限
+Mate -> Claw ++ : 创建定时任务（转发用户的 access-token）
+return 定时任务（scheduleId）
+Mate -> MateStore ++ : 写入任务归属（scheduleId、用户）
+return 已写入
+return 定时任务及下次运行时间
+deactivate Operator
+== 自动运行 ==
+[-> Claw ++ : 到达计划时间
+Claw -> Mate ++ : 登记新会话归属（sessionId、scheduleId、runId、agentId）
+Mate -> MateStore ++ : 写定时会话登记与 Chat 映射
+return chatId
+return 登记结果
+Claw -> Claw : 受理并运行 Agent
+Claw -> Mate ++ : 获取统一账号 access-token
+return access-token
+Claw -> Claw : 运行结束，记录 Run
+deactivate Claw
+== 查看运行结果 ==
+Operator -> Mate ++ : 查看运行记录
+activate Operator
+Mate -> Claw ++ : 查询 Run（转发用户的 access-token，Claw 按用户筛选）
+return Run（含 sessionId）
+Mate -> MateStore ++ : 按 sessionId 查 chatId
+return chatId
+return Run（含 chatId，不含 sessionId）
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_create
+' 目标：待实现；UC1 创建接口配置的任务。
+' Claw 接口：POST /campusclaw-service/v1/schedules，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画正常创建与 Claw 结果三种去向；配额统计不加锁；写入失败直接返回 500，Claw 残留的对账见 README.md 第 3.7 节。
+title 创建定时任务（UC1）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : POST /schedules
+activate Operator
+Mate -> MateStore ++ : 统计 t_schedule 中该用户的任务数（不加锁）
+return 未达上限（达到上限返回 422）
+Mate -> Claw ++ : POST /schedules（原样转发请求体与用户的 access-token，\nClaw 用它查出创建者）
+alt Claw 返回 201
+  Claw --> Mate : 定时任务（scheduleId）
+  Mate -> MateStore ++ : 插入 t_schedule（id、user_id）
+  return 已写入
+  Mate --> Operator : 201 定时任务（sessionId 换为 chatId）
+else Claw 明确失败（带错误码）
+  Claw --> Mate : 4xx / 5xx 错误码
+  Mate --> Operator : 原错误码（Mate 未写入）
+else 结果未知（超时、断连）
+  Mate --> Operator : 503 SCHEDULE_SERVICE_UNAVAILABLE，提示刷新列表核对
+end
+deactivate Claw
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_session_registration
+' 目标：待实现；UC6 接口配置的任务每次运行前，Claw 请求 Mate 登记新 Session 的归属。
+' Claw 基线：pi-mono-java main ead67eba，schedule/session/ScheduledSessionStarter.prepare、confirmRegistration；schedule/mate/MateScheduleSessionRegistry 默认返回服务不可用。
+' 接口路径为草案（README.md 评审 Todo M3）；mate-service 源码未核验。
+' 表达方式：画登记成功与被拒绝；结果未知时 Claw 改用只读核对，见 README.md 第 3.6 节。
+title 登记定时会话归属（UC6）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "Claw 受理" as Claw
+participant "Mate 运行时接口" as Mate
+database "Mate 存储" as MateStore
+database "Claw 数据库" as ClawStore
+autonumber
+[-> Claw ++ : 到达计划时间或立即运行
+Claw -> Claw : 固定本次 Run 的 sessionId
+Claw -> Mate ++ : POST /runtime/scheduled-sessions（数据库事务外）
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 任务归属
+alt t_schedule 有该任务，且 sessionId 未登记或 scheduleId、runId 相同
+  Mate -> MateStore ++ : 同一事务写定时会话登记与 Chat 映射（已存在则复用）
+  return chatId
+  Mate --> Claw : 200 四个字段与 chatId
+  Claw -> ClawStore ++ : 同库事务受理 Session、首条消息、根执行与 Run
+  return 已受理
+else t_schedule 没有该任务，或 sessionId 已用不同的 scheduleId 或 runId 登记
+  Mate --> Claw : 409 SCHEDULED_SESSION_REJECTED
+  Claw -> ClawStore ++ : 记录 Run 失败 session_creation_rejected_error
+  return 已记录
+end
+deactivate Mate
+deactivate Claw
+@enduml
+
+@startuml mate_schedule_architecture
+' 目标：待实现；Mate 侧定时任务的全局目标类图。
+' mate-service 源码未核验：类名为目标命名，Chat 映射与统一账号认证为 Mate 既有能力的抽象；用户权限由 Mate 框架按 access-token 检查，不在图中，接入方式待实现时核对。
+' Claw 侧契约：01-总体架构/08-CampusClaw定时任务/README.md 0.66.0 第 4 章与第 4.8 节。
+title Mate 定时任务：全局目标类图
+skinparam backgroundColor white
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 50
+
+package "Web 边界（待实现）" as WebPkg {
+  class ScheduleManagementController <<浏览器入口：待实现>> {
+    + 10 个操作，/mate-service/v1/schedules…、/schedule-runs…
+  }
+  class ScheduleRuntimeController <<Claw 入口：待实现>> {
+    + scheduledAccessToken()
+    + registerSession(request)
+    + findSession(sessionId)
+  }
+}
+
+package "应用服务（待实现）" as AppPkg {
+  class ScheduleManagementService <<待实现>> {
+    + create(user, request)
+    + list(user, query)
+    + get / update / delete / run / pause / unpause(user, scheduleId)
+    + listRuns(user, query) / getRun(user, runId)
+  }
+  class ScheduledSessionRegistrationService <<待实现>> {
+    + register(sessionId, scheduleId, runId, agentId)
+    + find(sessionId)
+  }
+  class ScheduledAccessTokenService <<待实现>> {
+    + currentToken() : String
+  }
+  class ScheduleOwnershipReconciler <<定时运行：待实现>> {
+    + reconcile()
+  }
+}
+
+package "规则（待实现）" as RulePkg {
+  class ScheduleVisibilityPolicy <<待实现>> {
+    + visible(user, schedule) : boolean
+  }
+  class ScheduleQuotaGuard <<待实现>> {
+    + checkQuota(user)
+  }
+  class ScheduleProjector <<待实现>> {
+    + toView(clawSchedule) : ScheduleView
+    + toView(clawRun) : ScheduleRunView
+  }
+}
+
+package "持久化（待实现，物理表由 Mate 决定）" as StorePkg {
+  interface ScheduleOwnershipStore <<待实现>> {
+    + 任务归属：写入、按 id 读取、按用户统计、删除
+    + 定时会话登记：写入、确认、删除
+  }
+
+  class ScheduleOwnership <<t_schedule>> {
+    id : String（Claw 任务 ID）
+    userId : String
+    createdAt : Instant
+  }
+  class ScheduledSessionRegistration <<t_schedule_session>> {
+    sessionId : String
+    scheduleId, runId : String
+    status : registered / confirmed
+    createdAt : Instant
+  }
+}
+
+package "外部边界" as ExtPkg {
+  interface ClawScheduleClient <<待实现>> {
+    + 10 个 Claw 定时任务接口
+  }
+  interface ChatMappingService <<Mate 既有：未核验>> {
+    + bind(userId, sessionId) : chatId
+    + chatOf(sessionId) / ownerOf(chatId)
+  }
+  interface UnifiedAccountTokenSource <<Mate 既有：未核验>> {
+    + accessToken()
+  }
+}
+
+ScheduleManagementController --> ScheduleManagementService
+ScheduleRuntimeController --> ScheduledSessionRegistrationService
+ScheduleRuntimeController --> ScheduledAccessTokenService
+ScheduleManagementService --> ScheduleVisibilityPolicy
+ScheduleManagementService --> ScheduleQuotaGuard
+ScheduleManagementService --> ScheduleProjector
+ScheduleManagementService --> ClawScheduleClient
+ScheduleManagementService --> ScheduleOwnershipStore
+ScheduleVisibilityPolicy --> ScheduleOwnershipStore
+ScheduleVisibilityPolicy --> ChatMappingService
+ScheduleQuotaGuard --> ScheduleOwnershipStore
+ScheduleProjector --> ChatMappingService
+ScheduledSessionRegistrationService --> ScheduleOwnershipStore
+ScheduledSessionRegistrationService --> ChatMappingService
+ScheduledAccessTokenService --> UnifiedAccountTokenSource
+ScheduleOwnershipReconciler --> ScheduleOwnershipStore
+ScheduleOwnershipReconciler --> ClawScheduleClient
+ScheduleOwnershipStore "1" o-- "*" ScheduleOwnership
+ScheduleOwnershipStore "1" o-- "*" ScheduledSessionRegistration
+ScheduleOwnership "1" -- "*" ScheduledSessionRegistration : schedule_id
+WebPkg -[hidden]down- AppPkg
+AppPkg -[hidden]down- RulePkg
+RulePkg -[hidden]down- StorePkg
+@enduml
+
+@startuml mate_schedule_list
+' 目标：待实现；UC2 读取当前用户的任务列表。
+' Claw 接口：GET /campusclaw-service/v1/schedules，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.4 节；按用户查询见 D9 与第 4.8.3 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画 Claw 返回成功、错误码与不可达三种去向；Mate 不再拉取全部页过滤，分页与 total 由 Claw 完成。
+title 读取任务列表（UC2）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : GET /schedules?page=1&limit=50&status=active
+activate Operator
+Mate -> Claw ++ : GET /schedules（原样转发 query 与用户的 access-token）
+Claw -> Claw : 用 access-token 查出用户 ID，\n按 user_id 与筛选条件分页并统计 total
+alt Claw 返回 200
+  Claw --> Mate : schedules、total、nextPage
+  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
+  return chatId
+  Mate --> Operator : 200 schedules、total、nextPage\n（sessionId 换为 chatId，去掉 userId）
+else Claw 返回错误码
+  Claw --> Mate : 4xx / 5xx 错误码
+  Mate --> Operator : 原错误码
+else Claw 不可达或超时
+  Mate --> Operator : 503 SCHEDULE_SERVICE_UNAVAILABLE
+end
+deactivate Claw
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_run_list
+' 目标：待实现；UC5 读取当前用户任务的运行记录，可按 scheduleId 筛选。
+' Claw 接口：GET /campusclaw-service/v1/schedule-runs，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.11 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画带 scheduleId 时的可见性检查与正常查询；Claw 错误码原样返回、不可达返回 503，与任务列表相同，不再重复。
+title 读取 Run 列表（UC5）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : GET /schedule-runs?scheduleId=...&page=1
+activate Operator
+opt 带 scheduleId
+  Mate -> MateStore ++ : 按第 3.5 节检查该任务可见\n（查 t_schedule，无记录时读 Claw 详情比较 userId）
+  return 可见；不可见时直接返回 200 空页，total 为 0
+end
+Mate -> Claw ++ : GET /schedule-runs（原样转发 query 与用户的 access-token）
+Claw -> Claw : 用 access-token 查出用户 ID，\n按所属任务的 user_id 与筛选条件分页并统计 total
+return runs、total、nextPage
+Mate -> MateStore ++ : 按 sessionId 批量查 chatId
+return chatId
+Mate --> Operator : 200 runs、total、nextPage（sessionId 换为 chatId）
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_get
+' 目标：待实现；UC2 读取一个任务的详情。
+' Claw 接口：GET /campusclaw-service/v1/schedules/{scheduleId}，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.3 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画可见性检查的两步（先查 t_schedule，再看 Claw 资源的 userId）；Claw 不可达返回 503，见 README.md 第 4.2.8 节。
+title 读取任务详情（UC2）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : GET /schedules/{scheduleId}
+activate Operator
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 归属记录，或无记录
+alt 记录属于其他用户
+  Mate --> Operator : 404 SCHEDULE_NOT_FOUND（不调用 Claw）
+else 记录属于当前用户，或无记录（对话中创建的任务）
+  Mate -> Claw ++ : GET /schedules/{scheduleId}
+  return 任务（含 userId）或 404
+  alt Claw 返回 404，或无记录且 userId 不是当前用户
+    Mate --> Operator : 404 SCHEDULE_NOT_FOUND
+  else 可见
+    Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
+    return chatId
+    Mate --> Operator : 200 任务（sessionId 换为 chatId，去掉 userId）
+  end
+end
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_update
+' 目标：待实现；UC3 部分更新一个任务。
+' Claw 接口：POST /campusclaw-service/v1/schedules/{scheduleId}，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.5 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画可见性检查与转发；Claw 的字段错误原样返回，超时或断连返回 503 并由页面读取详情核对，见 README.md 第 4.2.9 节。
+title 部分更新定时任务（UC3）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : POST /schedules/{scheduleId}（只含要改的字段）
+activate Operator
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 归属记录，或无记录
+opt 无记录（对话中创建的任务）
+  Mate -> Claw ++ : GET /schedules/{scheduleId}
+  return 任务（含 userId）或 404
+end
+alt 不可见（记录属于其他用户、userId 不是当前用户，或 Claw 返回 404）
+  Mate --> Operator : 404 SCHEDULE_NOT_FOUND
+else 可见
+  Mate -> Claw ++ : POST /schedules/{scheduleId}（原样转发请求体，不转发 access-token）
+  return 合并保存后的任务，或错误码
+  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
+  return chatId
+  Mate --> Operator : 200 任务（sessionId 换为 chatId）；错误码原样返回；结果未知返回 503
+end
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_delete
+' 目标：待实现；UC3 删除一个任务。
+' Claw 接口：DELETE /campusclaw-service/v1/schedules/{scheduleId}，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.6 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画可见性检查、Claw 删除与删除 t_schedule；已生成的会话、定时会话登记与 Chat 映射保留，不在图中。
+title 删除定时任务（UC3）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : DELETE /schedules/{scheduleId}
+activate Operator
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 归属记录，或无记录
+opt 无记录（对话中创建的任务）
+  Mate -> Claw ++ : GET /schedules/{scheduleId}
+  return 任务（含 userId）或 404
+end
+alt 不可见（记录属于其他用户、userId 不是当前用户，或 Claw 返回 404）
+  Mate --> Operator : 404 SCHEDULE_NOT_FOUND
+else 可见
+  Mate -> Claw ++ : DELETE /schedules/{scheduleId}
+  return 删除回执，或 404
+  Mate -> MateStore ++ : 删除 t_schedule 记录（对话中创建的任务没有记录）
+  return 已删除
+  Mate --> Operator : 200 删除回执；Claw 返回 404 时同样删除记录并返回 404
+end
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_pause
+' 目标：待实现；UC3 暂停定时任务。
+' Claw 接口：POST /campusclaw-service/v1/schedules/{scheduleId}/pause，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.8 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画可见性检查与转发；无请求体，超时或断连返回 503 并由页面读取详情核对。
+title 暂停定时任务（UC3）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : POST /schedules/{scheduleId}/pause
+activate Operator
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 归属记录，或无记录
+opt 无记录（对话中创建的任务）
+  Mate -> Claw ++ : GET /schedules/{scheduleId}
+  return 任务（含 userId）或 404
+end
+alt 不可见（记录属于其他用户、userId 不是当前用户，或 Claw 返回 404）
+  Mate --> Operator : 404 SCHEDULE_NOT_FOUND
+else 可见
+  Mate -> Claw ++ : POST /schedules/{scheduleId}/pause
+  return paused 任务（pausedReason 为 manual）
+  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
+  return chatId
+  Mate --> Operator : 200 paused 任务（sessionId 换为 chatId）；已受理的运行不取消
+end
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_unpause
+' 目标：待实现；UC3 取消暂停定时任务。
+' Claw 接口：POST /campusclaw-service/v1/schedules/{scheduleId}/unpause，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.9 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：画可见性检查与转发；无请求体，超时或断连返回 503 并由页面读取详情核对。
+title 取消暂停定时任务（UC3）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : POST /schedules/{scheduleId}/unpause
+activate Operator
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 归属记录，或无记录
+opt 无记录（对话中创建的任务）
+  Mate -> Claw ++ : GET /schedules/{scheduleId}
+  return 任务（含 userId）或 404
+end
+alt 不可见（记录属于其他用户、userId 不是当前用户，或 Claw 返回 404）
+  Mate --> Operator : 404 SCHEDULE_NOT_FOUND
+else 可见
+  Mate -> Claw ++ : POST /schedules/{scheduleId}/unpause
+  return active 任务，或 409 SCHEDULE_ACTIVATION_REJECTED
+  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
+  return chatId
+  Mate --> Operator : 200 active 任务；409 原样返回，任务保持暂停
+end
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_run
+' 目标：待实现；UC4 立即运行一个任务。
+' Claw 接口：POST /campusclaw-service/v1/schedules/{scheduleId}/run，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.7 节；登记见本文第 3.6 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：可见性检查与详情相同，压成一步；按任务类型画两种受理方式；结果未知返回 503，不自动重试。
+title 立即运行定时任务（UC4）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+participant "Mate 运行时接口" as MateRt
+autonumber
+Operator -> Mate ++ : POST /schedules/{scheduleId}/run
+activate Operator
+Mate -> MateStore ++ : 按第 3.5 节检查可见性（不可见返回 404，不调用 Claw）
+return 可见
+Mate -> Claw ++ : POST /schedules/{scheduleId}/run（不持有会阻塞登记的锁）
+alt 接口配置的任务
+  Claw -> MateRt ++ : 登记新 Session 归属（第 3.6 节）
+  return 登记结果
+  Claw -> Claw : 新建 Session 并受理；登记被拒记 session_creation_rejected_error
+else 对话中创建的任务
+  Claw -> Claw : 在关联会话追加一轮；会话正忙记 session_busy_error
+end
+return Run（sessionId 或 error 二选一）
+Mate -> MateStore ++ : 按 sessionId 查 chatId
+return chatId
+Mate --> Operator : 200 Run（sessionId 换为 chatId）
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_schedule_run_get
+' 目标：待实现；UC5 读取一次运行的详情。
+' Claw 接口：GET /campusclaw-service/v1/schedule-runs/{runId}，见 01-总体架构/08-CampusClaw定时任务/README.md 第 4.4.11 节。
+' mate-service 源码未核验；用户认证与权限由 Mate 框架按 access-token 在进入管理接口前完成，不在本图中。
+' 表达方式：先读 Run 再按所属任务检查可见性；Claw 不可达返回 503，不在图中。
+title 读取 Run 详情（UC5）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+actor "运营人员" as Operator
+participant "Mate 管理接口" as Mate
+database "Mate 存储" as MateStore
+participant "Claw" as Claw
+autonumber
+Operator -> Mate ++ : GET /schedule-runs/{runId}
+activate Operator
+Mate -> Claw ++ : GET /schedule-runs/{runId}
+return Run（含 scheduleId）或 404
+Mate -> MateStore ++ : 按 scheduleId 查 t_schedule
+return 归属记录，或无记录
+opt 无记录（对话中创建的任务）
+  Mate -> Claw ++ : GET /schedules/{scheduleId}
+  return 任务（含 userId）或 404
+end
+alt Claw 返回 404，或所属任务不可见
+  Mate --> Operator : 404 SCHEDULE_RUN_NOT_FOUND
+else 可见
+  Mate -> MateStore ++ : 按 sessionId 查 chatId
+  return chatId
+  Mate --> Operator : 200 Run（sessionId 换为 chatId）
+end
+deactivate Mate
+deactivate Operator
+@enduml
+
+@startuml mate_scheduled_access_token
+' 目标：待实现；UC7 定时运行中 Claw 向 Mate 取统一账号的 access-token。
+' Claw 基线：pi-mono-java main ead67eba，schedule/mate/MateAccessTokenClient 已实现调用方；Mate 接口路径为草案，见 README.md 第 4.4.1 节。
+' mate-service 源码未核验；统一账号如何配置与 Token 有效期待定（Claw T2）。
+' 表达方式：画取到 Token 与失败两种去向；Token 不落库、不写日志，每批工具调用取一次，不缓存。
+title 获取统一账号 access-token（UC7）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+participant "Claw 定时执行" as Claw
+participant "Mate 运行时接口" as Mate
+participant "统一账号认证" as Auth
+autonumber
+[-> Claw ++ : 模型返回一批需要凭据的工具调用
+Claw -> Mate ++ : POST /runtime/scheduled-access-token（无请求体）
+Mate -> Auth ++ : 用 Mate 配置的统一账号取 access-token
+alt 取到 Token
+  Auth --> Mate : access-token
+  Mate --> Claw : 200 accessToken
+  Claw -> Claw : 本批工具共用这个 Token，只放进 access-token 请求头
+else 账号未配置或停用，或认证依赖不可用
+  Auth --> Mate : 失败
+  Mate --> Claw : 403 SCHEDULED_TOKEN_FORBIDDEN 或 503 SCHEDULED_TOKEN_UNAVAILABLE
+  Claw -> Claw : 本批需要凭据的工具不执行，按工具失败返回模型
+end
+deactivate Auth
+deactivate Mate
+deactivate Claw
+@enduml

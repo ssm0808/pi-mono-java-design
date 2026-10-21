@@ -1,4 +1,4 @@
-# mate-service 定时任务设计
+# CampusMate 定时任务设计
 
 [服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [共享连接目录](../02-CampusMate共享客户端配置/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
 
@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.8.0 |
+| 文档版本 | 1.9.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -110,8 +110,8 @@
 | 阶段 | 详细时序 |
 |---|---|
 | 步骤 1～8：创建定时任务 | [§3.3 创建定时任务的详细时序](#create-sequence) |
-| 步骤 9～17：自动运行 | 登记见 [§3.6 登记定时会话归属的详细时序](#registration-sequence)；access-token 见 [§4.4.1](#scheduled-access-token)；受理与运行见 Claw 主设计 §3.5、§3.6 |
-| 步骤 18～23：查看运行结果 | [§3.4 列表与可见性](#list-visibility)；打开会话沿用 [通用对话 API](../07-mate-service通用对话API/README.md) |
+| 步骤 9～17：自动运行 | 登记见 [§3.6 登记定时会话归属的详细时序](#registration-sequence)；access-token 见 [§3.8](#scheduled-token-sequence)；受理与运行见 Claw 主设计 §3.5、§3.6 |
+| 步骤 18～23：查看运行结果 | [§3.4.2 读取 Run 列表](#run-list-sequence)、[§3.5.7 读取 Run 详情](#run-get-sequence)；打开会话沿用 [通用对话 API](../07-mate-service通用对话API/README.md) |
 
 <a id="key-decisions"></a>
 
@@ -254,37 +254,147 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 
 <a id="list-visibility"></a>
 
-### 3.4 列表与可见性（UC2、UC5）
+### 3.4 列表的详细时序（UC2、UC5）
 
-Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)），Mate 不再拉取全部页过滤：
+Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)），Mate 不再拉取全部页过滤：浏览器的 query 与 access-token 一起转给 Claw，由 Claw 查出用户 ID 后筛选、排序、分页并统计 total，Mate 只做 [§4.2.3](#resource-projection) 的投影。翻页期间有并发修改时可能重复或遗漏，与 Claw 普通翻页的限制相同。
 
-1. 浏览器的 query 原样转给 Claw，Mate 把前端请求的 access-token 原样放进请求头转给 Claw。
-2. Claw 用 access-token 查出用户 ID，按它与筛选条件查询、排序（updatedAt DESC、id ASC）并分页，返回 `{schedules, total, nextPage}`。
-3. Mate 只做 [§4.2.3](#resource-projection) 的投影，schedules、total、nextPage 原样返回。
+<a id="list-sequence"></a>
 
-接口创建的任务和对话中创建的任务都带 user_id，所以一次查询就包含两种任务，Mate 不再按 Chat 映射判断对话任务的归属。
+#### 3.4.1 读取任务列表
 
-Run 查询：
+![读取任务列表](mate_schedule_list.svg)
 
-| 请求 | 处理 |
+[原尺寸 SVG](mate_schedule_list.svg) · [PlantUML 源码](diagram.puml#L233)
+
+| 步骤 | 规则 |
 |---|---|
-| 带 scheduleId 的列表 | 先按 [§3.5](#detail-write) 检查该任务可见，不可见返回空页（total 为 0）；可见则把 query 与 access-token 一起转给 Claw，直接返回 Claw 的分页与 total |
-| 不带 scheduleId 的列表 | 把 query 与 access-token 一起转给 Claw，Claw 按所属任务的 user_id 筛选并分页，直接返回 Claw 的分页与 total；顺序为 Claw 的 createdAt DESC、id DESC |
-| 详情 | 读取 Claw Run，再检查其 scheduleId 对应任务可见；不可见返回 404 `SCHEDULE_RUN_NOT_FOUND` |
+| 2 | query 原样转给 Claw，Mate 把前端请求的 access-token 原样放进请求头 |
+| 3 | Claw 用 access-token 查出用户 ID（Claw [§4.8.3](../../01-总体架构/08-CampusClaw定时任务/README.md#resolve-user)），按它与筛选条件查询，排序为 updatedAt DESC、id ASC |
+| 4～7 | schedules、total、nextPage 原样返回；接口创建的任务和对话中创建的任务都带 user_id，一次查询就包含两种任务，Mate 不再按 Chat 映射判断归属 |
+| 8～10 | Claw 返回错误码时原样返回；不可达或超时返回 503，读取可有界重试 |
 
-翻页期间有并发修改时可能重复或遗漏，与 Claw 普通翻页的限制相同。
+<a id="run-list-sequence"></a>
+
+#### 3.4.2 读取 Run 列表
+
+![读取 Run 列表](mate_schedule_run_list.svg)
+
+[原尺寸 SVG](mate_schedule_run_list.svg) · [PlantUML 源码](diagram.puml#L268)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～3 | 带 scheduleId 时先按 [§3.5](#detail-write) 检查该任务可见，不可见直接返回空页（total 为 0），不调用 Claw |
+| 4～6 | query 与 access-token 一起转给 Claw；Claw 按所属任务的 user_id 筛选并分页，顺序为 createdAt DESC、id DESC，分页与 total 直接返回 |
+| 7～9 | 按 sessionId 批量查 chatId 后返回；错误码与不可达的处理同 [§3.4.1](#list-sequence) |
 
 <a id="detail-write"></a>
 
-### 3.5 详情与写操作（UC3、UC4）
+### 3.5 详情与写操作的详细时序（UC2～UC5）
 
-详情、更新、删除、立即运行、暂停、取消暂停都先做可见性检查，不可见直接返回 404，不调用 Claw。
+详情、更新、删除、立即运行、暂停、取消暂停与 Run 详情都先做可见性检查，不可见返回 404，不调用 Claw 的写接口。
 
-- **可见性判断**：先查 `t_schedule`，有记录且 user_id 为当前用户即可见；没有记录时读取 Claw 详情，userId 等于当前用户才可见（对话中创建的任务，user_id 由 Claw 在创建时写入）。
-- **修改 agentId**：对话中创建的任务不能改 agentId（Claw 拒绝）。
-- **删除**：Claw 返回成功后删除 `t_schedule` 中的记录；Claw 返回 404 时同样删除记录并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留。
-- **立即运行**：接口配置的任务会在这次请求中触发 Claw 回调登记，Mate 的管理请求不得持有会阻塞登记的锁。对话中创建的任务立即运行时，Claw 在关联会话追加一轮，会话正忙则 Run 记为 `session_busy_error`。
+- **可见性判断**：先查 `t_schedule`，有记录且 user_id 为当前用户即可见；有记录但属于其他用户直接不可见；没有记录时读取 Claw 详情，userId 等于当前用户才可见（对话中创建的任务，user_id 由 Claw 在创建时写入）。
+- **access-token**：只有创建、任务列表与 Run 列表把用户的 access-token 转给 Claw；本节的接口都按 scheduleId 或 runId 操作，不转发。
 - **结果未知**：写操作超时后返回 503，不自动重试；页面先读取详情核对，规则同 Claw [§4.5](../../01-总体架构/08-CampusClaw定时任务/README.md#reliable-write-flow)。
+
+<a id="get-sequence"></a>
+
+#### 3.5.1 读取任务详情
+
+![读取任务详情](mate_schedule_get.svg)
+
+[原尺寸 SVG](mate_schedule_get.svg) · [PlantUML 源码](diagram.puml#L299)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～4 | `t_schedule` 中的记录属于其他用户：返回 404 `SCHEDULE_NOT_FOUND`，不调用 Claw |
+| 5～7 | 记录属于当前用户，或没有记录：读取 Claw 详情；Claw 返回 404，或没有记录且 userId 不是当前用户，返回 404 |
+| 8～10 | 对话中创建的任务按 sessionId 查 chatId；返回时 sessionId 换为 chatId，去掉 userId |
+
+<a id="update-sequence"></a>
+
+#### 3.5.2 部分更新定时任务
+
+![部分更新定时任务](mate_schedule_update.svg)
+
+[原尺寸 SVG](mate_schedule_update.svg) · [PlantUML 源码](diagram.puml#L335)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～6 | 可见性检查；没有 `t_schedule` 记录时才读取 Claw 详情 |
+| 7～8 | 请求体原样转给 Claw，Claw 合并保存；对话中创建的任务不能改 agentId（Claw 拒绝），字段错误原样返回 |
+| 9～11 | 返回合并后的任务；超时或断连返回 503，见 [§4.2.9](#update-schedule-api) |
+
+<a id="delete-sequence"></a>
+
+#### 3.5.3 删除定时任务
+
+![删除定时任务](mate_schedule_delete.svg)
+
+[原尺寸 SVG](mate_schedule_delete.svg) · [PlantUML 源码](diagram.puml#L371)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～6 | 可见性检查，同 [§3.5.2](#update-sequence) |
+| 7～8 | 调用 Claw 删除 |
+| 9～11 | Claw 返回成功后删除 `t_schedule` 中的记录；Claw 返回 404 时同样删除记录并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留 |
+
+<a id="run-sequence"></a>
+
+#### 3.5.4 立即运行定时任务
+
+![立即运行定时任务](mate_schedule_run.svg)
+
+[原尺寸 SVG](mate_schedule_run.svg) · [PlantUML 源码](diagram.puml#L479)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～3 | 可见性检查，同 [§3.5.2](#update-sequence)，图中压成一步 |
+| 4～7 | 接口配置的任务会在这次请求中触发 Claw 回调登记（[§3.6](#registration-sequence)），Mate 的管理请求不得持有会阻塞登记的锁；登记被拒时 Run 记为 `session_creation_rejected_error` |
+| 8 | 对话中创建的任务在关联会话追加一轮，会话正忙则 Run 记为 `session_busy_error` |
+| 9～12 | Run 中 sessionId 与 error 二选一；按 sessionId 查 chatId 后返回 |
+
+<a id="pause-sequence"></a>
+
+#### 3.5.5 暂停定时任务
+
+![暂停定时任务](mate_schedule_pause.svg)
+
+[原尺寸 SVG](mate_schedule_pause.svg) · [PlantUML 源码](diagram.puml#L407)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～6 | 可见性检查，同 [§3.5.2](#update-sequence) |
+| 7～8 | 无请求体；Claw 把任务改为 paused，pausedReason 为 manual，已受理的运行不取消 |
+| 9～11 | 按 sessionId 查 chatId 后返回 |
+
+<a id="unpause-sequence"></a>
+
+#### 3.5.6 取消暂停定时任务
+
+![取消暂停定时任务](mate_schedule_unpause.svg)
+
+[原尺寸 SVG](mate_schedule_unpause.svg) · [PlantUML 源码](diagram.puml#L443)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～6 | 可见性检查，同 [§3.5.2](#update-sequence) |
+| 7～8 | 无请求体；Claw 不能恢复时返回 409 `SCHEDULE_ACTIVATION_REJECTED`，任务保持暂停 |
+| 9～11 | 返回 active 任务；409 原样返回 |
+
+<a id="run-get-sequence"></a>
+
+#### 3.5.7 读取 Run 详情
+
+![读取 Run 详情](mate_schedule_run_get.svg)
+
+[原尺寸 SVG](mate_schedule_run_get.svg) · [PlantUML 源码](diagram.puml#L515)
+
+| 步骤 | 规则 |
+|---|---|
+| 2～3 | 先读取 Claw Run，拿到它的 scheduleId |
+| 4～8 | 按 scheduleId 检查所属任务可见；Claw 返回 404 或不可见都返回 404 `SCHEDULE_RUN_NOT_FOUND` |
+| 9～11 | 按 sessionId 查 chatId 后返回 |
 
 <a id="registration-sequence"></a>
 
@@ -319,6 +429,20 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | 未确认的定时会话登记 | `registered` 且超过准备期限，读取 Claw 该 Session | 存在则改为 `confirmed`；明确不存在则删除登记与 Chat 映射；读取结果未知时保留，下轮再查 |
 
 对账只读取 Claw 公开接口，不直接访问 Claw 数据库。无主任务的删除与普通删除一样保留已生成的 Session。
+
+<a id="scheduled-token-sequence"></a>
+
+### 3.8 获取统一账号 access-token 的详细时序（UC7）
+
+![获取统一账号 access-token](mate_scheduled_access_token.svg)
+
+[原尺寸 SVG](mate_scheduled_access_token.svg) · [PlantUML 源码](diagram.puml#L551)
+
+| 步骤 | 规则 |
+|---|---|
+| 1～2 | 定时运行中模型返回一批需要凭据的工具调用时，Claw 取一次 Token，无请求体，不传用户、任务、Session 或 Agent 标识 |
+| 3～6 | Mate 用配置的统一账号取 access-token；本批工具共用这个 Token，只放进 access-token 请求头，不落库、不写日志，首版不缓存 |
+| 7～9 | 账号未配置或停用返回 403，认证依赖不可用返回 503；本批需要凭据的工具不执行，按工具失败返回模型。接口报文见 [§4.4.1](#scheduled-access-token) |
 
 <a id="interface"></a>
 
@@ -360,15 +484,15 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | 操作 | Mate 方法与路径 | 对应 Claw 接口 | Mate 额外处理 |
 |---|---|---|---|
 | 创建 | POST `/schedules` | POST `/schedules` | 配额；Claw 创建成功后写 `t_schedule`（[§3.3](#create-sequence)） |
-| 列表 | GET `/schedules` | GET `/schedules` | 转发 access-token，分页与 total 由 Claw 完成（[§3.4](#list-visibility)） |
-| 详情 | GET `/schedules/{scheduleId}` | GET `/schedules/{scheduleId}` | 可见性检查 |
-| 部分更新 | POST `/schedules/{scheduleId}` | POST `/schedules/{scheduleId}` | 可见性检查 |
-| 删除 | DELETE `/schedules/{scheduleId}` | DELETE `/schedules/{scheduleId}` | 可见性检查；成功后删除 `t_schedule` 中的记录 |
-| 立即运行 | POST `/schedules/{scheduleId}/run` | POST `/schedules/{scheduleId}/run` | 可见性检查；Run 投影 |
-| 暂停 | POST `/schedules/{scheduleId}/pause` | POST `/schedules/{scheduleId}/pause` | 可见性检查 |
-| 取消暂停 | POST `/schedules/{scheduleId}/unpause` | POST `/schedules/{scheduleId}/unpause` | 可见性检查 |
-| Run 列表 | GET `/schedule-runs` | GET `/schedule-runs` | 转发 access-token；指定任务时先检查可见性 |
-| Run 详情 | GET `/schedule-runs/{runId}` | GET `/schedule-runs/{runId}` | 按所属任务检查可见性 |
+| 列表 | GET `/schedules` | GET `/schedules` | 转发 access-token，分页与 total 由 Claw 完成（[§3.4.1](#list-sequence)） |
+| 详情 | GET `/schedules/{scheduleId}` | GET `/schedules/{scheduleId}` | 可见性检查（[§3.5.1](#get-sequence)） |
+| 部分更新 | POST `/schedules/{scheduleId}` | POST `/schedules/{scheduleId}` | 可见性检查（[§3.5.2](#update-sequence)） |
+| 删除 | DELETE `/schedules/{scheduleId}` | DELETE `/schedules/{scheduleId}` | 可见性检查；成功后删除 `t_schedule` 中的记录（[§3.5.3](#delete-sequence)） |
+| 立即运行 | POST `/schedules/{scheduleId}/run` | POST `/schedules/{scheduleId}/run` | 可见性检查；Run 投影（[§3.5.4](#run-sequence)） |
+| 暂停 | POST `/schedules/{scheduleId}/pause` | POST `/schedules/{scheduleId}/pause` | 可见性检查（[§3.5.5](#pause-sequence)） |
+| 取消暂停 | POST `/schedules/{scheduleId}/unpause` | POST `/schedules/{scheduleId}/unpause` | 可见性检查（[§3.5.6](#unpause-sequence)） |
+| Run 列表 | GET `/schedule-runs` | GET `/schedule-runs` | 转发 access-token；指定任务时先检查可见性（[§3.4.2](#run-list-sequence)） |
+| Run 详情 | GET `/schedule-runs/{runId}` | GET `/schedule-runs/{runId}` | 按所属任务检查可见性（[§3.5.7](#run-get-sequence)） |
 
 路径和资源名与 Claw 一致。创建、列表、详情与部分更新接口的完整定义见 [§4.2.6](#create-schedule-api)～[§4.2.9](#update-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
 
@@ -453,7 +577,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.2.7 读取任务列表
 
-`GET /mate-service/v1/schedules`。页面按名称、Agent 和状态查看当前用户能看到的任务，包括接口创建的任务和在自己对话中创建的任务（[§4.2.4](#visibility)）。Mate 把 query 与 access-token 转给 Claw，分页与 total 由 Claw 完成，处理顺序见 [§3.4](#list-visibility)。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [02-list-schedules.json](接口契约/操作/02-list-schedules.json)。本接口不定义请求头，无请求体。
+`GET /mate-service/v1/schedules`。页面按名称、Agent 和状态查看当前用户能看到的任务，包括接口创建的任务和在自己对话中创建的任务（[§4.2.4](#visibility)）。Mate 把 query 与 access-token 转给 Claw，分页与 total 由 Claw 完成，时序见 [§3.4.1](#list-sequence)。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [02-list-schedules.json](接口契约/操作/02-list-schedules.json)。本接口不定义请求头，无请求体。
 
 **query**：全部原样转给 Claw 校验，规则与 Claw [§4.4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 相同；Mate 不增删参数，只转发 access-token。筛选条件以 AND 组合；重复参数或未知参数返回 400 `SCHEDULE_REQUEST_INVALID`。
 
@@ -489,7 +613,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.2.8 读取任务详情
 
-`GET /mate-service/v1/schedules/{scheduleId}`。用户打开某个任务，查看保存的任务内容、Agent、时间规则和当前计划摘要；运行记录另从 Run 列表读取。Mate 先按 [§3.5](#detail-write) 检查可见性，不可见直接返回 404、不调用 Claw；可见则读取 Claw 详情并投影。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [03-get-schedule.json](接口契约/操作/03-get-schedule.json)。本接口不定义请求头，没有 query 参数和请求体，读取可安全重试。
+`GET /mate-service/v1/schedules/{scheduleId}`。用户打开某个任务，查看保存的任务内容、Agent、时间规则和当前计划摘要；运行记录另从 Run 列表读取。Mate 先按 [§3.5](#detail-write) 检查可见性，不可见直接返回 404、不调用 Claw；可见则读取 Claw 详情并投影，时序见 [§3.5.1](#get-sequence)。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [03-get-schedule.json](接口契约/操作/03-get-schedule.json)。本接口不定义请求头，没有 query 参数和请求体，读取可安全重试。
 
 | 参数 | 规定 |
 |---|---|
@@ -511,7 +635,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.2.9 部分更新定时任务
 
-`POST /mate-service/v1/schedules/{scheduleId}`。用户把“工作日园区告警汇总”从 08:00 改到 09:00，或改描述、任务内容、Agent。Mate 先按 [§3.5](#detail-write) 检查可见性，不可见直接返回 404、不调用 Claw；可见则把请求体原样转给 Claw，Claw 在一个事务内合并并保存，Mate 投影后返回完整任务。Mate 不改 `t_schedule`，任务 ID 与创建者都不变；修改不触发运行。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [04-update-schedule.json](接口契约/操作/04-update-schedule.json)。本接口不定义请求头，不转发 access-token，没有 query 参数。
+`POST /mate-service/v1/schedules/{scheduleId}`。用户把“工作日园区告警汇总”从 08:00 改到 09:00，或改描述、任务内容、Agent。Mate 先按 [§3.5](#detail-write) 检查可见性，不可见直接返回 404、不调用 Claw；可见则把请求体原样转给 Claw，Claw 在一个事务内合并并保存，Mate 投影后返回完整任务，时序见 [§3.5.2](#update-sequence)。Mate 不改 `t_schedule`，任务 ID 与创建者都不变；修改不触发运行。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [04-update-schedule.json](接口契约/操作/04-update-schedule.json)。本接口不定义请求头，不转发 access-token，没有 query 参数。
 
 | 参数 | 规定 |
 |---|---|
@@ -569,7 +693,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.4.1 获取统一账号 access-token
 
-普通对话中，用户请求带着 `access-token` Header，Claw 调用 Mate 业务工具时原样透传（[M06 §7.1](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)）。定时任务到点运行时没有用户请求，也就没有用户的 access-token。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，Claw 运行时向 Mate 取这个账号的 access-token。
+普通对话中，用户请求带着 `access-token` Header，Claw 调用 Mate 业务工具时原样透传（[M06 §7.1](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)）。定时任务到点运行时没有用户请求，也就没有用户的 access-token。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，Claw 运行时向 Mate 取这个账号的 access-token。调用时序见 [§3.8](#scheduled-token-sequence)。
 
 **请求**
 
@@ -773,6 +897,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.9.0 | 2026-10-21 | 目录由 `08-mate-service定时任务` 改名为 `08-CampusMate定时任务`；详细时序改为每个接口一张：§3.4 拆为任务列表与 Run 列表，§3.5 拆为详情、部分更新、删除、立即运行、暂停、取消暂停与 Run 详情，新增 §3.8 获取统一账号 access-token；业务总览的消息与 access-token 转发对齐。接口与规则不变。 |
 | 1.8.0 | 2026-10-21 | 新增 §4.2.9 部分更新接口的完整定义：可写字段与 null 规则、200 响应、并发与结果未知、双语错误表，示例由接口 HTML 展示。 |
 | 1.7.0 | 2026-10-21 | 列表改为由 Claw 按用户查询（D2，Claw D9）：创建、列表与 Run 列表把用户的 access-token 原样转给 Claw，由 Claw 查出用户 ID 后写入或筛选（修改 1.4.1 的“不转发 access-token”）；§3.4、§4.2.7 不再拉取全部页，分页与 total 直接用 Claw 返回的值；创建请求不得带 userId；对话任务的可见性改看 Claw 资源的 userId；投影不返回 userId；§5.2.2 删除全量拉取的容量缺口。 |
 | 1.6.0 | 2026-10-20 | 新增 §4.2.8 详情接口的完整定义：路径参数、200 响应、双语错误表，示例由接口 HTML 展示。 |

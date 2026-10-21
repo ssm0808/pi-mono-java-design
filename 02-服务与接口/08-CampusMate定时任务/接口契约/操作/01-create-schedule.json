@@ -1,7 +1,7 @@
 {
   "api": {
-    "title": "mate-service 定时任务管理 API",
-    "version": "1.8.0",
+    "title": "CampusMate 定时任务管理 API",
+    "version": "1.9.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -305,6 +305,6 @@
     "questions": [],
     "followUpTitle": "创建接口待评审",
     "promptPrefix": "更新 POST /mate-service/v1/schedules",
-    "promptSuffix": "保持与 mate-service 定时任务设计 §4.2 和 Claw 创建接口同步。"
+    "promptSuffix": "保持与 CampusMate 定时任务设计 §4.2 和 Claw 创建接口同步。"
   }
 }
