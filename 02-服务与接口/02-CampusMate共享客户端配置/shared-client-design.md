@@ -158,7 +158,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 
 ![执行一次 Mate 工具](campusmate_short_request_sequence.svg)
 
-[原尺寸 SVG](campusmate_short_request_sequence.svg) · [PlantUML 源码](diagram.puml#L242)
+[原尺寸 SVG](campusmate_short_request_sequence.svg) · [PlantUML 源码](diagram.puml#L241)
 
 | 角色 | 映射 |
 |---|---|
