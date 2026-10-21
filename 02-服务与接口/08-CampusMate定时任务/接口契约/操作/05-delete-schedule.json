@@ -1,0 +1,190 @@
+{
+  "api": {
+    "title": "CampusMate 定时任务管理 API",
+    "version": "1.10.0",
+    "basePath": "/mate-service/v1",
+    "visibility": "Public · 待评审 · 待实现"
+  },
+  "operation": {
+    "method": "DELETE",
+    "path": "/schedules/{scheduleId}",
+    "summary": "删除定时任务",
+    "description": "用户不再需要某个定时任务时删除它，之后不再产生新的运行。Mate 先检查任务对当前用户可见，再调用 Claw 删除；Claw 删除成功后 Mate 删除 t_schedule 中的归属记录，返回 Claw 删除时的最后配置，sessionId 换成 chatId。该任务的 Run 随之删除，已生成的会话、定时会话登记与 Chat 映射保留，已受理的运行不取消。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "scheduleId",
+        "required": true,
+        "schema": "string, schedule-{32 位十六进制}",
+        "description": "创建或列表返回的任务 ID，原样传回，不按名称查找，不自行构造；格式非法由 Claw 返回 400"
+      }
+    ],
+    "requestBody": {
+      "required": false,
+      "contentType": "none",
+      "description": "无请求体，也没有 query 参数；带非空正文或 query 参数由 Claw 返回 400。重复删除不会再次删除，结果未知时可以直接重发同一请求。"
+    },
+    "responses": [
+      {
+        "id": "200-ok",
+        "status": "200",
+        "tabLabel": "200 · 删除回执",
+        "label": "OK",
+        "summary": "删除已生效。result 是删除时的最后配置，形状与详情相同：status 与 pausedReason 保留删除前的值，有 Cron 规则时 upcomingRunsAt 为空数组，updatedAt 为删除时间。这是一次性回执，页面应从列表中移除该任务，之后详情返回 404。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store"
+        },
+        "bodies": {
+          "接口创建的任务": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "type": "schedule",
+              "id": "schedule-927e03d2a4784f90a6238e790539c6e4",
+              "name": "工作日园区告警汇总",
+              "description": null,
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "chatId": null,
+              "prompt": "汇总园区过去24小时的设备告警，并标出需要跟进的工单。",
+              "schedule": {
+                "type": "cron",
+                "expression": "0 0 8 * * MON-FRI",
+                "timezone": "Asia/Shanghai",
+                "lastRunAt": null,
+                "upcomingRunsAt": []
+              },
+              "status": "active",
+              "pausedReason": null,
+              "createdAt": "2026-10-04T02:00:00Z",
+              "updatedAt": "2026-10-21T03:00:00Z",
+              "metadata": {
+                "parkCode": "park-east",
+                "purpose": "alarm-summary"
+              }
+            }
+          },
+          "对话中创建的任务（删除前已暂停）": {
+            "resCode": "0",
+            "resMsg": "success",
+            "result": {
+              "type": "schedule",
+              "id": "schedule-1f2e3d4c5b6a47988a7b6c5d4e3f2a1b",
+              "name": "每晚门禁异常复盘",
+              "description": "在门禁巡检对话中创建，每晚复盘当天的门禁异常。",
+              "agentId": "agent-550e8400e29b41d4a716446655440000",
+              "chatId": "b5e1c2d3f4a5468798a0b1c2d3e4f506",
+              "prompt": "复盘今天东区门禁的异常记录，列出需要处理的设备。",
+              "schedule": {
+                "type": "cron",
+                "expression": "0 30 21 * * *",
+                "timezone": "Asia/Shanghai",
+                "lastRunAt": "2026-10-03T13:30:00Z",
+                "upcomingRunsAt": []
+              },
+              "status": "paused",
+              "pausedReason": "manual",
+              "createdAt": "2026-10-01T09:12:00Z",
+              "updatedAt": "2026-10-21T03:00:00Z",
+              "metadata": {}
+            }
+          }
+        }
+      },
+      {
+        "id": "400-schedule-request-invalid",
+        "status": "400",
+        "tabLabel": "400 · SCHEDULE_REQUEST_INVALID",
+        "label": "Bad Request",
+        "summary": "scheduleId 格式非法、带了 query 参数或非空请求体。Claw 校验，错误码原样返回。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "定时任务请求无效。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_REQUEST_INVALID",
+            "resMsg": "Invalid schedule request."
+          }
+        }
+      },
+      {
+        "id": "404-schedule-not-found",
+        "status": "404",
+        "tabLabel": "404 · SCHEDULE_NOT_FOUND",
+        "label": "Not Found",
+        "summary": "任务不存在、已删除，或对当前用户不可见，三种情况结果相同。重复删除也返回 404，页面按已删除处理；Claw 返回 404 时 Mate 同样删除 t_schedule 中的残留记录。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_NOT_FOUND",
+            "resMsg": "定时任务不存在或不可访问。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_NOT_FOUND",
+            "resMsg": "Schedule not found or not accessible."
+          }
+        }
+      },
+      {
+        "id": "500-schedule-delete-failed",
+        "status": "500",
+        "tabLabel": "500 · SCHEDULE_DELETE_FAILED",
+        "label": "Internal Server Error",
+        "summary": "Claw 删除事务失败，任务没有删除。Mate 读取或删除 t_schedule 失败时返回 Mate 通用 500，此时 Claw 中的任务可能已删除，重发同一请求即可清理。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_DELETE_FAILED",
+            "resMsg": "删除定时任务失败，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_DELETE_FAILED",
+            "resMsg": "Failed to delete the schedule. Please try again later."
+          }
+        }
+      },
+      {
+        "id": "503-schedule-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · SCHEDULE_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "Claw 不可达、证书校验失败，或结果未知（超时、断连）。Mate 不自动重试；删除可以重发，再次得到 404 即表示已删除。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "定时任务服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "SCHEDULE_SERVICE_UNAVAILABLE",
+            "resMsg": "The schedule service is temporarily unavailable. Please try again later."
+          }
+        }
+      }
+    ]
+  },
+  "review": {
+    "questions": [],
+    "followUpTitle": "删除接口待评审",
+    "promptPrefix": "更新 DELETE /mate-service/v1/schedules/{scheduleId}",
+    "promptSuffix": "保持与 CampusMate 定时任务设计 §4.2 和 Claw 删除接口同步。"
+  }
+}
