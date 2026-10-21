@@ -118,10 +118,13 @@ def bilingual_errors(section, allowed=None):
     return result
 
 
-def model(key, method, route, name, purpose, params, body, responses, details):
+def model(key, method, route, name, purpose, params, body, responses, details, user_token=False):
     language = 'zh-CN'
     headers = [{'name': 'Accept-Language', 'value': language, 'required': False,
                 'description': f'支持 zh-CN/en-US；缺省或不支持时回退 {language}；返回实际 Content-Language。'}]
+    if user_token:
+        headers.insert(0, {'name': 'access-token', 'value': '<当前用户的 access-token>', 'required': True,
+                           'description': 'Mate 原样转发的用户 token；Claw 只用它查询用户 ID，不落库、不写日志。'})
     if body.get('required'):
         headers.insert(0, {'name': 'Content-Type', 'value': 'application/json',
                           'required': True, 'description': 'JSON 请求体。'})
@@ -176,7 +179,8 @@ def build_models(claw):
     def add(key, method, route, name, purpose, params, body, success, numbers, errors=None):
         details = common_rules + contract_sections(source, numbers) + shared_errors
         models.append(model(key, method, route, name, purpose, params, body,
-                            success + (errors or []), details))
+                            success + (errors or []), details,
+                            user_token=key in ('CreateSchedule', 'ListSchedules', 'ListScheduleRuns')))
 
     add('CreateSchedule', 'POST', '/schedules', '创建任务配置',
         '保存园区告警汇总任务的 Agent、prompt 和时间规则，返回完整配置及计划摘要。保存不立即运行；有效 Cron 登记自动计划。',

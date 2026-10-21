@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "mate-service 定时任务管理 API",
-    "version": "1.6.0",
+    "version": "1.8.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -152,7 +152,7 @@
         "status": "500",
         "tabLabel": "500 · SCHEDULE_READ_FAILED",
         "label": "Internal Server Error",
-        "summary": "Claw 中的任务记录损坏或投影失败，不转成 404。Mate 读取 t_schedule 或 Chat 映射失败时返回 Mate 通用 500。",
+        "summary": "Claw 中的任务记录损坏或投影失败，不转成 404。Mate 读取 t_schedule 或 Chat 映射（投影 chatId）失败时返回 Mate 通用 500。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
