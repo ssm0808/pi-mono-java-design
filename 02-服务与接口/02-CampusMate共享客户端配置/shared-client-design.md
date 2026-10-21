@@ -4,10 +4,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.3.0 |
+| 文档版本 | 0.3.1 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
-| 设计状态 | 待实现。路径目录、共享短请求通道和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil` 等现状见 [§8.2](#source-evidence) |
+| 设计状态 | 待实现。路径目录、共享同步请求通道和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil` 等现状见 [§8.2](#source-evidence) |
 | 源码基线 | Claw Java main `628dca25a694d9d056b15f012e1223d68091ab66`（2026-10-21 fetch） |
 | 主基线 | Codex main `d571eaf1f61d0d93a797506335a99a9950ffe37b`、Anthropic Java SDK main `85bfc1966a94862ec39477278430c3f8f5a0c3f6`，均于 2026-10-21 fetch；pi main `16f5f0af4d85ca583d045ceb5ed6d646fcaf7761`、OpenCode dev `dbe08ddc3c405168c679a3dac0029ef64787b7af` 作对照 |
 
@@ -25,7 +25,7 @@
 |---|---|---|---|
 | T1 | 确认公司部署流水线没有覆盖任何 `CAMPUSMATE_*_PATH*` 环境变量；若有，按 [D1 代价](#key-decisions)评估 | Lotus | [D1](#key-decisions) |
 | T2 | 已确认（2026-10-21，Lotus）：Mate 用 HTTP 状态表达成败，非 2xx 即失败，业务失败只带 `resCode`、`resMsg`，没有 `result`。通道只按 HTTP 状态判定成败，不检查 `resCode`，与实现仓 `b0f45547` 的决定一致 | Lotus | [§3.3](#short-request-sequence) |
-| T3 | 已确认（2026-10-21，Lotus）：短请求 10 秒、工具执行 60 秒、模型推理 600 秒，均可配置 | Lotus | [§7.1](#config-items) |
+| T3 | 已确认（2026-10-21，Lotus）：查询请求 10 秒、工具执行 60 秒、模型推理 600 秒，均可配置 | Lotus | [§7.1](#config-items) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
 | T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
 
@@ -42,8 +42,9 @@
 | Mate | CampusMate 服务，与 CampusMate 是同一个服务 |
 | 服务地址 | `campusmate.base-url`，只含 scheme、host、port |
 | 接口目录 | Claw 调用的全部 Mate 接口，每项是一个 HTTP 方法加路径模板，定义在代码中 |
-| 短请求 | 除模型流式推理外的所有 Mate 调用：读取 Agent 和 Skill、查询和执行工具、取定时 token |
-| 短请求通道 | 所有短请求共用的发送组件，负责拼地址、超时、响应上限和 Mate 统一响应的解包 |
+| 同步请求 | 除模型流式推理外的所有 Mate 调用：读取 Agent 和 Skill、查询和执行工具、取定时 token；一次请求一次响应，都经过同步请求通道 |
+| 查询请求 | 同步请求中只读取数据的一类：读取 Agent 和 Skill、查询工具定义、取定时 token；与工具执行分开设超时 |
+| 同步请求通道 | 所有同步请求共用的发送组件，负责拼地址、超时、响应上限和 Mate 统一响应的解包 |
 | 业务客户端 | 按业务分组调用 Mate 的类：Runtime、Tool、定时 token 三个，只负责请求和结果的业务转换 |
 
 ### 1.2 需求整理
@@ -51,9 +52,9 @@
 | 编号 | 需求 | 类型 | 来源 |
 |---|---|---|---|
 | R1 | 部署只需配置 Mate 服务地址，新增一个 Mate 接口不新增配置项或环境变量 | 约束 | 用户要求；推导，需确认 |
-| R2 | 同一种调用失败（不可达、超时、非 2xx、响应过大、响应无效）在所有短请求上按同一规则判定 | 稳定性 | 用户"五花八门"；[§8.2](#source-evidence) 中三套不同判定 |
+| R2 | 同一种调用失败（不可达、超时、非 2xx、响应过大、响应无效）在所有同步请求上按同一规则判定 | 稳定性 | 用户"五花八门"；[§8.2](#source-evidence) 中三套不同判定 |
 | R3 | 所有 Mate 请求只能发往 `campusmate.base-url` 指定的服务，路径不能改道到其他主机 | 安全 | 沿用 ADR-0026 |
-| R4 | 超时按调用类型分三组并均可配置：短请求 10 秒、工具执行 60 秒、模型推理 600 秒 | 稳定性 | 用户确认（T3） |
+| R4 | 超时按调用类型分三组并均可配置：查询请求 10 秒、工具执行 60 秒、模型推理 600 秒 | 稳定性 | 用户确认（T3） |
 | R5 | 不改变任何 Mate 接口的方法、路径、请求头、请求体和响应体 | 约束 | 沿用 ADR-0026 |
 | R6 | 发现请求不携带业务凭据；工具执行只携带本次执行的凭据快照 | 安全 | 沿用 [README §1](README.md) |
 
@@ -68,13 +69,13 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 | 编号 | 参与者 | 业务目标 | 业务结果 |
 |---|---|---|---|
 | BU1 | 部署人员 | 把 Claw 接到某个环境的 Mate | 服务启动成功，所有 Mate 调用都发往配置的地址；只需设置一个地址 |
-| BU2 | 运维人员 | 调整调用 Mate 的超时 | 短请求、工具执行、模型推理三类超时各自生效 |
+| BU2 | 运维人员 | 调整调用 Mate 的超时 | 查询请求、工具执行、模型推理三类超时各自生效 |
 | BU3 | 开发人员 | 接入一个新的 Mate 接口 | 在接口目录加一项、写业务客户端方法即可调用，超时、响应上限和失败判定自动与其他接口一致 |
 | BU4 | 园区用户 | 让 Agent 处理一项园区工单 | Agent 读取定义、装配工具、推理并执行工具，返回处理结果 |
 
 ### 2.2 整体时序
 
-场景：园区用户让 Agent 创建一条园区工单，Agent 读取定义、装配工具、推理、执行工具后返回结果。前提：Agent 已在 Mate 中定义并绑定工单工具。图中 Claw 对 Mate 的调用全部经过同一个服务地址和接口目录，短请求经过同一个通道；收敛本身待实现，Mate 接口不变。
+场景：园区用户让 Agent 创建一条园区工单，Agent 读取定义、装配工具、推理、执行工具后返回结果。前提：Agent 已在 Mate 中定义并绑定工单工具。图中 Claw 对 Mate 的调用全部经过同一个服务地址和接口目录，同步请求经过同一个通道；收敛本身待实现，Mate 接口不变。
 
 | 参与者 | 职责 | 映射 |
 |---|---|---|
@@ -88,10 +89,10 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 
 | 阶段 | 详细时序 |
 |---|---|
-| 步骤 2～5：准备 Agent | 运行目录写入沿用 [M01](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)；短请求发送见 [§3.3](#short-request-sequence) |
-| 步骤 6～9：装配工具 | 工具装配沿用 [M03](../../01-总体架构/02-CampusClaw工具系统/README.md)；短请求发送见 [§3.3](#short-request-sequence) |
+| 步骤 2～5：准备 Agent | 运行目录写入沿用 [M01](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)；同步请求发送见 [§3.3](#short-request-sequence) |
+| 步骤 6～9：装配工具 | 工具装配沿用 [M03](../../01-总体架构/02-CampusClaw工具系统/README.md)；同步请求发送见 [§3.3](#short-request-sequence) |
 | 步骤 10～11：推理 | 模型调用沿用 [Model §5](../03-Model/README.md#http-transport) |
-| 步骤 12～13：执行工具 | [§3.3 发送短请求的详细时序](#short-request-sequence) |
+| 步骤 12～13：执行工具 | [§3.3 发送同步请求的详细时序](#short-request-sequence) |
 
 <a id="key-decisions"></a>
 
@@ -102,7 +103,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | Mate 接口路径由部署配置，还是写在代码里？ | Codex 的 `Provider` 只有 `base_url`、请求头和重试，每个接口客户端在代码里写死路径（`"models"`、`"memories/trace_summarize"`、`/responses`），唯一例外 `model_catalog_url` 是因为模型目录可能在另一个主机；Anthropic SDK 只暴露 `baseUrl`，各 Service 用 `addPathSegments("v1", "messages")` 写死；pi 的模型只有 `baseUrl` 和 `api`；OpenCode 的 Provider 设置只有 `baseURL` | Mate 是唯一服务，所有接口同一主机（产品约束）；路径变化必然伴随请求或响应变化，Claw 本来就要发版；仓库内没有部署覆盖任何路径变量 | 路径写成 common 模块的接口目录 `CampusMateOperation`（方法 + 路径模板），配置只保留 `campusmate.base-url`；ai 和 cli 两个模块共用这份目录 | Mate 单独改路径时 Claw 必须发版；退役 7 个配置键和环境变量，不做兼容双读；若某环境需要不同网关前缀，要再加一个前缀配置（T1） |
-| D2 | 短请求的发送、超时、响应上限和失败判定由谁负责？ | Codex 的 `EndpointSession` 为所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 所有 Service 共用 `ClientOptions` 中的一个 `HttpClient` 和默认 `Timeout`，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块 | cli 模块新增一个短请求通道 `CampusMateHttpClient`，持有唯一的 JDK HttpClient，统一拼地址、超时、响应上限，并只按 HTTP 状态判定成败（Mate 非 2xx 即失败，T2）；业务客户端只做请求组装和结果转换。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用接口目录和地址校验 | 现有三套失败判定合并成一套，工具执行和取 token 不再自行检查 `resCode`；若某个 Mate 接口违反"非 2xx 即失败"，Claw 会把失败当成功；模型与短请求仍是两条连接，不能共用连接池 |
+| D2 | 同步请求的发送、超时、响应上限和失败判定由谁负责？ | Codex 的 `EndpointSession` 为所有接口客户端统一发请求，`Request` 带单次 `timeout` 和 `response_body_limit_bytes`；Anthropic SDK 所有 Service 共用 `ClientOptions` 中的一个 `HttpClient` 和默认 `Timeout`，单次调用可用 `RequestOptions` 覆盖 | 现状三个业务客户端各自封装 JDK HttpClient，HTTP 状态、`resCode`、响应上限的判定各不相同（[§8.2](#source-evidence)）；ai 模块不能依赖 cli 模块 | cli 模块新增一个同步请求通道 `CampusMateHttpClient`，持有唯一的 JDK HttpClient，统一拼地址、超时、响应上限，并只按 HTTP 状态判定成败（Mate 非 2xx 即失败，T2）；业务客户端只做请求组装和结果转换。模型推理是长时 SSE，保留 Provider 自己的连接（[Model §5](../03-Model/README.md#http-transport)），只共用接口目录和地址校验 | 现有三套失败判定合并成一套，工具执行和取 token 不再自行检查 `resCode`；若某个 Mate 接口违反"非 2xx 即失败"，Claw 会把失败当成功；模型与同步请求仍是两条连接，不能共用连接池 |
 | D3 | 业务客户端是合并成一个 Mate 客户端，还是按业务保留？ | Anthropic SDK 按资源保留 `MessageService`、`ModelService` 等，共用同一个 `ClientOptions`；Codex 按接口保留 `ModelsClient`、`MemoriesClient` 等，共用同一个 `EndpointSession` | 三个调用方属于不同模块（M01、M03、M10），各自的失败要转换成本模块的错误：工具执行失败要变成给模型看的工具结果，定时 token 失败要区分"需要重新授权"和"服务不可用" | 保留 `MateServiceClient`、`HttpMateToolClient`、`MateAccessTokenClient` 三个业务客户端，全部改用共享通道；删除 `MateRestUtil` | 新接口仍要选一个业务客户端或新建一个；通道的失败类型要映射到三套模块错误，直到 [M12 统一错误码](../../01-总体架构/09-CampusClaw异常与错误码/README.md)落地 |
 
 ## 3. 详细设计
@@ -112,7 +113,7 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 | 用例 | 对应业务用例 | 触发者 | 前置条件 | 主成功结果 | 关键约束 |
 |---|---|---|---|---|---|
 | UC1 启动时校验服务地址 | BU1 | 部署人员启动服务 | 设置了 `CAMPUSMATE_BASE_URL` | 服务启动，地址规范化后供所有调用使用 | 地址非法时启动失败，不发任何请求；规则沿用 [README §5](README.md) |
-| UC2 发送短请求 | BU3、BU4 | 业务客户端 | 地址已校验 | 返回 Mate 统一响应中的 `result` | 超时、响应上限和 HTTP 状态按同一规则判定 |
+| UC2 发送同步请求 | BU3、BU4 | 业务客户端 | 地址已校验 | 返回 Mate 统一响应中的 `result` | 超时、响应上限和 HTTP 状态按同一规则判定 |
 | UC3 读取 Agent 运行定义 | BU4 | Runtime 准备运行目录 | — | 返回提示词、默认模型和绑定 Skill | 不携带业务凭据 |
 | UC4 读取 Skill | BU4 | Runtime 准备运行目录、Tool 装配 | — | 返回 Skill 文件或绑定工具 | 两个客户端读同一接口的不同字段 |
 | UC5 查询工具定义 | BU4 | Tool 装配 | — | 返回 Agent 或 Skill 绑定工具的定义 | 不携带业务凭据 |
@@ -146,15 +147,15 @@ Agent 服务依赖一个上游平台提供模型、Agent 定义、业务工具�
 分层理由：
 
 - **目录和地址放 common。** ai 模块的 Provider 和 cli 模块的三个业务客户端都要用，common 是两者唯一的共同依赖，而且只需要 `java.net`。这样 Provider 不再复制一份地址和路径校验。
-- **通道放 cli。** 只有 cli 有短请求调用方。通道是 Spring 单例，持有唯一的 JDK HttpClient，连接复用和超时在一处决定。
+- **通道放 cli。** 只有 cli 有同步请求调用方。通道是 Spring 单例，持有唯一的 JDK HttpClient，连接复用和超时在一处决定。
 - **业务客户端只依赖通道，不依赖配置类。** 它们不再接收 base-url 字符串或路径参数，也就不会绕过地址校验。
 - **先落骨架：** 先加目录、地址和通道，再逐个迁移业务客户端，最后删除 `Endpoints` 和 `MateRestUtil`。
 
 <a id="short-request-sequence"></a>
 
-### 3.3 发送短请求的详细时序（UC2、UC6）
+### 3.3 发送同步请求的详细时序（UC2、UC6）
 
-以执行工具为例展开 [§2.2](#business-use-cases) 步骤 12～13；读取 Agent、读取 Skill、查询工具和取定时 token 走同一条路径，只是业务客户端不同、使用短请求超时。待实现。
+以执行工具为例展开 [§2.2](#business-use-cases) 步骤 12～13；读取 Agent、读取 Skill、查询工具和取定时 token 走同一条路径，只是业务客户端不同、使用同步请求超时。待实现。
 
 ![执行一次 Mate 工具](campusmate_short_request_sequence.svg)
 
@@ -225,20 +226,20 @@ Mate 接口的方法、路径和报文不变，列表见 [§3.2](#data-model)，
 | # | 失败 | 发生阶段 | 副作用状态 | 处理方 | 系统处置 | 用户可见结果与下一步 | 不保证项 |
 |---|---|---|---|---|---|---|---|
 | F1 | 服务地址非法 | 启动 | 未发生 | 部署人员 | 启动失败并输出配置项名 | 服务未启动，修正 `CAMPUSMATE_BASE_URL` 后重启 | — |
-| F2 | 读取或查询类短请求不可达、被拒绝、响应无效 | UC3～UC5、UC7 | 未发生（只读） | 业务客户端 | 按 §3.3 转换为本模块错误，不重试 | 本次请求失败，用户可重试 | 不区分 Mate 宕机和网络故障 |
+| F2 | 读取或查询类同步请求不可达、被拒绝、响应无效 | UC3～UC5、UC7 | 未发生（只读） | 业务客户端 | 按 §3.3 转换为本模块错误，不重试 | 本次请求失败，用户可重试 | 不区分 Mate 宕机和网络故障 |
 | F3 | 工具执行超时或连接中断 | UC6 | 未知 | Tool 客户端 | 返回 `isError=true` 的工具结果，不重试 | 模型看到执行失败，可提示用户核对园区工单是否已创建 | 不保证 Mate 侧没有执行 |
 | F4 | 工具执行被 Mate 拒绝（非 2xx，带 `resCode`） | UC6 | 已提交或未发生，由 Mate 决定 | Tool 客户端 | 返回 `isError=true` 的工具结果，`resCode` 只进日志 | 模型看到执行失败 | 不透出失败原因 |
-| F5 | 响应超过上限 | 任一短请求 | 只读请求未发生；工具执行未知 | 通道 | 停止读取并按"响应过大"失败 | 同 F2 或 F3 | — |
+| F5 | 响应超过上限 | 任一同步请求 | 只读请求未发生；工具执行未知 | 通道 | 停止读取并按"响应过大"失败 | 同 F2 或 F3 | — |
 
 #### 5.2.2 容量与限流
 
-短请求共用一个 JDK HttpClient，连接池在发现、执行和取 token 之间共享；JDK 默认不限制连接数，本设计不新增限流。模型推理的并发上限仍由 [Model §5.6](../03-Model/README.md#http-transport-config) 维护。【缺口】未压测，不给容量承诺。
+同步请求共用一个 JDK HttpClient，连接池在发现、执行和取 token 之间共享；JDK 默认不限制连接数，本设计不新增限流。模型推理的并发上限仍由 [Model §5.6](../03-Model/README.md#http-transport-config) 维护。【缺口】未压测，不给容量承诺。
 
 #### 5.2.3 监控告警
 
 | 指标 | 为什么需要 | 告警条件 |
 |---|---|---|
-| 按操作和失败类型统计的短请求失败数 | D2 把三套判定合成一套后，各接口按状态码和 `resCode` 的失败分布要能看见 | 【缺口】阈值待定 |
+| 按操作和失败类型统计的同步请求失败数 | D2 把三套判定合成一套后，各接口按状态码和 `resCode` 的失败分布要能看见 | 【缺口】阈值待定 |
 | 工具执行超时次数 | F3 的副作用未知，需要人工核对 | 【缺口】阈值待定 |
 
 【缺口】Claw 现有的指标上报方式未核验，首版先在通道统一打结构化日志字段（操作名、失败类型、耗时）。
@@ -254,10 +255,10 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 | 变化 | 现状 | 目标 | 影响 |
 |---|---|---|---|
 | 路径配置 | 7 个 `campusmate.endpoints.*` 键和 `CAMPUSMATE_*_PATH*` 变量 | 删除，写进代码 | 已设置的变量被忽略；与默认值相同时无行为变化（T1） |
-| 短请求超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 短请求统一 10 秒；工具执行 60 秒可配；模型推理 600 秒不变 | Runtime 读取从 30 秒、工具发现从 60 秒收紧到 10 秒，取 token 从 5 秒放宽到 10 秒（T3）；Mate 慢于 10 秒的读取会开始失败，【缺口】没有 Mate 实际耗时数据 |
+| 超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 查询请求统一 10 秒；工具执行 60 秒可配；模型推理 600 秒不变 | Runtime 读取从 30 秒、工具发现从 60 秒收紧到 10 秒，取 token 从 5 秒放宽到 10 秒（T3）；Mate 慢于 10 秒的读取会开始失败，【缺口】没有 Mate 实际耗时数据 |
 | `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 全部不检查，成败只看 HTTP 状态 | Mate 非 2xx 即失败（T2 已确认），行为不变 |
 | HTTP 状态 | Runtime 要求 2xx；取 token 要求 200；`MateRestUtil` 不检查 | 统一要求 2xx | 工具发现和执行遇到非 2xx 时更早失败 |
-| 响应上限 | 只有 Runtime 限制 4 MiB | 所有短请求限制 4 MiB | 工具结果超过 4 MiB 时失败；【缺口】未核验现有工具结果大小 |
+| 响应上限 | 只有 Runtime 限制 4 MiB | 所有同步请求限制 4 MiB | 工具结果超过 4 MiB 时失败；【缺口】未核验现有工具结果大小 |
 | 配置键改名 | `campusmate.runtime.connect-timeout` 等 | `campusmate.http.*` | 环境变量改名，不做兼容双读（沿用 ADR-0035） |
 
 ## 6. 质量保证
@@ -290,9 +291,9 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 | 配置键 | 环境变量 | 默认值 | 取值约束 | 用途 |
 |---|---|---|---|---|
 | `campusmate.base-url` | `CAMPUSMATE_BASE_URL` | 通用模块无默认值；公司镜像 `https://localhost:8591`（ADR-0042） | 规则不变，见 [README §5](README.md) | Mate 服务地址 |
-| `campusmate.http.connect-timeout` | `CAMPUSMATE_HTTP_CONNECT_TIMEOUT` | `PT10S` | 正数 | 短请求连接超时（新增，取代 `campusmate.runtime.connect-timeout`） |
-| `campusmate.http.request-timeout` | `CAMPUSMATE_HTTP_REQUEST_TIMEOUT` | `PT10S` | 正数 | 读取、查询、取 token 的单次超时（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
-| `campusmate.http.max-response-bytes` | `CAMPUSMATE_HTTP_MAX_RESPONSE_BYTES` | `4194304` | 正整数 | 所有短请求的响应上限（新增，取代 `campusmate.runtime.max-response-bytes`） |
+| `campusmate.http.connect-timeout` | `CAMPUSMATE_HTTP_CONNECT_TIMEOUT` | `PT10S` | 正数 | 同步请求连接超时（新增，取代 `campusmate.runtime.connect-timeout`） |
+| `campusmate.http.request-timeout` | `CAMPUSMATE_HTTP_REQUEST_TIMEOUT` | `PT10S` | 正数 | 同步请求的默认单次超时，即查询请求超时；工具执行用下面的 `execute-timeout` 覆盖（新增，取代 `campusmate.runtime.request-timeout`、`campusclaw.schedule.access-token-timeout` 和写死的 60 秒） |
+| `campusmate.http.max-response-bytes` | `CAMPUSMATE_HTTP_MAX_RESPONSE_BYTES` | `4194304` | 正整数 | 所有同步请求的响应上限（新增，取代 `campusmate.runtime.max-response-bytes`） |
 | `campusmate.tool.execute-timeout` | `CAMPUSMATE_TOOL_EXECUTE_TIMEOUT` | `PT60S` | 正数 | 工具执行单次超时（新增，取代写死的 60 秒） |
 | `campusmate.model.response-timeout` | `CAMPUSMATE_MODEL_RESPONSE_TIMEOUT` | `PT600S`（与现有 `PT10M` 相同） | 正数 | 模型流式推理超时（已有，不变） |
 
@@ -350,7 +351,8 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.3.0 | 2026-10-21 | 超时分三组且均可配置：短请求 10 秒、工具执行 60 秒、模型推理 600 秒。 |
-| 0.2.0 | 2026-10-21 | 短请求成败只按 HTTP 状态判定，不检查 `resCode`。 |
+| 0.3.1 | 2026-10-21 | 区分“同步请求”（经同一通道的全部非流式调用，含工具执行）与“查询请求”（10 秒超时分组）。 |
+| 0.3.0 | 2026-10-21 | 超时分三组且均可配置：查询请求 10 秒、工具执行 60 秒、模型推理 600 秒。 |
+| 0.2.0 | 2026-10-21 | 同步请求成败只按 HTTP 状态判定，不检查 `resCode`。 |
 | 0.1.1 | 2026-10-21 | T2 注明统一检查 `resCode` 会推翻 2026-08-26 的既有决定，并给出不改变行为的备选。 |
-| 0.1.0 | 2026-10-21 | Mate 接口路径写进代码目录，短请求共用一个通道，超时按调用类型分组。 |
+| 0.1.0 | 2026-10-21 | Mate 接口路径写进代码目录，同步请求共用一个通道，超时按调用类型分组。 |

@@ -13,7 +13,7 @@
 
 本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。定时运行时 Claw 无入参向 Mate 获取统一账号 `access-token`，该接口与 Mate 侧其余定时任务设计统一在 [mate-service 定时任务设计](../08-mate-service定时任务/README.md#scheduled-access-token)维护；本专题只记录 Claw 侧路径配置 `campusmate.endpoints.scheduled-access-token-path`。
 
-[客户端收敛设计](shared-client-design.md)（待评审、待实现）提出把下文 `campusmate.endpoints` 的路径写进代码中的接口目录、短请求共用一个通道；评审通过前，本文仍描述当前有效配置。
+[客户端收敛设计](shared-client-design.md)（待评审、待实现）提出把下文 `campusmate.endpoints` 的路径写进代码中的接口目录、同步请求共用一个通道；评审通过前，本文仍描述当前有效配置。
 
 Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 目标配置树。目标路径共8项，调用 Mate 的路径全部集中在 `campusmate.endpoints`，定时任务获取 access-token 的路径也在其中；当前源码已实现其中7项配置绑定，模型能力查询尚待实现，不能把目标目录等同于已发布服务。
 

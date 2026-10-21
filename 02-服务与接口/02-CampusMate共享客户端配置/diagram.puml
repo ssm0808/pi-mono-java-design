@@ -122,7 +122,7 @@ deactivate User
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/util/MateRestUtil.java（待删除）。
 ' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java send（迁入通道）。
 ' 源码：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java validateChatPath（待删除）。
-' 目标：待实现；接口目录与地址放 common，短请求通道放 coding-agent-cli，三个业务客户端只依赖通道。
+' 目标：待实现；接口目录与地址放 common，同步请求通道放 coding-agent-cli，三个业务客户端只依赖通道。
 ' 依赖方向：common <- ai <- agent-core <- coding-agent-cli；ai 不依赖 coding-agent-cli，所以目录必须在 common。
 ' 基线：Codex Provider + EndpointSession；Anthropic Java SDK ClientOptions + 各 Service。
 title CampusMate 客户端：全局目标类图
@@ -176,7 +176,7 @@ package "coding-agent-cli：配置" as ConfigPkg {
   }
 }
 
-package "coding-agent-cli：短请求通道" as ChannelPkg {
+package "coding-agent-cli：同步请求通道" as ChannelPkg {
   class CampusMateHttpClient <<Spring 单例，待实现>> {
     - httpClient : HttpClient
     - origin : CampusMateOrigin
