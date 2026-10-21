@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.1.0 |
+| 文档版本 | 0.1.1 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M02 · Model（CampusMate 共享客户端配置专题；调用方横跨 M01 Runtime、M03 Tool、M10 定时任务） |
 | 设计状态 | 待实现。路径目录、共享短请求通道和超时分组都待实现；被替换的 `campusmate.endpoints`、`MateRestUtil` 等现状见 [§8.2](#source-evidence) |
@@ -24,7 +24,7 @@
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
 | T1 | 确认公司部署流水线没有覆盖任何 `CAMPUSMATE_*_PATH*` 环境变量；若有，按 [D1 代价](#key-decisions)评估 | Lotus | [D1](#key-decisions) |
-| T2 | 确认通道对所有短请求统一检查 `resCode == "0"`，包括目前"不按 resCode 预判"的工具发现 | Lotus | [§5.3](#compatibility) |
+| T2 | 确认通道对所有短请求统一检查 `resCode == "0"`。这会推翻实现仓 `b0f45547`（2026-08-26，`docs/designs/agent-skill-runtime.md` 3.1.0）"不按 resCode 预判、只校验 result 形状"的决定，该提交没有写原因；备选是通道只解析信封、不判定 `resCode`，由执行和取 token 两个客户端各自检查，现有行为不变 | Lotus | [§5.3](#compatibility) |
 | T3 | 确认短请求超时统一为 30 秒：工具发现从 60 秒收紧，定时取 token 从 5 秒放宽 | Lotus | [§5.3](#compatibility) |
 | T4 | 采纳后修改 codex-style `design-doc-template` 中 7.1 的"路径放进服务的路径目录"规则，改为"路径进代码中的接口目录，配置只放服务地址" | Lotus | [§7.1](#config-items) |
 | T5 | 采纳后同步 [Agent 架构对比 A06/A18](../../01-总体架构/07-Agent架构对比/README.md) 与共享配置主设计 [README](README.md) §1、§4～§10 | Claude | 设计仓 AGENTS.md |
@@ -254,7 +254,7 @@ Mate 路径临时变更时，Claw 无法靠环境变量热修，只能发版（D
 |---|---|---|---|
 | 路径配置 | 7 个 `campusmate.endpoints.*` 键和 `CAMPUSMATE_*_PATH*` 变量 | 删除，写进代码 | 已设置的变量被忽略；与默认值相同时无行为变化（T1） |
 | 短请求超时 | Runtime 30 秒可配；发现与执行 60 秒写死；定时 token 5 秒可配 | 短请求统一 30 秒；工具执行 60 秒可配 | 发现收紧，取 token 放宽（T3） |
-| `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取不检查 | 通道统一检查 | 发现和 Runtime 读取遇到 `resCode` 非 0 时从"按 result 解析"变为失败（T2） |
+| `resCode` 判定 | 执行和取 token 检查；发现和 Runtime 读取按 `b0f45547` 的决定不检查 | 通道统一检查 | 发现和 Runtime 读取遇到 `resCode` 非 0 时从"按 result 解析"变为失败（T2） |
 | HTTP 状态 | Runtime 要求 2xx；取 token 要求 200；`MateRestUtil` 不检查 | 统一要求 2xx | 工具发现和执行遇到非 2xx 时更早失败 |
 | 响应上限 | 只有 Runtime 限制 4 MiB | 所有短请求限制 4 MiB | 工具结果超过 4 MiB 时失败；【缺口】未核验现有工具结果大小 |
 | 配置键改名 | `campusmate.runtime.connect-timeout` 等 | `campusmate.http.*` | 环境变量改名，不做兼容双读（沿用 ADR-0035） |
@@ -348,4 +348,5 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.1.1 | 2026-10-21 | T2 注明统一检查 `resCode` 会推翻 2026-08-26 的既有决定，并给出不改变行为的备选。 |
 | 0.1.0 | 2026-10-21 | Mate 接口路径写进代码目录，短请求共用一个通道，超时按调用类型分组。 |
