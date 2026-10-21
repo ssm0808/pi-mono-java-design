@@ -4,8 +4,8 @@
     "operationKey": "ExecuteSessionCommand",
     "method": "POST",
     "path": "/sessions/{sessionId}/command",
-    "summary": "执行 Builtin（JSON）或 Skill（SSE）命令",
-    "description": "执行指定会话的内置命令或绑定的 Skill 命令。内置命令返回对应的 JSON 业务结果；Skill 命令接收文本和可选文件引用，通过 SSE 返回调用回执及执行结果。",
+    "summary": "执行 Builtin（文本 JSON）或 Skill（SSE）命令",
+    "description": "执行指定会话的内置命令或绑定的 Skill 命令。内置命令返回一段按请求语言生成的 Markdown 文本，调用方随后读取 Session 刷新界面状态；Skill 命令接收文本和可选文件引用，通过 SSE 返回调用回执及执行结果。新对话尚无会话时，客户端先创建会话再调用本接口。",
     "credentialPolicy": {
       "requestHeadersRequired": false,
       "entryRejectsMissingCredentials": false,
@@ -140,7 +140,7 @@
     "requestBody": {
       "required": true,
       "contentType": "application/json",
-      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元。只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。Help 只接受空参数：arguments 缺省/null/空白由 Service 归一为空；非空参数（包括 model 等命令名）按 INVALID_COMMAND_REQUEST 拒绝，不查询命令详情。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。 mode 的 arguments 缺省/null/空白归一为空并查询当前模式；非空仅接受精确小写 plan 或 build，不接受别名、额外单词或附件。",
+      "description": "先列 Builtin 请求约束，Skill 联合分支见下文；共享入口须先选择命令类别，再应用对应约束。name 必填，长度 1～64，匹配 ^[a-z0-9]+(?:-[a-z0-9]+)*$ 且不含 Slash。arguments 可省略或为 null，最多 262144 个 UTF-16 代码单元；入口先去掉首尾空白，再按命令定义统一检查：help、status、compact、skills 不接受参数，有内容按 INVALID_COMMAND_REQUEST 拒绝；rename、model、thinking、mode 的参数必填，为空按 INVALID_COMMAND_REQUEST 拒绝，不再提供无参查询。Builtin 只接受 name 和 arguments；fileIds 和其他未知字段按 INVALID_COMMAND_REQUEST 拒绝。thinking 只接受精确小写 on 或 off；mode 只接受精确小写 plan 或 build，不接受别名、额外单词或附件。 Skill 联合分支已确认：name=skill:<name>，前缀后的名称严格匹配 Skill 域正则且长 1..64；arguments 可省略/null，由 Service 归一为空字符串，最多 262144 UTF-16 单元；fileIds 可省略为 []，显式 null 拒绝，最多四个不重复的 32 位十六进制 fileId。不接受其他字段。回执 text 为 /skill:<name>，非空 arguments 前加一个空格并原样追加，再附 file 块；回执整体大小接受前校验。",
       "example": {
         "name": "model",
         "arguments": "model_011CZq2GkV8aD4NwP7sLmXfS"
@@ -148,34 +148,22 @@
       "examples": [
         {
           "label": "Help：无参 Agent 使用指南",
-          "description": "idle/running 均可查询；不改变其他 Builtin 的参数规则。",
+          "description": "idle/running 均可执行；不接受参数。",
           "value": {
             "name": "help"
           }
         },
         {
-          "label": "Status：查询 Session",
+          "label": "Status：查看会话状态",
           "value": {
             "name": "status"
           }
         },
         {
-          "label": "Name：查询 Session 名称",
+          "label": "Rename：修改名称",
           "value": {
-            "name": "name"
-          }
-        },
-        {
-          "label": "Name：修改名称",
-          "value": {
-            "name": "name",
+            "name": "rename",
             "arguments": "园区网络故障分析"
-          }
-        },
-        {
-          "label": "Model：查询可选模型",
-          "value": {
-            "name": "model"
           }
         },
         {
@@ -186,22 +174,10 @@
           }
         },
         {
-          "label": "Thinking：查询开关",
-          "value": {
-            "name": "thinking"
-          }
-        },
-        {
           "label": "Thinking：开启",
           "value": {
             "name": "thinking",
             "arguments": "on"
-          }
-        },
-        {
-          "label": "Mode：查询当前模式",
-          "value": {
-            "name": "mode"
           }
         },
         {
@@ -249,7 +225,7 @@
         "status": "200",
         "tabLabel": "200 · help",
         "label": "OK",
-        "summary": "Help 只接受空参数，idle/running 均可查询。result 必填且精确为 displayName、description、useCases。displayName 为非空 Agent 显示名，空白时回退 Agent name，不是 Session 名称。description/useCases 为必填非 null 字符串数组，去除条目两端空白和空白条目，保持作者顺序与内部换行；不翻译、不生成能力说明。以下为虚构示例。",
+        "summary": "Help 只接受空参数，idle/running 均可执行。text 为 Agent 显示名、介绍与使用场景的 Markdown；显示名空白时回退 Agent name，不是 Session 名称。介绍与场景按作者顺序原样插入，不翻译、不生成能力说明。以下为虚构示例。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -260,15 +236,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "displayName": "园区网络分析助手",
-              "description": [
-                "帮助理解园区网络状态，整理故障线索与排查建议。"
-              ],
-              "useCases": [
-                "无线网络连接异常时，梳理排查步骤。",
-                "分析告警和日志，定位可能原因。",
-                "整理排查结论与后续处理建议。"
-              ]
+              "text": "## 园区网络分析助手\n\n帮助理解园区网络状态，整理故障线索与排查建议。\n\n**使用场景**\n\n- 无线网络连接异常时，梳理排查步骤。\n- 分析告警和日志，定位可能原因。\n- 整理排查结论与后续处理建议。"
             }
           }
         }
@@ -278,7 +246,7 @@
         "status": "200",
         "tabLabel": "200 · help 空内容",
         "label": "OK",
-        "summary": "完整缓存但介绍未填写：description/useCases 缺失或 null 均返回 []；只缺一组则只该组为空。旧缓存缺 useCases 也按 [] 读取，发布新实现后通过现有显式刷新流程补齐；Help 不自动联网或刷新。无完整缓存是 422 AGENT_NOT_AVAILABLE，不与本例混淆。",
+        "summary": "完整缓存但介绍未填写：text 只含显示名并说明暂无介绍；只缺一组时只省略该组。无完整缓存是 422 AGENT_NOT_AVAILABLE，不与本例混淆。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -289,9 +257,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "displayName": "network-assistant",
-              "description": [],
-              "useCases": []
+              "text": "## 园区网络分析助手\n\n暂无介绍。"
             }
           }
         }
@@ -301,7 +267,7 @@
         "status": "200",
         "tabLabel": "200 · status",
         "label": "OK",
-        "summary": "与 GET Session 相同的完整资源；包含既有 lifetimeUsage，不增加上下文用量估算。示例为 running。",
+        "summary": "text 为会话名称、运行状态、模型名称、深度思考、工作模式与累计用量；模型名称取自模型信息，没有名称时回退 modelId。示例为 running。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -312,39 +278,17 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "claude-sonnet-4-5",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-16T01:15:21Z",
-              "mode": "build"
+              "text": "**园区网络故障分析**\n\n- 状态：运行中\n- 模型：[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)\n- 深度思考：开启\n- 工作模式：实施\n- 累计用量：2336 tokens（输入 1280，输出 320，缓存读取 640，缓存写入 96）"
             }
           }
         }
       },
       {
-        "id": "200-name",
+        "id": "200-rename",
         "status": "200",
-        "tabLabel": "200 · name 查询",
+        "tabLabel": "200 · rename",
         "label": "OK",
-        "summary": "空参数查询与 GET Session 相同；displayName 未设置时保留 null。",
+        "summary": "修改名称后返回说明新名称的文本；running 仍允许改名，不写 Name Entry。界面状态由调用方随后 GET Session 刷新。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -355,39 +299,17 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": null,
-              "modelId": "claude-sonnet-4-5",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-16T01:15:21Z",
-              "mode": "build"
+              "text": "已将会话命名为“园区网络故障分析”。"
             }
           }
         }
       },
       {
-        "id": "200-name-updated",
+        "id": "200-rename-unchanged",
         "status": "200",
-        "tabLabel": "200 · name 修改",
+        "tabLabel": "200 · rename 同值",
         "label": "OK",
-        "summary": "更新后返回完整 Session；running 仍允许改名，不写 Name Entry。",
+        "summary": "在修改示例后再次提交同一名称：updatedAt 保持不变，text 说明名称未变化。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -398,119 +320,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "claude-sonnet-4-5",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:15:00Z",
-              "mode": "build"
-            }
-          }
-        }
-      },
-      {
-        "id": "200-name-unchanged",
-        "status": "200",
-        "tabLabel": "200 · name 同值",
-        "label": "OK",
-        "summary": "在 name 修改示例后再次提交同一名称：资源、updatedAt 均保持不变；不返回 changed。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "claude-sonnet-4-5",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:15:00Z",
-              "mode": "build"
-            }
-          }
-        }
-      },
-      {
-        "id": "200-model-query",
-        "status": "200",
-        "tabLabel": "200 · model 查询",
-        "label": "OK",
-        "summary": "空参数返回 currentModelId 与 models，与 ListSessionCommandValues 的 model 取值相同，idle/running 均可查询；models 实时过滤并保持 Agent 绑定顺序，名称展示使用既有模型信息来源。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "currentModelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
-              "models": [
-                "model_011CZq2GkV8aD4NwP7sLmXfR",
-                "model_011CZq2GkV8aD4NwP7sLmXfS"
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": "200-model-query-empty",
-        "status": "200",
-        "tabLabel": "200 · model 无可选项",
-        "label": "OK",
-        "summary": "没有可选模型时 models=[]，currentModelId 仍保留当前值且可以不在候选中。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "currentModelId": "model_011CZq2GkV8aD4NwP7sLmXfR",
-              "models": []
+              "text": "会话名称已是“园区网络故障分析”，未修改。"
             }
           }
         }
@@ -520,7 +330,7 @@
         "status": "200",
         "tabLabel": "200 · model 修改",
         "label": "OK",
-        "summary": "非空参数与 Session POST 成功响应相同：完整 Session，不再重复返回模型候选。本例切换到不支持 Thinking 的模型，thinking 自动关闭。按锁内最新配置合并本次修改。",
+        "summary": "切换模型后返回说明结果的文本；本例切换到不支持 Thinking 的模型，thinking 自动关闭并在文本中说明。按锁内最新配置合并本次修改。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -531,29 +341,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": false,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:20:31Z",
-              "mode": "build"
+              "text": "已切换到 **[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)**。该模型不支持深度思考，已关闭深度思考。"
             }
           }
         }
@@ -563,7 +351,7 @@
         "status": "200",
         "tabLabel": "200 · model 同值",
         "label": "OK",
-        "summary": "在 model 修改示例后再次选择同一模型：与 Session POST 的无变化成功一致，返回原资源，不追加 Entry。",
+        "summary": "在修改示例后再次选择同一模型：与 Session POST 的无变化成功一致，不追加 Entry，text 说明未变化。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -574,72 +362,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": false,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:20:31Z",
-              "mode": "build"
-            }
-          }
-        }
-      },
-      {
-        "id": "200-thinking-query",
-        "status": "200",
-        "tabLabel": "200 · thinking 查询",
-        "label": "OK",
-        "summary": "空参数返回 GET Session 的完整资源，前端读取 thinking；本例 running 可查询。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "claude-sonnet-4-5",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-16T01:15:21Z",
-              "mode": "build"
+              "text": "当前已是 **[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)**，未修改。"
             }
           }
         }
@@ -649,7 +372,7 @@
         "status": "200",
         "tabLabel": "200 · thinking 修改",
         "label": "OK",
-        "summary": "小写 on/off 修改后与 Session POST 成功响应相同，返回完整 Session；本例为 on。",
+        "summary": "小写 on/off 修改后返回说明结果的文本；本例为 on。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -660,29 +383,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:25:09Z",
-              "mode": "build"
+              "text": "已开启深度思考。"
             }
           }
         }
@@ -692,7 +393,7 @@
         "status": "200",
         "tabLabel": "200 · thinking 同值",
         "label": "OK",
-        "summary": "在 thinking 修改示例后再次提交 on：返回原资源，不修改 updatedAt，不追加 Entry。",
+        "summary": "在修改示例后再次提交 on：不修改 updatedAt，不追加 Entry，text 说明未变化。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -703,72 +404,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:25:09Z",
-              "mode": "build"
-            }
-          }
-        }
-      },
-      {
-        "id": "200-mode-query",
-        "status": "200",
-        "tabLabel": "200 · mode 查询",
-        "label": "OK",
-        "summary": "无参数查询返回完整 Session；idle/running 均可读取。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "0",
-            "resMsg": "success",
-            "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "running",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:25:09Z",
-              "mode": "plan"
+              "text": "深度思考已是开启状态，未修改。"
             }
           }
         }
@@ -778,7 +414,7 @@
         "status": "200",
         "tabLabel": "200 · mode 切换 plan",
         "label": "OK",
-        "summary": "空闲时切换为 plan，返回完整 Session；真实变化保存 session.mode_changed(reason=requested)，不启动模型。",
+        "summary": "空闲时切换为 plan；真实变化保存 session.mode_changed(reason=requested)，不启动模型。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -789,29 +425,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:25:09Z",
-              "mode": "plan"
+              "text": "已切换到计划模式。"
             }
           }
         }
@@ -821,7 +435,7 @@
         "status": "200",
         "tabLabel": "200 · mode 切换 build",
         "label": "OK",
-        "summary": "空闲时切换为 build，返回完整 Session；不批准已有方案，不启动或恢复执行。",
+        "summary": "空闲时切换为 build；不批准已有方案，不启动或恢复执行。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -832,29 +446,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:25:09Z",
-              "mode": "build"
+              "text": "已切换到实施模式。不会批准已有计划，也不会启动执行。"
             }
           }
         }
@@ -864,7 +456,7 @@
         "status": "200",
         "tabLabel": "200 · mode 同值",
         "label": "OK",
-        "summary": "在 mode 切换 build 示例之后再次提交 build：仍检查 idle，返回相同资源、updatedAt，不追加事件。",
+        "summary": "在切换 build 示例之后再次提交 build：仍检查 idle，updatedAt 不变，不追加事件，text 说明未变化。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -875,29 +467,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "sessionId": "session-550e8400e29b41d4a716446655440003",
-              "agentId": "agent-550e8400e29b41d4a716446655440000",
-              "displayName": "园区网络故障分析",
-              "modelId": "model_011CZq2GkV8aD4NwP7sLmXfS",
-              "state": "idle",
-              "thinking": true,
-              "lifetimeUsage": {
-                "input": 1280,
-                "output": 320,
-                "cacheRead": 640,
-                "cacheWrite": 96,
-                "totalTokens": 2336,
-                "cost": {
-                  "input": 0.00384,
-                  "output": 0.0048,
-                  "cacheRead": 0.000192,
-                  "cacheWrite": 0.00036,
-                  "total": 0.009192
-                }
-              },
-              "createdAt": "2026-08-15T02:30:00Z",
-              "updatedAt": "2026-08-17T06:25:09Z",
-              "mode": "build"
+              "text": "当前已是实施模式，未修改。"
             }
           }
         }
@@ -907,7 +477,7 @@
         "status": "200",
         "tabLabel": "200 · compact",
         "label": "OK",
-        "summary": "无对应独立 API，保留最小业务结果 compacted=true。成功即返回，不承诺排队续跑，也不暴露内部 Entry 序号。",
+        "summary": "压缩成功即返回，不承诺排队续跑，也不暴露内部 Entry 序号。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -918,7 +488,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "compacted": true
+              "text": "已压缩当前会话的上下文。"
             }
           }
         }
@@ -928,7 +498,7 @@
         "status": "200",
         "tabLabel": "200 · compact 空历史",
         "label": "OK",
-        "summary": "空历史 compacted=false；不占容量、不改状态、不写 Entry。请求断线不取消已接受的真实压缩；不自动重放。",
+        "summary": "空历史不占容量、不改状态、不写 Entry。请求断线不取消已接受的真实压缩；不自动重放。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -939,7 +509,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "compacted": false
+              "text": "当前会话没有可压缩的内容。"
             }
           }
         }
@@ -949,7 +519,7 @@
         "status": "200",
         "tabLabel": "200 · skills 空绑定",
         "label": "OK",
-        "summary": "完整空快照返回 skills=[]；无完整快照仍返回既有 AGENT_NOT_AVAILABLE。",
+        "summary": "完整空快照说明没有可用技能；无完整快照仍返回 AGENT_NOT_AVAILABLE。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -960,7 +530,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "skills": []
+              "text": "当前智能体没有可用的技能。"
             }
           }
         }
@@ -970,7 +540,7 @@
         "status": "200",
         "tabLabel": "200 · skills",
         "label": "OK",
-        "summary": "最新完整绑定快照中按名称稳定排序的名称和描述；不增加 Skill ID、版本、路径或命令字段。",
+        "summary": "最新完整绑定快照中按名称稳定排序的技能名称与描述；描述原样插入，不翻译。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -981,12 +551,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "skills": [
-                {
-                  "name": "pdf",
-                  "description": "分析和生成 PDF 文档"
-                }
-              ]
+              "text": "当前智能体可用的技能：\n\n- **pdf**：分析和生成 PDF 文档"
             }
           }
         }
@@ -1017,7 +582,7 @@
         "status": "400",
         "tabLabel": "400 · INVALID_COMMAND_REQUEST",
         "label": "Bad Request",
-        "summary": "命令请求内容不符合约束。 Help 的非空参数（如 model）也使用本错误，而不是 COMMAND_NOT_FOUND。 mode 参数不是精确小写 plan/build（例如 PLAN、auto 或 plan now）时也使用本错误。",
+        "summary": "命令请求内容不符合约束：不接受参数的命令带了参数；rename、model、thinking、mode 的参数为空；thinking 不是精确小写 on/off，mode 不是精确小写 plan/build；技能命令正文加用户文本后超过长度上限（缩短文本即可通过）。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -1080,7 +645,7 @@
         "status": "409",
         "tabLabel": "409 · SESSION_BUSY",
         "label": "Conflict",
-        "summary": "该 Session 正在执行，当前命令暂不可用。 mode 的非空参数在 running（含计划、问题或工具确认等待）均拒绝；即使目标值与当前相同也不例外。",
+        "summary": "该 Session 正在执行，当前命令暂不可用：运行中 model、thinking、mode、compact 与技能命令均拒绝，即使目标值与当前相同也不例外；help、status、rename、skills 不受影响。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -1101,7 +666,7 @@
         "status": "422",
         "tabLabel": "422 · AGENT_NOT_AVAILABLE",
         "label": "Unprocessable Entity",
-        "summary": "当前 Agent 运行时不可用。 Help 无完整 Agent 缓存时复用此错误；完整缓存仅缺介绍时返回 200 空数组。",
+        "summary": "当前 Agent 运行时不可用，Builtin 与技能命令相同。Help 无完整 Agent 缓存时复用此错误；完整缓存仅缺介绍时返回 200 文本。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -1114,6 +679,27 @@
           "en-US": {
             "resCode": "AGENT_NOT_AVAILABLE",
             "resMsg": "The current Agent runtime is unavailable."
+          }
+        }
+      },
+      {
+        "id": "422-skill-not-available",
+        "status": "422",
+        "tabLabel": "422 · SKILL_NOT_AVAILABLE",
+        "label": "Unprocessable Entity",
+        "summary": "仅 Skill 分支：技能已绑定，但正文为空或正文本身超过长度上限；调用方修改参数无法通过，需修正技能内容。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SKILL_NOT_AVAILABLE",
+            "resMsg": "技能内容不可用。"
+          },
+          "en-US": {
+            "resCode": "SKILL_NOT_AVAILABLE",
+            "resMsg": "The skill content is unavailable."
           }
         }
       },
@@ -1181,11 +767,32 @@
         }
       },
       {
+        "id": "500-session-update-failed",
+        "status": "500",
+        "tabLabel": "500 · SESSION_UPDATE_FAILED",
+        "label": "Internal Server Error",
+        "summary": "model、thinking、mode 写入会话失败，与统一 Session POST 相同。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "SESSION_UPDATE_FAILED",
+            "resMsg": "Session 更新失败。"
+          },
+          "en-US": {
+            "resCode": "SESSION_UPDATE_FAILED",
+            "resMsg": "Failed to update the Session."
+          }
+        }
+      },
+      {
         "id": "500-command-execution-failed",
         "status": "500",
         "tabLabel": "500 · COMMAND_EXECUTION_FAILED",
         "label": "Internal Server Error",
-        "summary": "命令执行失败。",
+        "summary": "命令执行中出现未归类的异常；原始异常随日志记录，不对外暴露。",
         "headers": {
           "Content-Type": "application/json",
           "Content-Language": "zh-CN"
@@ -1198,6 +805,27 @@
           "en-US": {
             "resCode": "COMMAND_EXECUTION_FAILED",
             "resMsg": "Command execution failed."
+          }
+        }
+      },
+      {
+        "id": "500-event-acceptance-failed",
+        "status": "500",
+        "tabLabel": "500 · EVENT_ACCEPTANCE_FAILED",
+        "label": "Internal Server Error",
+        "summary": "仅 Skill 分支：受理写入失败，与普通消息相同；调用未被接受。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_ACCEPTANCE_FAILED",
+            "resMsg": "用户事件接收失败。"
+          },
+          "en-US": {
+            "resCode": "EVENT_ACCEPTANCE_FAILED",
+            "resMsg": "User event acceptance failed."
           }
         }
       },
@@ -1246,6 +874,29 @@
         }
       },
       {
+        "id": "503-event-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · EVENT_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "仅 Skill 分支：本次事件流暂时接收不了首帧（背压），与普通消息相同；调用未被接受，可稍后重试。",
+        "headers": {
+          "Content-Type": "application/json",
+          "Content-Language": "zh-CN",
+          "Cache-Control": "no-store",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "事件服务暂不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "EVENT_SERVICE_UNAVAILABLE",
+            "resMsg": "The event service is temporarily unavailable. Try again later."
+          }
+        }
+      },
+      {
         "id": "200-skill-message",
         "status": "200",
         "tabLabel": "200 · Skill SSE",
@@ -1258,51 +909,6 @@
         },
         "bodies": {
           "default": "data: {\"eventId\":\"c0000000000000000000000000000001\",\"type\":\"user.message\",\"createdAt\":\"2026-09-08T02:30:00Z\",\"content\":[{\"type\":\"text\",\"text\":\"/skill:pdf 分析附件中的巡检记录\"},{\"type\":\"file\",\"fileId\":\"7f12d8a380964fdc8518f48be1cf6a42\"}]}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"delta\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"content\":\"正在整理巡检信息。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000002\",\"type\":\"agent.message\",\"phase\":\"completed\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:04Z\",\"content\":\"已整理巡检信息，建议先核查上联链路。\"}\n\ndata: {\"eventId\":\"c0000000000000000000000000000003\",\"type\":\"session.status_idle\",\"sourceEventId\":\"c0000000000000000000000000000001\",\"createdAt\":\"2026-09-08T02:30:05Z\",\"reason\":\"done\"}\n\n"
-        }
-      },
-      {
-        "id": "503-skill-agent-unavailable",
-        "status": "503",
-        "tabLabel": "503 · SKILL_AGENT_UNAVAILABLE",
-        "label": "Service Unavailable",
-        "summary": "仅 Skill 分支；Builtin/Help 既有 422 AGENT_NOT_AVAILABLE 不变。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN",
-          "Retry-After": "3"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "SKILL_AGENT_UNAVAILABLE",
-            "resMsg": "Skill 所需的完整 Agent 缓存暂不可用。"
-          },
-          "en-US": {
-            "resCode": "SKILL_AGENT_UNAVAILABLE",
-            "resMsg": "The complete Agent cache required for this Skill is temporarily unavailable."
-          }
-        }
-      },
-      {
-        "id": "500-skill-preparation-failed",
-        "status": "500",
-        "tabLabel": "500 · SKILL_PREPARATION_FAILED",
-        "label": "Internal Server Error",
-        "summary": "Skill 解析失败，调用未接受。",
-        "headers": {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Content-Language": "zh-CN"
-        },
-        "bodies": {
-          "zh-CN": {
-            "resCode": "SKILL_PREPARATION_FAILED",
-            "resMsg": "Skill 解析失败，调用未接受。"
-          },
-          "en-US": {
-            "resCode": "SKILL_PREPARATION_FAILED",
-            "resMsg": "The Skill could not be prepared; the call was not accepted."
-          }
         }
       },
       {
@@ -1338,23 +944,23 @@
         "rows": [
           [
             "分派",
-            "八个精确名称；各自对应 Handler",
+            "八个精确名称：help、status、rename、model、thinking、mode、compact、skills；各自对应 Handler",
             "skill:<name>；独立 SkillCommandDefinition/Handler，共用 Registry 快照"
           ],
           [
             "响应",
-            "普通 ResultBean JSON，继续返回相同形状的业务资源",
+            "普通 ResultBean JSON，result 只有 text（Markdown，按 Accept-Language 生成）；调用方随后 GET Session 刷新状态",
             "200 text/event-stream；首帧 user.message，后续 Agent/Tool/idle 与 Events 完整事件同形"
           ],
           [
             "权限和状态",
-            "既有各命令准入",
+            "参数按命令定义统一检查；运行中 model、thinking、mode、compact 返回 SESSION_BUSY",
             "完整快照中精确绑定；idle→running 与根消息接受同事务；running 返回 SESSION_BUSY"
           ],
           [
             "错误",
             "既有 400/404/409/422/500/503",
-            "非法输入 INVALID_COMMAND_REQUEST；不存在或不再绑定 COMMAND_NOT_FOUND；缺完整缓存 SKILL_AGENT_UNAVAILABLE；容量 RUNTIME_CAPACITY_EXCEEDED；接受前解析失败 SKILL_PREPARATION_FAILED；接受后按 Events 失败终态"
+            "非法输入或正文加文本超长 INVALID_COMMAND_REQUEST；不存在或不再绑定 COMMAND_NOT_FOUND；缺完整缓存 AGENT_NOT_AVAILABLE；正文为空或本身超长 SKILL_NOT_AVAILABLE；受理写入失败 EVENT_ACCEPTANCE_FAILED；首帧背压 EVENT_SERVICE_UNAVAILABLE；容量 RUNTIME_CAPACITY_EXCEEDED；接受后按 Events 失败终态"
           ],
           [
             "快照与恢复",
@@ -1381,15 +987,15 @@
         "rows": [
           [
             "调用范围",
-            "执行 Builtin 命令：help、status、name、model、thinking、mode、compact 和 skills。Builtin 和 Skill 共用此入口；Builtin 返回 JSON，Skill 返回与 POST Events 相同的请求级 SSE。"
+            "执行 Builtin 命令：help、status、rename、model、thinking、mode、compact 和 skills。Builtin 和 Skill 共用此入口；Builtin 返回文本 JSON，Skill 返回与 POST Events 相同的请求级 SSE。新对话先创建会话再调用。"
           ],
           [
             "输入归一化",
-            "Service 将省略或 null 的 arguments 归一为空字符串，Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。"
+            "入口将省略或 null 的 arguments 归一为空字符串并去掉首尾空白，按命令定义统一检查是否接受参数及是否必填；Builtin 请求拒绝未知字段和附件；不得使用 Builtin 名称正则全局拒绝 skill:*。"
           ],
           [
             "内置命令结果",
-            "Builtin 成功返回普通 ResultBean JSON，不生成公开 commandId，不保存 command.started/completed/failed；Name 只保存当前名称，Model/Thinking/Mode/Compact 复用权威领域 Entry。"
+            "Builtin 成功返回 ResultBean JSON，result 只有 text；不生成公开 commandId，不保存 command.started/completed/failed；Rename 只保存当前名称，Model/Thinking/Mode/Compact 复用权威领域 Entry。"
           ],
           [
             "压缩恢复",
@@ -1405,7 +1011,7 @@
           ],
           [
             "响应与权威快照",
-            "status/name/thinking/mode 查询及 name/model/thinking/mode 修改统一返回 GET Session 的完整资源；model 查询返回 currentModelId/models（与 ListSessionCommandValues 的 model 取值相同，独立 GET Models 接口已删除）。仅复用业务响应 VO 和投影，不调用其他 Controller；Session 同取权威查询快照或锁内更新结果，不从旧命令清单拼接。Help、Compact、Skills 无对应独立 API，保留最小业务结果，不新增公共路径。所有成功结果删除 command、changed、sourceEventSeq，不新增类型判别或命令回执包装；调用方依据自身请求区分响应。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry。"
+            "所有 Builtin 成功结果只返回 Markdown 文本，按 Accept-Language 选择 zh-CN 或 en-US 模板；模型写成 `[modelId](model:modelId)` 链接，由 Mate 转发时替换为显示名，技能描述原样插入。文本是展示结果，调用方不得从中解析状态，成功后统一 GET Session 刷新界面。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry，文本说明未变化。"
           ],
           [
             "Skill 执行",
@@ -1417,7 +1023,7 @@
           ],
           [
             "模式切换",
-            "mode 空参只读查询；带参仅在 idle 接受。与统一 Session POST 共用模式能力规则和行锁事务，基于锁内最新记录只修改 mode，同字段按后一次成功提交生效。真实变化将 mode、updatedAt、内部 resourceVersion 与 session.mode_changed(reason=requested) 原子提交；同值仍校验状态与 plan 能力但不写事件、不升版本。成功返回同一提交快照的完整 Session，不暴露内部版本。切换不调用模型、不批准计划、不清空上下文；running 的确认等待不允许以 mode=build 绕过审核。结果不确定只读 Session/Events 对账，不自动重放。"
+            "mode 参数必填，仅在 idle 接受。与统一 Session POST 共用模式能力规则和行锁事务，基于锁内最新记录只修改 mode，同字段按后一次成功提交生效。真实变化将 mode、updatedAt、内部 resourceVersion 与 session.mode_changed(reason=requested) 原子提交；同值仍校验状态与 plan 能力但不写事件、不升版本。切换不调用模型、不批准计划、不清空上下文；running 的确认等待不允许以 mode=build 绕过审核。结果不确定只读 Session/Events 对账，不自动重放。"
           ]
         ]
       },
@@ -1451,6 +1057,11 @@
       "date": "2026-10-04",
       "status": "confirmed",
       "decision": "所有接口不声明或消费 If-Match、Idempotency-Key，不返回配套资源 ETag，不用 body/query 版本或请求键替代；额外收到这些 Header 不触发专门拒绝。更新基于数据库最新记录按提交字段原子合并，同字段按后一次成功提交生效；业务状态和权限校验保留。已观察 Java 与前端仍有相关 Header 依赖，移除待实现。"
+    },
+    "slashAlignment": {
+      "status": "已确认",
+      "confirmedAt": "2026-10-20",
+      "decision": "name 改名为 rename；rename、model、thinking、mode 参数必填、不再提供无参查询；Builtin 只返回 Markdown 文本，调用方随后 GET Session 刷新状态；新对话先创建会话再执行；技能命令错误码按原因细分，与普通消息共用受理阶段错误码。"
     }
   }
 }

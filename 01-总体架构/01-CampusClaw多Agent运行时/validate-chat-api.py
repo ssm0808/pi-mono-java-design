@@ -22,6 +22,7 @@ RETIRED_ARTIFACTS = (
     "接口契约/操作/07-change-session-model.json",
     "接口契约/操作/08-change-session-thinking.json",
     "接口契约/操作/14-change-session-name.json",
+    "接口契约/操作/09-list-session-command-values.json",
 )
 
 
@@ -54,7 +55,7 @@ def validate_catalog():
         validate_request_headers(model["operation"])
     require({model["operation"]["operationKey"] for model in models} == {
         "CreateSession", "GetSession", "DeleteSession", "SubmitSessionEvent", "ListSessionEvents",
-        "ListSessionCommandValues", "UpdateSession",
+        "ListAgentCommandValues", "UpdateSession",
         "ListAgentCommands", "ExecuteSessionCommand",
         "QuerySkillLoadStatistics", "ListAgentEvents", "ListTurnEvents",
     }, "Current catalog identities differ")

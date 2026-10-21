@@ -10,7 +10,7 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Target Slash Command Frontend Components
+title Slash 命令前端目标组件
 
 ' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
 ' Source evidence: frontend/src/App.vue, setup and submit
@@ -35,44 +35,46 @@ title Target Slash Command Frontend Components
 ' Observed behavior: attachment Plus, chip and running Stop now exist. Earlier observations are historical.
 ' Pending implementation: shared question, plan and command admission below; public mapping is still gated.
 ' Design reason: keep discovery, immutable invocation decoding, ephemeral results, and ordinary chat history as separate responsibilities.
+' 契约基线：pi-mono-java@628dca25a694d9d056b15f012e1223d68091ab66 对照；按 Agent 读取清单与可选值、argumentRequired、Builtin 文本结果均待实现。
+' 设计原因：Builtin 结果统一为 Markdown 文本，由共享受限 Markdown 渲染器展示；状态只从 GET Session 读取，不按命令名区分结果结构。
+' 待实现：新对话执行命令先经对话协调器创建会话；Mate 对外命令接口由 Mate 负责人另行设计，确认前生产 Gateway 关闭。
 
-
-package "Existing application shell" as ExistingPkg {
-  class "App.vue\n[current]" as App
-  class "ComposerBox.vue\n[current, extended]" as Composer
-  class "ConversationTimeline\n[current, unchanged]" as Timeline
-  class "Session and model state\n[current, extended]" as SessionState
-  class "Attachment draft state\n[current concept, extended]" as AttachmentState
+package "现有应用外壳" as ExistingPkg {
+  class "App.vue\n[现有]" as App
+  class "ComposerBox.vue\n[现有，扩展]" as Composer
+  class "ConversationTimeline\n[现有，不变]" as Timeline
+  class "会话与配置状态\n[现有，扩展]\n命令成功后读取 Session" as SessionState
+  class "附件草稿状态\n[现有概念，扩展]" as AttachmentState
+  class "RichTextRenderer\n[现有，受限 Markdown]" as RichText
 }
 
-package "Slash presentation [pending implementation]" as PresentationPkg {
-  class "AttachmentMenu\nno command entry" as MoreMenu
-  class "CommandRunAction\nvisible while Session runs" as RunAction
-  class "ComposerPrimaryAction\nsend or stop" as PrimaryAction
+package "Slash 展示 [待实现]" as PresentationPkg {
+  class "AttachmentMenu\n不含命令入口" as MoreMenu
+  class "CommandRunAction\n会话运行中显示" as RunAction
+  class "ComposerPrimaryAction\n发送或停止" as PrimaryAction
   class "CommandPalette" as Palette
-  class "SelectedCommandChip\nchange or remove" as CommandChip
-  class "CommandResultRegion" as ResultRegion
-  class "CommandResultRenderers" as Renderers
+  class "CommandValuesPopup\n选项型命令的可选值" as ValuesPopup
+  class "SelectedCommandChip\n更换或移除" as CommandChip
+  class "CommandResultRegion\nBuiltin 文本，仅当前页面" as ResultRegion
 }
 
-package "Slash application state [pending implementation]" as StatePkg {
+package "Slash 应用状态 [待实现]" as StatePkg {
   class "useSlashCommands" as UseSlash
-  class "CommandDraftStore\nper active chat" as DraftStore
-  class "CommandCatalogStore\nper active chat" as CatalogStore
-  class "CommandParser\npure function" as Parser
-  class "CommandPresentation\nRegistry" as Registry
-  class "ConversationCoordinator\nSkill / stop / pending interaction; gated" as Conversation
-  class "Shared Chat interaction state\nquestion / plan / permission\none current target" as InteractionState
+  class "CommandDraftStore\n按当前 Chat" as DraftStore
+  class "CommandCatalogStore\n按 Agent 与可选会话" as CatalogStore
+  class "CommandParser\n纯函数" as Parser
+  class "ConversationCoordinator\n创建会话 / Skill / 停止 / 待交互" as Conversation
+  class "共享 Chat 交互状态\n问题 / 方案 / 授权\n当前唯一目标" as InteractionState
 }
 
-package "Gateway boundary [pending implementation]" as GatewayPkg {
-  interface "CommandGateway" as Gateway
-  class "MateCommandGateway\nproduction target" as MateGateway
-  class "RuntimeCommandGateway\ncontrolled development only" as RuntimeGateway
+package "Gateway 边界 [待实现]" as GatewayPkg {
+  interface "CommandGateway\n清单 / 可选值 / 执行" as Gateway
+  class "MateCommandGateway\n生产目标" as MateGateway
+  class "RuntimeCommandGateway\n仅受控开发" as RuntimeGateway
 }
 
-class "mate-service public API\nGET descriptor confirmed\nexecute contract pending" as MateApi
-class "Runtime internal API\nGET / Builtin JSON / Skill SSE confirmed" as RuntimeApi
+class "mate-service 对外命令接口\n由 Mate 负责人另行设计" as MateApi
+class "Runtime 命令接口\n清单 / 可选值 / 执行" as RuntimeApi
 
 App *-- Composer
 App *-- Timeline
@@ -81,6 +83,7 @@ Composer *-- MoreMenu
 Composer *-- RunAction
 Composer *-- PrimaryAction
 Composer *-- Palette
+Composer *-- ValuesPopup
 Composer *-- CommandChip
 Composer --> UseSlash
 MoreMenu --> AttachmentState
@@ -88,63 +91,63 @@ RunAction --> UseSlash
 PrimaryAction --> Conversation
 CommandChip --> UseSlash
 Palette --> UseSlash
-ResultRegion --> Registry
+ValuesPopup --> UseSlash
+ResultRegion --> RichText
 UseSlash *-- DraftStore
 UseSlash *-- CatalogStore
 UseSlash --> Parser
-UseSlash --> Registry
 UseSlash --> Gateway
 UseSlash --> Conversation
-UseSlash --> InteractionState : admission only
+UseSlash --> InteractionState : 仅准入
 Conversation *-- InteractionState
 UseSlash --> SessionState
 UseSlash --> AttachmentState
-Registry --> Renderers
 Gateway <|.. MateGateway
 Gateway <|.. RuntimeGateway
 MateGateway --> MateApi
 RuntimeGateway --> RuntimeApi
 
 note bottom of Timeline
-  Questions and plans remain in the timeline.
-  Only complete accepted events resolve an interaction.
-  Builtin results remain ephemeral.
-  Skill uses ordinary message events and history.
+  问题与方案留在时间线。
+  只有完整受理事件才结束一次交互。
+  Builtin 结果只在当前页面显示。
+  Skill 使用普通消息事件与历史。
 end note
 
 note bottom of MateGateway
-  Production execution remains gated until
-  route, authentication, errors, Skill result,
-  and file reference contracts are confirmed.
+  Mate 对外命令接口的路径、认证、错误、
+  Skill 结果与附件引用确认前，
+  生产执行保持关闭。
 end note
 
 note bottom of DraftStore
-  Separate message and command buffers prevent
-  a Slash attempt from destroying user text.
-  Query, selected name and arguments are distinct.
-  Reopening preserves the selection for Escape.
+  消息与命令分开缓冲，
+  尝试 Slash 不会破坏用户已写内容。
+  查询词、所选命令与参数分开保存。
+  更换命令时保留原选择供 Escape 恢复。
 end note
 
 App -[hidden]down-> Composer
 Composer -[hidden]down-> UseSlash
 UseSlash -[hidden]down-> Gateway
 Gateway -[hidden]down-> MateGateway
-Palette -[hidden]down-> CommandChip
+Palette -[hidden]down-> ValuesPopup
+ValuesPopup -[hidden]down-> CommandChip
 CommandChip -[hidden]down-> RunAction
 MoreMenu -[hidden]down-> PrimaryAction
-ResultRegion -[hidden]down-> Renderers
-Parser -[hidden]down-> Registry
+ResultRegion -[hidden]down-> RichText
 DraftStore -[hidden]down-> CatalogStore
 @enduml
 
 @startuml slash_composer_state
-title Slash Composer Interaction State
+title Slash 输入区交互状态
 
 ' Source baseline: pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60
 ' Source evidence: frontend/src/components/ComposerBox.vue, enter, leave, choose, submit and onKeydown
 ' Observed behavior: selection closes the palette; the editor retains the raw slash command and button labels change.
 ' Pending implementation design: removable chips, argument-only editing and consistent Escape restoration are proposed.
-' Design reason: explicit selection and explicit execution prevent accidental state-changing commands.
+' 设计原因：明确选择与明确执行分开，避免误触改变状态的命令；选项型命令只有一层选择，选值即执行。
+' 待实现：argumentRequired 为 true 且参数为空时禁止执行；新对话执行前先创建会话；Builtin 文本成功后读取 Session。
 
 skinparam backgroundColor #FFFCFA
 skinparam shadowing false
@@ -159,84 +162,93 @@ skinparam nodesep 34
 skinparam ranksep 42
 top to bottom direction
 
+state "消息草稿" as MessageDraft
+state "浏览清单" as BrowsingCatalog
+state "保留查询" as QueryDraft
+state "已选命令" as SelectedCommand
+state "选择可选值" as ChoosingValue
+state "更换命令" as ChangingCommand
+state "执行中" as Executing
+state "临时结果" as ResultVisible
+state "对话执行" as ConversationExecution
+
 [*] --> MessageDraft
-MessageDraft : Ordinary message buffer is authoritative
-MessageDraft --> BrowsingCatalog : first-character slash
+MessageDraft : 以普通消息缓冲为准
+MessageDraft --> BrowsingCatalog : 首字符输入 /
 
-state BrowsingCatalog
-BrowsingCatalog : Full list or prefix-filtered list
-BrowsingCatalog --> SelectedCommand : select descriptor; close palette
-BrowsingCatalog --> QueryDraft : Escape; keep query
-BrowsingCatalog --> MessageDraft : lone slash Backspace
+BrowsingCatalog : 完整清单或前缀过滤
+BrowsingCatalog --> SelectedCommand : 选中文本或无参命令，收起清单
+BrowsingCatalog --> ChoosingValue : 选中选项型命令
+BrowsingCatalog --> QueryDraft : Escape，保留查询
+BrowsingCatalog --> MessageDraft : 仅剩 / 时 Backspace
 
-state QueryDraft
-QueryDraft : Retained query; submit disabled
-QueryDraft --> BrowsingCatalog : edit query or Enter
-QueryDraft --> MessageDraft : Escape; restore message
+QueryDraft : 保留查询，禁止提交
+QueryDraft --> BrowsingCatalog : 编辑查询或 Enter
+QueryDraft --> MessageDraft : Escape，恢复消息
 
-state SelectedCommand
-SelectedCommand : Removable canonical name chip
-SelectedCommand : Edit arguments when command and Session rules allow
-SelectedCommand --> Executing : explicit action; current descriptor and shared gate
-SelectedCommand --> MessageDraft : remove, Escape, or empty Backspace
-SelectedCommand --> ChangingCommand : click chip name; suspend selection
+SelectedCommand : 可移除的规范名称标签
+SelectedCommand : 按 argumentType 编辑参数
+SelectedCommand --> Executing : 明确执行；必填参数非空且通过共享准入
+SelectedCommand --> MessageDraft : 移除、Escape 或空参数 Backspace
+SelectedCommand --> ChangingCommand : 点击标签名称，暂存选择
 
-state ChangingCommand
-ChangingCommand : Browse catalog with saved selection and arguments
-ChangingCommand --> SelectedCommand : select replacement or Escape to restore
+ChoosingValue : 在清单位置弹出可选值，默认高亮当前值
+ChoosingValue --> Executing : 回车、数字键或点击可选值
+ChoosingValue --> MessageDraft : Escape 或点击弹层外
 
-state Executing
-Executing --> SelectedCommand : failure, preserve command draft
-Executing --> ResultVisible : Builtin JSON success
-ResultVisible : Restore suspended message; never auto-send
-Executing --> ConversationExecution : Skill receipt / public gate passed
-ConversationExecution : Shared message, confirmation and recovery flow
-ConversationExecution --> MessageDraft : restore suspended draft; never auto-send
+ChangingCommand : 带着暂存的选择与参数浏览清单
+ChangingCommand --> SelectedCommand : 选中替换命令，或 Escape 恢复
 
-state ResultVisible
-ResultVisible : Ephemeral result, latest one per active chat
-ResultVisible --> BrowsingCatalog : start another command
-ResultVisible --> MessageDraft : dismiss, refresh, or switch chat
+Executing : 新对话先创建会话再执行
+Executing --> SelectedCommand : 失败，保留命令草稿
+Executing --> ResultVisible : Builtin 文本成功
+Executing --> ConversationExecution : 技能命令已受理
+
+ResultVisible : 展示 Markdown 文本，随后读取 Session
+ResultVisible : 每个当前 Chat 只保留最近一条
+ResultVisible --> BrowsingCatalog : 开始另一个命令
+ResultVisible --> MessageDraft : 关闭、刷新或切换 Chat
+
+ConversationExecution : 共用消息、确认与恢复流程
+ConversationExecution --> MessageDraft : 恢复暂存草稿，不自动发送
 
 note right of BrowsingCatalog
-  Prefix filtering preserves server order.
-  No fuzzy reordering and no auto-execution.
+  前缀过滤保持服务端顺序。
+  不做模糊重排，不自动执行。
 end note
 
 note right of SelectedCommand
-  Question, review and permission waits remain running.
-  Submission or recovery blocks command execution.
-  A stale argument draft is preserved, never auto-cleared.
-  hints are display-only, independent of Session state.
-  Files are admitted for type=skill when upload is ready.
-  Query-only selection focuses the command action.
-  While running, Stop keeps its primary position.
-  Repeated Enter does not execute.
+  问题、审核与授权等待时会话仍在运行。
+  运行中 model、thinking、mode、compact
+  与技能命令置灰，草稿保留不自动清除。
+  提交或恢复期间禁止执行命令。
+  type=skill 且上传已接入时才接收附件。
+  无参命令选中后焦点进入执行按钮。
+  运行中停止按钮保持原位。
+  重复 Enter 不会执行。
 end note
 
 note left of BrowsingCatalog
-  No automatic fallback to an ordinary message.
-  IME composition never triggers a mode transition.
+  不自动回退为普通消息。
+  输入法组合期间不切换状态。
 end note
 
 note right of MessageDraft
-  Slash entry suspends existing files.
-  Plus opens attachments, never commands.
+  进入 Slash 时暂存已有附件。
+  + 只打开附件，不打开命令。
 end note
 @enduml
 
 @startuml slash_command_execution_flow
 ' Source baseline: pi-mono-java@6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5
 ' Source evidence: frontend/src/composables/useRuntimeApi.ts, requestRaw and return surface
-' Contract evidence: Runtime operations listSessionCommands and executeSessionCommand
-' Historical behavior: the 6f52fddc frontend had no command HTTP methods or response projectors.
 ' UI update baseline: pi-mono-java@4cc8dd86f601417c22cf9306e52152acbb59bb60
 ' Source evidence: frontend/src/components/ComposerBox.vue, choose and runCommand
 ' Source evidence: frontend/src/runtime/commands.ts, freezeInvocation and decodeCommandResult
 ' Observed behavior: current command submission already freezes an invocation and decodes by expected result kind.
-' Pending implementation design: the browser workflow and production Mate gateway are proposed.
-' Design reason: decode from an immutable invocation, never replay an uncertain mutation, and reconcile through authoritative resources.
-' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
+' 契约基线：pi-mono-java@628dca25a694d9d056b15f012e1223d68091ab66 对照；新对话先创建会话、Builtin 只返回文本、成功后读取 Session 均待实现。
+' 设计原因：前端不按命令名解析结果，状态只认权威 Session；不重放结果不确定的写请求。
+' 表达方式：只画新对话执行一次 Builtin 选项型命令的正常流程；已有对话省略第 5～8 步，技能命令改收 SSE，失败与恢复见正文。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -254,28 +266,29 @@ skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 
-title Execute One Selected Slash Command - Target
-actor User
-participant Composer
-participant "Command coordination" as Commands
-participant "Command API" as API
-participant "Conversation state" as State
-User -> Composer : Select a listed command and arguments
-Composer -> Commands : Execute explicitly
-Commands -> State : Check shared submission and recovery admission
-Commands -> Commands : Validate descriptor; freeze invocation and result kind
-Commands -> API : Submit command once
-alt Confirmed result
-  API --> Commands : Typed Builtin result or accepted Skill stream
-  Commands -> State : Apply authoritative result or ordinary event flow
-  Commands --> Composer : Acknowledge matching draft; render result
-else Rejected or uncertain result
-  API --> Commands : Structured error or connection loss
-  Commands -> State : Read-only reconciliation when needed
-  Commands --> Composer : Preserve draft; require explicit action
-end
+title 新对话执行一个已选的 Slash 命令（目标）
+actor "用户" as User
+participant "输入区" as Composer
+participant "命令协调" as Commands
+participant "对话协调" as Conversation
+participant "Claw 接口\n（经 Gateway）" as API
+participant "会话状态" as State
+User -> Composer : 在 /model 的可选值中选中一个模型
+Composer -> Commands : 明确执行
+Commands -> State : 检查共享提交与恢复准入
+Commands -> Commands : 校验描述符与必填参数，冻结调用快照
+Commands -> Conversation : 新对话还没有会话，请求创建（待实现）
+Conversation -> API : 创建会话
+API --> Conversation : 新会话
+Conversation --> Commands : 新 sessionId；空对话照常显示
+Commands -> API : 提交一次命令 name、arguments
+API --> Commands : Builtin 结果文本（待实现）
+Commands --> Composer : 按受限 Markdown 展示结果，恢复消息草稿
+Commands -> API : 读取 Session（待实现）
+API --> Commands : 完整 Session
+Commands -> State : 原子更新标题、模型、深度思考与模式
 note over Commands,API
-  Production execution stays gated by its public contract.
-  Catalog refresh is read-only; never replay command POST.
+  文本只用于展示，不从中解析状态。
+  刷新清单只读，绝不重放命令 POST。
 end note
 @enduml

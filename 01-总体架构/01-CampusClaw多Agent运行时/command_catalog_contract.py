@@ -1,10 +1,12 @@
-"""Shared design checks for lightweight Runtime and Mate GET descriptors."""
+"""Shared design checks for the lightweight Runtime command descriptors and option values."""
 
 import re
 
-BUILTINS = ("help", "status", "name", "model", "thinking", "mode", "compact", "skills")
-# Builtins that need no Session; returned when the catalog request omits sessionId.
-AGENT_BUILTINS = ("help", "skills")
+BUILTINS = ("help", "status", "rename", "model", "thinking", "mode", "compact", "skills")
+# Builtins returned when the catalog request omits sessionId: commands that affect a new Session or explain the
+# Agent. status and compact only read or change an existing Session, so they stay in the full catalog only.
+AGENT_BUILTINS = ("help", "rename", "model", "thinking", "mode", "skills")
+DESCRIPTOR_FIELDS = {"name", "type", "description", "argumentType", "argumentRequired"}
 
 
 def require(condition, message):
@@ -14,8 +16,7 @@ def require(condition, message):
 
 def validate_descriptor(command):
     require(isinstance(command, dict), "Descriptor must be an object")
-    require({"name", "type", "description"} <= set(command)
-            and set(command) <= {"name", "type", "description", "argumentType"},
+    require({"name", "type", "description"} <= set(command) <= DESCRIPTOR_FIELDS,
             "Descriptor fields differ from lightweight contract")
     require(all(isinstance(command[key], str) and command[key].strip()
                 for key in ("name", "type", "description")), "Required descriptor strings must be nonblank")
@@ -27,6 +28,11 @@ def validate_descriptor(command):
                 and len(command["name"]) <= 70, "Invalid Skill command name")
     require(command.get("argumentType") == expected_argument_type(command),
             f"argumentType must follow the command's argument: {command['name']}")
+    require(("argumentRequired" in command) == ("argumentType" in command),
+            f"argumentRequired is present exactly when argumentType is: {command['name']}")
+    if "argumentRequired" in command:
+        require(command["argumentRequired"] is expected_argument_required(command),
+                f"argumentRequired must follow the command's argument: {command['name']}")
 
 
 def validate_commands(commands, scope="session"):
@@ -46,17 +52,24 @@ def validate_commands(commands, scope="session"):
 
 HELP_DESCRIPTIONS = {"zh-CN": "介绍当前智能体的用途和使用场景", "en-US": "Introduce this agent's purpose and use cases"}
 # How each command takes its argument, so any client picks the input control without per-command logic.
-# text: free text; options: values from ListSessionCommandValues, shown through Mate command options.
-# Skills take text; Builtins not listed take no argument.
-ARGUMENT_TYPE_BY_COMMAND = {"name": "text", "model": "options", "thinking": "options", "mode": "options"}
+# text: free text; options: values from ListAgentCommandValues. Skills take text; Builtins not listed take none.
+ARGUMENT_TYPE_BY_COMMAND = {"rename": "text", "model": "options", "thinking": "options", "mode": "options"}
 
 
 def expected_argument_type(command):
     return "text" if command.get("type") == "skill" else ARGUMENT_TYPE_BY_COMMAND.get(command.get("name"))
 
 
+def expected_argument_required(command):
+    """Builtins with an argument only change state, so the argument is required; Skill text stays optional."""
+    return command.get("type") != "skill"
+
+
 SESSION_SUCCESS_IDS = {"200-commands", "200-no-skills"}
 AGENT_SUCCESS_ID = "200-agent-commands"
+CATALOG_ERROR_CODES = {("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "AGENT_NOT_FOUND"),
+                       ("404", "SESSION_NOT_FOUND"), ("422", "AGENT_NOT_AVAILABLE"),
+                       ("503", "AGENT_SERVICE_UNAVAILABLE")}
 
 
 def accepts_optional_session(operation):
@@ -64,11 +77,17 @@ def accepts_optional_session(operation):
                and parameter.get("required") is False for parameter in operation["parameters"])
 
 
+def error_codes(operation):
+    return {(response["status"], body.get("resCode")) for response in operation["responses"]
+            if response["status"] != "200" for body in response.get("bodies", {}).values()}
+
+
 def success_examples(operation):
-    expected = SESSION_SUCCESS_IDS | ({AGENT_SUCCESS_ID} if accepts_optional_session(operation) else set())
+    require(accepts_optional_session(operation), "Agent command catalog must take sessionId as an optional query")
+    expected = SESSION_SUCCESS_IDS | {AGENT_SUCCESS_ID}
     successes = [response for response in operation["responses"] if response["status"] == "200"]
     require(len(successes) == len(expected) and {response.get("id") for response in successes} == expected,
-            "Catalog requires the populated, no-Skill and (with optional sessionId) no-Session examples exactly once")
+            "Catalog requires the populated, no-Skill and no-Session examples exactly once")
     return {response["id"]: response for response in successes}
 
 
@@ -91,13 +110,15 @@ def validate_catalog_examples(operation):
     require(any(command["type"] == "skill" for command in full), "Populated example must include a Skill")
     require(empty == [command for command in full if command["type"] == "builtin"],
             "No-Skill example must keep identical Builtin descriptors")
-    if AGENT_SUCCESS_ID in examples:
-        for language in HELP_DESCRIPTIONS:
-            session = examples["200-commands"]["bodies"][language]["result"]["commands"]
-            agent = examples[AGENT_SUCCESS_ID]["bodies"][language]["result"]["commands"]
-            require(agent == [command for command in session
-                              if command["type"] == "skill" or command["name"] in AGENT_BUILTINS],
-                    "No-Session catalog must be the Session catalog without Session Builtins")
+    for language in HELP_DESCRIPTIONS:
+        session = examples["200-commands"]["bodies"][language]["result"]["commands"]
+        agent = examples[AGENT_SUCCESS_ID]["bodies"][language]["result"]["commands"]
+        require(agent == [command for command in session
+                          if command["type"] == "skill" or command["name"] in AGENT_BUILTINS],
+                "No-Session catalog must be the Session catalog without status and compact")
+    require(error_codes(operation) == CATALOG_ERROR_CODES, "Agent command catalog error codes differ")
+    require("ListAgentCommandValues" in operation["description"],
+            "Catalog must leave option values to ListAgentCommandValues")
 
 
 def scope_of(response):
@@ -109,33 +130,33 @@ def validate_localized_pair(chinese, english):
     for left, right in zip(chinese, english):
         require((left["name"], left["type"]) == (right["name"], right["type"]),
                 "name and type stay language-neutral")
-        require(left.get("argumentType") == right.get("argumentType"),
-                f"argumentType is language-neutral: {left['name']}")
+        for field in ("argumentType", "argumentRequired"):
+            require(left.get(field) == right.get(field) and (field in left) == (field in right),
+                    f"{field} is language-neutral: {left['name']}")
         if left["type"] == "builtin":
             require(left["description"] != right["description"], f"Builtin description is not localized: {left['name']}")
         else:
             require(left["description"] == right["description"], f"Skill description must be returned as authored: {left['name']}")
 
 
-def validate_projection_pair(runtime, public):
-    validate_catalog_examples(runtime)
-    validate_catalog_examples(public)
-    left, right = success_examples(runtime), success_examples(public)
-    require(set(right) == SESSION_SUCCESS_IDS, "Mate maps every Chat to a Session and projects only the full catalog")
-    for identity in right:
-        require(left[identity]["bodies"] == right[identity]["bodies"], "Mate GET projection drifted from Runtime")
-
-
 OPTION_COMMANDS = tuple(name for name, argument_type in ARGUMENT_TYPE_BY_COMMAND.items() if argument_type == "options")
-# One example per option command and value state; Mate options examples reuse these ids.
-VALUE_EXAMPLE_IDS = ("200-model", "200-model-empty", "200-thinking", "200-thinking-unsupported", "200-mode")
+# With sessionId: one example per option command and value state. Without sessionId (-agent): the initial values a
+# Session created now would use.
+SESSION_VALUE_IDS = ("200-model", "200-model-empty", "200-thinking", "200-thinking-unsupported", "200-mode")
+AGENT_VALUE_IDS = ("200-model-agent", "200-thinking-agent", "200-mode-agent")
+VALUE_EXAMPLE_IDS = SESSION_VALUE_IDS + AGENT_VALUE_IDS
+VALUE_ERROR_CODES = {("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "SESSION_NOT_FOUND"),
+                     ("404", "AGENT_NOT_FOUND"), ("404", "COMMAND_VALUES_NOT_FOUND"),
+                     ("422", "AGENT_NOT_AVAILABLE"), ("503", "AGENT_SERVICE_UNAVAILABLE"),
+                     ("503", "MANAGER_UNAVAILABLE")}
 
 
 def value_examples(operation):
-    """Return {example id: {currentValue, values}} for the ListSessionCommandValues success examples."""
+    """Return {example id: {currentValue, values}} for the ListAgentCommandValues success examples."""
     successes = [response for response in operation["responses"] if response["status"] == "200"]
     require([response.get("id") for response in successes] == list(VALUE_EXAMPLE_IDS),
-            "Command values require model, empty model, thinking (supported and unsupported) and mode examples")
+            "Command values require model, empty model, thinking (supported and unsupported), mode "
+            "and the three no-Session examples")
     results = {}
     for response in successes:
         require(response["headers"].get("Cache-Control") == "no-store", "Command values must not be cached")
@@ -145,25 +166,37 @@ def value_examples(operation):
         result = bodies[0]["result"]
         require(set(result) == {"currentValue", "values"} and isinstance(result["currentValue"], str)
                 and isinstance(result["values"], list), "Command values carry the current value and the values only")
+        session_scoped = response["id"] in SESSION_VALUE_IDS
+        require(response.get("summary", "").startswith("带 sessionId" if session_scoped else "不带 sessionId"),
+                f"Command values example must state its sessionId scope: {response['id']}")
         results[response["id"]] = result
     return results
 
 
-def validate_command_values(operation, model_query):
-    """One query serves every option command; model matches the /model query result, thinking follows the model."""
+def validate_command_values(operation, created_session):
+    """One Agent-scoped query serves every option command; without sessionId it returns a new Session's values."""
+    require(operation["path"] == "/agents/{agentId}/commands/{commandName}/values",
+            "Command values are queried per Agent, like the command catalog")
+    require(accepts_optional_session(operation), "Command values must take sessionId as an optional query")
     command_name = next(item for item in operation["parameters"] if item.get("name") == "commandName")
     require(command_name["in"] == "path" and command_name["schema"] == " | ".join(OPTION_COMMANDS),
             "commandName must list exactly the commands whose argumentType is options")
     results = value_examples(operation)
-    require(results["200-model"] == {"currentValue": model_query["currentModelId"], "values": model_query["models"]},
-            "Model values must be the models the /model query returns")
-    require(results["200-model-empty"] == {"currentValue": model_query["currentModelId"], "values": []},
+    require(bool(results["200-model"]["values"]) and results["200-model"]["currentValue"] in results["200-model"]["values"],
+            "Model values list the selectable models, including the current one")
+    require(results["200-model-empty"] == {"currentValue": results["200-model"]["currentValue"], "values": []},
             "Empty model values keep the current model")
     require(results["200-thinking"] == {"currentValue": "on", "values": ["on", "off"]}
             and results["200-thinking-unsupported"] == {"currentValue": "off", "values": ["off"]},
             "Thinking values are on/off, or off only when the model does not support thinking")
     require(results["200-mode"]["values"] == ["plan", "build"]
             and results["200-mode"]["currentValue"] in results["200-mode"]["values"], "Mode values are plan and build")
-    codes = {(response["status"], body.get("resCode")) for response in operation["responses"]
-             for body in response.get("bodies", {}).values()}
-    require(("404", "COMMAND_VALUES_NOT_FOUND") in codes, "Commands without values must return 404")
+    require(results["200-model-agent"] == {"currentValue": created_session["modelId"],
+                                           "values": results["200-model"]["values"]},
+            "No-Session model values use the created Session's default model and the same selectable models")
+    require(results["200-thinking-agent"] == {"currentValue": "on" if created_session["thinking"] else "off",
+                                              "values": ["on", "off"]},
+            "No-Session thinking follows the default model, which must support thinking")
+    require(results["200-mode-agent"] == {"currentValue": created_session["mode"], "values": ["plan", "build"]},
+            "No-Session mode starts from the Agent's published mode")
+    require(error_codes(operation) == VALUE_ERROR_CODES, "Command values error codes differ")

@@ -192,6 +192,12 @@ window.frontendScenes = [
         "view": "slash"
       },
       {
+        "id": "newChat",
+        "label": "新对话命令",
+        "frame": "slash-command-review.html",
+        "view": "slash"
+      },
+      {
         "id": "running",
         "label": "运行中命令",
         "frame": "slash-command-review.html",
@@ -204,7 +210,7 @@ window.frontendScenes = [
         "view": "slash"
       }
     ],
-    "coverage": "演示清单过滤、标签选择、参数、临时结果及问答/计划期间的可用命令。Skill 的真实执行需要对应 Gateway。",
+    "coverage": "演示清单过滤、标签选择、参数、新对话先建会话再执行、Markdown 临时结果及问答/计划期间的可用命令。Skill 的真实执行需要对应 Gateway。",
     "directory": "07-命令与技能",
     "doc": "../场景/07-命令与技能/README.md"
   },

@@ -2,31 +2,31 @@
 
 [返回命令系统](../README.md)
 
-> Slash 只是业务能力的调用入口：响应复用既有 Session/模型清单，不再提供命令专属回执。
-> `/help` 无参介绍当前 Agent，结果只有 displayName/description/useCases；[Help 专项设计](Help-Agent使用指南/README.md)维护缓存与展示语义。
+> Slash 只是业务能力的调用入口：Builtin 成功只返回一段按请求语言生成的 Markdown 文本，状态由调用方随后读取 GET Session（2026-10-20 已确认，待实现）。
+> `/help` 无参介绍当前 Agent，文本由显示名、介绍与使用场景生成；[Help 专项设计](Help-Agent使用指南/README.md)维护缓存与展示语义。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.17.0 |
-| 更新日期 | 2026-10-18 |
+| 文档版本 | 2.19.0 |
+| 更新日期 | 2026-10-21 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 查询、useCases 缓存往返、Agent 级锁、响应投影与 Command POST 已实现 |
-| 当前 Runtime 核验基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；七个 Builtin 的 Contributor、业务服务、JSON 投影与共享 POST 已实现；验收范围见 §8.3 |
+| 当前 Runtime 核验基线 | `628dca25a694d9d056b15f012e1223d68091ab66`（2026-10-20）：八个 Builtin 的 Contributor、业务服务、JSON 投影与共享 POST 已实现；rename、必填参数、统一参数检查与文本结果待实现；早期验收范围见 §8.3 |
 | Name 历史复核基线 | `510d882ca45541e0086586dab89c429c5a18cf20`；仅保留当时命名服务证据，统一 Session POST 已在当前核验基线实现 |
 | 初始 Command 发现候选 | `0bb794f222273e12fc24fe98d6ab4e9013ac8599`（PR #210） |
 | 最新前置 PR #210 | `9d0d76f4a571b559dc77ae52736caebbcc8fad88`，已通过 a8192e047f4061bd385297d3dc6c4358362d0d49 合并 |
-| 状态 | 七个 Builtin 的 Runtime 调用链已实现；不等于全部目标契约、Mate 公共接入或部署验收完成 |
+| 状态 | 八个 Builtin 的 Runtime 调用链已实现；2026-10-20 对齐的 rename、必填参数、运行中规则与文本结果待实现；不等于部署验收完成 |
 
 本期不支持排队续跑；Compact 复用 Runtime 已有执行与可靠清理边界。
 [FollowUp 未来专题](../../01-CampusClaw多Agent运行时/chat-follow-up-future-design.md)
-记录 dfb90ca 源码证据与待启用方向，不改变七个 Builtin、Help 或 Skill 的归属与字段。
+记录 dfb90ca 源码证据与待启用方向，不改变八个 Builtin、Help 或 Skill 的归属与字段。
 
 ## 1. 范围与证据
 
-Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（待评审 · 待实现）：不带 sessionId 只返回 help、skills 与技能命令，带 sessionId 返回完整命令；轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。Builtin 使用已确认 JSON 契约；Skill 的当前契约状态、执行与发布要求由[Skill 专题](../02-技能命令/README.md#4-统一实施与集成要求)维护。
+Builtin 与 Skill Command 由用户统一负责设计、实现和集成。命令清单按 Agent 查询 `GET /agents/{agentId}/commands`，sessionId 为可选查询参数（已实现）：不带 sessionId 返回 help、rename、model、thinking、mode、skills 与技能命令（范围调整待实现），带 sessionId 返回完整命令；轻量描述符、两类命令合并与固定排序保留，不再按 Session 状态过滤，运行中的禁用由前端状态规则表展示、POST 终判；Builtin 来源过滤只适用于内部 Builtin 专属解析，不是清单查询的全局限制。Builtin 成功只返回 `{text}`；Skill 的当前契约状态、执行与发布要求由[Skill 专题](../02-技能命令/README.md#4-统一实施与集成要求)维护。
 
-本文的 Builtin 目标覆盖 help、status、name、model、thinking、mode、compact、skills，不转换成模型提示词，不接受附件。
+本文的 Builtin 目标覆盖 help、status、rename、model、thinking、mode、compact、skills，不转换成模型提示词，不接受附件。`name` 直接改名为 `rename`，不保留兼容期（待实现）。
 精确请求和结果以 Runtime
 [操作 12](../../01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)、
 [操作 13](../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json) 为准。
@@ -46,13 +46,13 @@ Builtin 的来源过滤与 Skill 名称校验是不同职责，不能以过滤 S
 ## 2. 全局目标与核心扩展
 
 先看完整 Web → Application → Command Core → Builtin Adapter → Runtime/持久化结构；
-主图沿用设计仓 `06bea56` 的完整分层骨架。八个 Contributor、八个 Handler、窄业务服务分别分组；新增 Mode 待实现，
+主图沿用设计仓 `06bea56` 的完整分层骨架。八个 Contributor、八个 Handler、窄业务服务分别分组，
 Runtime Coordinator、执行对象和 Repository 分开表达。
 这些分组表示协作者集合，不要求实现同名大类，也不改变 Service 的 Java 包归属。
 
 ![Builtin 完整全局目标类图](../target_slash_command_global_classes.svg)
 
-[PlantUML 源码](../diagram.puml#L124) · [展开原尺寸 SVG](../target_slash_command_global_classes.svg)
+[PlantUML 源码](../diagram.puml#L125) · [展开原尺寸 SVG](../target_slash_command_global_classes.svg)
 
 Slash 与 Builtin 共用这一份图源；[Help 元数据补充图](Help-Agent使用指南/README.md#2-全局入口与-help-补充类图)
 和以下核心扩展类图只作下钻，不替代或重排全局主图。
@@ -65,17 +65,17 @@ BuiltinCommandSource 聚合八个 Contributor 并在 Spring 启动期查重。
 可执行 Builtin Definition 持有 Handler/Admission；Skill 发现定义不安装伪 Handler；当前 Skill 已由独立执行服务接入，统一 Definition/Handler 结构仍待实现。
 CommandExecutionContext 固定只读 Session、Locale 和同一 Catalog View。
 Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个完整 Agent 缓存；不消费命令清单、不反向注入 Registry。
-响应组装器才允许按结果类型分派，不允许中央按命令名称 switch。
+响应组装器按结果类型选择文本模板，不允许中央按命令名称 switch。参数检查由 `CommandExecutionService` 按定义统一完成，各窄服务不再各自检查（待实现）。
 
 | 命令 | 窄服务 |
 |---|---|
 | help | AgentHelpQueryService → AgentRuntimeManager.prepareCached |
 | status | RuntimeSessionStatusService |
 | skills | BoundSkillQueryService |
-| name | SessionNamingService |
+| rename | SessionNamingService |
 | model | SessionModelConfigurationService |
 | thinking | SessionThinkingConfigurationService |
-| mode | SessionModeConfigurationService（待实现；共享 Session 模式规则与事务） |
+| mode | SessionModeConfigurationService（共享 Session 模式规则与事务） |
 | compact | SessionCompactionApplicationService |
 
 ## 3. 串行 PR 与交付边界
@@ -101,36 +101,37 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 
 ## 4. 命令行为
 
+下表为 2026-10-20 对齐的目标（待实现）；实现基线中 name/model/thinking/mode 的空参数仍是查询，运行中 model/thinking/mode 仍允许无参查询。
+
 | 命令 | 空参数 | 非空参数 | running |
 |---|---|---|---|
-| help | 当前 Agent 的显示名、用途介绍与使用场景 | 拒绝，不再查询命令详情 | 可用 |
-| status | 持久化 state/modelId/thinking | 拒绝 | 可用 |
-| skills | 最新完整绑定快照的名称/描述 | 拒绝 | 可用 |
-| name | 查询当前名称 | 更新当前名称 | 可查询和修改 |
-| model | 当前与可选模型 | 修改模型 | 仅查询 |
-| thinking | 当前开关 | 仅小写 on/off | 仅查询 |
-| mode | 当前模式（完整 Session） | 仅小写 plan/build | 仅查询 |
-| compact | 压缩 | 拒绝 | 不可用 |
+| help | Agent 的显示名、用途介绍与使用场景文本 | 400 | 可用 |
+| status | 会话名称、状态、模型名称、深度思考、模式与累计用量文本 | 400 | 可用 |
+| skills | 最新完整绑定快照的名称/描述文本 | 400 | 可用 |
+| rename | 400（必填） | 更新当前名称 | 可用 |
+| model | 400（必填） | 修改模型 | 409 SESSION_BUSY |
+| thinking | 400（必填） | 仅小写 on/off | 409 SESSION_BUSY |
+| mode | 400（必填） | 仅小写 plan/build | 409 SESSION_BUSY |
+| compact | 压缩 | 400 | 409 SESSION_BUSY |
 
-空参数是 Service 归一后的空字符串。全空白 Name 修改在去除两端空白后为空时拒绝，不视为清空。
-Help 的 arguments 缺省/null/空白归一为空；非空参数（包括 model）为 INVALID_COMMAND_REQUEST，不进入命令详情或 COMMAND_NOT_FOUND 分支。
+空参数是执行入口去掉首尾空白后的空字符串；检查集中在 `CommandExecutionService`，按定义的 `CommandInputMode`（NONE / OPTIONAL / REQUIRED）判断，删除 Help（`isBlank`）与 Status、Skills、Compact（`isEmpty`）各自不一致的检查。rename、model、thinking、mode 不再有无参查询：当前值从 status、[可选值接口](../README.md#command-values) 或 GET Session 读取。全空白名称原本就被 `SessionNamingService.normalizeName` 拒绝，改为必填不损失功能。
 GET 的 Help 描述符只有 name/type/description，不返回 argumentType，不允许执行参数；Agent 命令清单按[轻量契约](../README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
-Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回 200 空数组。
-displayName 取 Agent 显示名，空白回退 Agent name；不是 `/name` 的 Session 名称。文案按纯文本展示，不调用模型、不写历史或模型上下文。
-清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE；不改变上述 POST Help 的 422。
-Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空快照返回 []，只展示名称/描述并稳定排序。
+Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回说明暂无介绍的文本。
+显示名取 Agent 显示名，空白回退 Agent name；不是 `/rename` 的 Session 名称。介绍与场景原样插入文本，不调用模型、不写历史或模型上下文。
+清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE，Mate 不可达为可重试的 503 AGENT_SERVICE_UNAVAILABLE（待实现）；不改变上述 POST Help 的 422。
+Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空快照返回说明暂无技能的文本，否则按名称稳定排序列出名称与描述。
 
 ## 5. Name 当前状态
 
-本图比较两个改名入口如何复用同一套校验，分支本身就是图要回答的问题。HTTP 与 Slash 均在数据库行锁内读取最新状态，HTTP 只合并本次提交的配置字段；同名不写入，真实改名更新名称、时间与版本。名称不创建 Entry，不改变活动执行；仅改名可在运行中进行，携带执行字段仍要求 idle。
+`/rename`（原 `/name`）与统一 Session POST 是两个改名入口。本图比较它们如何复用同一套校验，分支本身就是图要回答的问题。HTTP 与 Slash 均在数据库行锁内读取最新状态，HTTP 只合并本次提交的配置字段；同名不写入，真实改名更新名称、时间与版本。名称不创建 Entry，不改变活动执行；仅改名可在运行中进行，携带执行字段仍要求 idle。
 
 ![Name 行锁更新](session_name_update.svg)
 
-[PlantUML 源码](diagram.puml#L61)
+[PlantUML 源码](diagram.puml#L60)
 
 `t_sessions` 使用可空 `display_name`；GET Session 始终保留 `displayName`，即使为 null。
 修改去除两端空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。
-命名规则和 Repository 更新只保留一份。目标统一 `POST /sessions/{sessionId}` 与 `/name` 均不接收客户端版本令牌，由数据库锁内校验并更新；同字段以较晚成功提交的修改生效。同一归一值不升版本，running 允许两条入口修改。
+命名规则和 Repository 更新只保留一份。目标统一 `POST /sessions/{sessionId}` 与 `/rename` 均不接收客户端版本令牌，由数据库锁内校验并更新；同字段以较晚成功提交的修改生效。同一归一值不升版本，running 允许两条入口修改。
 不写 `session.name.changed` 或通用命令事件，不修改 active leaf；重启只恢复当前名称。
 
 `53eff85c` 已有 `RuntimeSessionController.update` 和 `RuntimeSessionUpdateService.update`：统一 POST 接收
@@ -143,7 +144,7 @@ Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空�
 ## 6. Model / Thinking
 
 Repository 在行锁内读取最新记录，合并本次提交字段并验证最终配置。统一 Session POST 与 Command 均不使用 If-Match、Idempotency-Key 或配套 ETag，也不增加同用途 body/query 令牌；内部版本仅用于服务端一致性。同值操作不写领域 Entry。
-查询在 running 可用，修改在锁内重新检查并返回 SESSION_BUSY。
+参数必填；running 时一律返回 409 SESSION_BUSY，修改在锁内重新检查（待实现，实现基线中 running 仍允许无参查询）。
 Model 不可用为 MODEL_NOT_AVAILABLE；开启不受支持的 Thinking 为 THINKING_NOT_SUPPORTED；
 Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的模型时沿用自动关闭规则。
 
@@ -151,23 +152,23 @@ Manager 不可用为 MANAGER_UNAVAILABLE。Model 切换到不支持 Thinking 的
 
 ### 6.1 Mode：查询与切换 plan/build
 
-园区用户准备先评估设备告警处置方案、再执行工单操作时，可以在 Composer 输入 `/mode`，选择“计划（plan）”或“实施（build）”，再明确执行；也支持直接输入 `/mode plan`、`/mode build`。切换只影响后续消息的工作模式，保留同一 Agent、Session 与上下文，不修改 Agent 默认模式、不启动模型，也不代替方案批准。
+园区用户准备先评估设备告警处置方案、再执行工单操作时，可以在 Composer 输入 `/mode`，选择“计划（plan）”或“实施（build）”，再明确执行；也支持直接输入 `/mode plan`、`/mode build`。当前模式从可选值接口的 currentValue 或 GET Session 读取。切换只影响后续消息的工作模式，保留同一 Agent、Session 与上下文，不修改 Agent 默认模式、不启动模型，也不代替方案批准。
 
 | 调用 | 请求中的 name / arguments | 结果与准入 |
 |---|---|---|
-| `/mode` | `mode` / 省略 | 查询完整 Session；idle/running 均可用 |
+| `/mode` | `mode` / 省略 | 400 INVALID_COMMAND_REQUEST（参数必填，待实现；实现基线为查询） |
 | `/mode plan` | `mode` / `plan` | idle 时校验计划能力，再原子切换；缺少能力返回 422 PLAN_MODE_UNAVAILABLE |
 | `/mode build` | `mode` / `build` | idle 时原子切换；无需计划能力，不隐含批准或继续当前执行 |
 | 同值切换 | `mode` / 当前值 | 仍检查 idle 和目标模式能力；通过后原资源、updatedAt 和内部版本不变，不追加事件 |
 | 非法参数、附件 | 如 `PLAN`、`auto`、`plan now` 或 fileIds | 400 INVALID_COMMAND_REQUEST；不写配置或历史 |
 
-arguments 缺省、null、空字符串及全空白按共享规则归一为查询；非空值必须精确等于小写 plan/build，不裁剪、猜测或接受别名。等待方案审核、工具授权或用户回答仍属于 running；任何带参切换（包括同值）都返回 409 SESSION_BUSY。无参查询不消费等待中的交互。
+arguments 去掉首尾空白后为空即 400；非空值必须精确等于小写 plan/build，不猜测或接受别名。等待方案审核、工具授权或用户回答仍属于 running；running 时任何调用（包括同值）都返回 409 SESSION_BUSY，不消费等待中的交互。
 
-真实变更在 Session 行锁内重新检查当前状态，将 mode、updatedAt、resourceVersion 与 `session.mode_changed(reason=requested)` 一次事务提交；失败整体回滚。该事件只进入历史，不带 sourceEventId/confirmationEventId；没有通用命令事件。返回锁内更新结果或同值当前快照，并由同一快照组装完整 Session。
+真实变更在 Session 行锁内重新检查当前状态，将 mode、updatedAt、resourceVersion 与 `session.mode_changed(reason=requested)` 一次事务提交；失败整体回滚。该事件只进入历史，不带 sourceEventId/confirmationEventId；没有通用命令事件。成功返回说明切换结果的文本；选 build 时文本说明不批准计划、不启动执行。
 
 Command 与直接 Session POST 均采用锁内最新记录，按提交字段更新；同字段后一次成功提交生效。消息接受与模式更新竞争时，以锁内权威状态决定能否切换。结果不确定时只读取 Session/Events 对账，保留草稿，不自动重放命令；看到 build 不能推断方案已批准。
 
-**实现切片（待实现）。** 注册 ModeCommandContributor 和 SessionModeConfigurationService，复用 Definition → Admission → Handler → 窄服务 → Repository 链路。抽取统一 Session POST 的模式准备、计划能力校验与 mode-change Entry 构造规则，让两个入口共享；统一 POST 的组合更新仍只提交一次事务。命令不调用 HTTP Controller，也不调用会独立提交的统一更新入口再拼接其他字段。Repository 保留内部一致性保护，但不将客户端版本比较作为 HTTP 或命令准入；迁移须调整旧 expectedVersion 检查和配置准备，不能仅删除 Header 后把 null 传入旧实现。
+**实现切片（已在 `628dca25` 实现）。** 注册 ModeCommandContributor 和 SessionModeConfigurationService，复用 Definition → Admission → Handler → 窄服务 → Repository 链路。抽取统一 Session POST 的模式准备、计划能力校验与 mode-change Entry 构造规则，让两个入口共享；统一 POST 的组合更新仍只提交一次事务。命令不调用 HTTP Controller，也不调用会独立提交的统一更新入口再拼接其他字段。Repository 保留内部一致性保护，但不将客户端版本比较作为 HTTP 或命令准入；迁移须调整旧 expectedVersion 检查和配置准备，不能仅删除 Header 后把 null 传入旧实现。
 
 **源码核对（2026-09-22）。** Java 固定基线 `53eff85c7f41de23eb434e027782f5085a8b8e45`；下表路径相对 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`，未运行 Java 测试。
 
@@ -178,7 +179,7 @@ Command 与直接 Session POST 均采用锁内最新记录，按提交字段更�
 | `service/command/contributor/`；`service/command/CommandDiscoveryResponseAssembler.java#assemble` | 仅七个 Builtin，未注册 mode | 新 Contributor、固定排序和中英文描述；复用 Session 结果投影 |
 | `service/command/SessionThinkingConfigurationService.java#execute` | 已有空参查询与带参修改的窄服务模式 | 参照职责分工，不能复制为第二套模式事务 |
 
-这是产品入口扩展与共享规则的架构变更；不新增 HTTP 路径、请求字段、数据库表或 Maven 依赖。代价是增加一个 Contributor/窄服务以及命令与 Session POST 的一致性验收。前端选择控件与八命令映射仍待实现，不能把已有模式按钮当作 Slash 已接通。
+这是产品入口扩展与共享规则的架构变更；不新增 HTTP 路径、请求字段、数据库表或 Maven 依赖。代价是增加一个 Contributor/窄服务以及命令与 Session POST 的一致性验收。
 
 ## 7. Compact 生命周期
 
@@ -188,12 +189,12 @@ Command 与直接 Session POST 均采用锁内最新记录，按提交字段更�
 
 [PlantUML 源码](diagram.puml#L110)
 
-只接受 idle Session 和空参数。空历史观察无副作用：不占容量、不改状态、不写 Entry，返回 compacted=false。
+只接受 idle Session 和空参数。空历史观察无副作用：不占容量、不改状态、不写 Entry，返回说明没有可压缩内容的文本。
 真实压缩与 POST Events 共用操作锁、全局容量、Active Holder、Event Projector 和 30 分钟超时。
 Projector 不依赖请求 SSE 仍持久化权威领域 Entry。
 
 虚拟请求线程等待独立“压缩终态 Future”，使用不会传播客户端断线取消的完成句柄。
-成功或无变化即返回 JSON；本期不接受排队续跑，失败/超时清理容量、Holder 和 Session 状态。
+成功或无变化即返回文本；本期不接受排队续跑，失败/超时清理容量、Holder 和 Session 状态。
 停止方向统一为 Events user.interrupt；Compact 的目标绑定、响应衔接需命令专项评审，
 不恢复独立 Abort 204。请求 Mate Header 只保留到本次执行结束，不写日志、Prompt 或存储。
 客户端不自动重放结果不确定的 Compact；通过 GET Session/Events 对账。
@@ -201,49 +202,46 @@ Projector 不依赖请求 SSE 仍持久化权威领域 Entry。
 ## 8. JSON 与错误
 
 POST 请求只有 name 和 arguments；name 必填，1～64，匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`。
-arguments 缺省/null 在 Service 归一为 ""，最大 262144 UTF-16 代码单元。
+arguments 缺省/null 在执行服务归一为 ""，去掉首尾空白，最大 262144 UTF-16 代码单元。
 Builtin 请求拒绝 fileIds 与未知字段；共享入口已按 Builtin/Skill 请求类型分派。所有命令均不定义 If-Match、Idempotency-Key 或配套 ETag，也不以其他字段代替；附件限制仍按命令类型处理。
 
-| 命令与操作 | 成功 result / 响应 VO | 复用基线 |
+2026-10-20 已确认：每个 Builtin 成功只返回 `{text}`，前端用同一种方式展示，再 `GET /sessions/{sessionId}` 刷新界面状态（待实现）。
+
+```json
+{ "resCode": "0", "resMsg": "success", "result": { "text": "已开启深度思考。" } }
+```
+
+| 命令 | 文本内容 | 实现基线（`628dca25`）的结果 |
 |---|---|---|
-| help | displayName、description[]、useCases[] / AgentHelpResponseVO（已实现） | 无独立 API，保留最小业务结果 |
-| status；name/thinking/mode 空参查询 | 完整 Session / GetSessionResponseVO | [GET Session](../../01-CampusClaw多Agent运行时/接口契约/操作/02-get-session.json) |
-| name 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json)；同形完整响应 |
-| model 空参查询 | currentModelId、models[] / AvailableModelsResponseVO | 无独立 API（原 GET Models 已删除）；取值与 [ListSessionCommandValues](../../01-CampusClaw多Agent运行时/接口契约/操作/09-list-session-command-values.json) 的 model 相同 |
-| model 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json) |
-| thinking 修改（包括同值） | 完整 Session / GetSessionResponseVO | [Session POST](../../01-CampusClaw多Agent运行时/接口契约/操作/07-update-session.json) |
-| mode 修改（包括同值；待实现） | 完整 Session / GetSessionResponseVO | Session POST 同形完整响应 |
-| compact | compacted:boolean / CompactionResponseVO（已实现） | 无独立 API，保留压缩有无变化 |
-| skills | skills[{name, description}] / BoundSkillsResponseVO（已实现） | 无独立 API，保留最小列表 |
+| help | 显示名标题、介绍与使用场景列表；介绍未填写时说明暂无介绍 | displayName、description[]、useCases[] |
+| status | 会话名称、运行状态、模型名称、深度思考、工作模式与累计用量 | 完整 Session |
+| rename | 新名称；同名时说明未修改 | 完整 Session |
+| model | 切换后的模型（`model:` 链接）；因模型能力关闭深度思考时一并说明；同值时说明未修改 | 完整 Session；无参时 currentModelId、models[] |
+| thinking | 已开启或已关闭；同值时说明未修改 | 完整 Session |
+| mode | 已切换到计划或实施模式；选 build 说明不批准计划、不启动执行 | 完整 Session |
+| compact | 已压缩，或当前没有可压缩的内容 | compacted:boolean |
+| skills | 技能名称与描述列表；没有绑定时说明暂无技能 | skills[{name, description}] |
 
-完整 Session 的字段、空值和类型只由 GET Session 维护，不能裁剪成 Status/Name/Thinking/Mode 的子集；
-这包含既有目标 lifetimeUsage，而非新增上下文用量估算。模型修改只返回 Session，不再重复带候选模型；
-`/model` 空参仍提供选择器所需的实时 models，顺序、空列表与 currentModelId 不在候选中的规则见 [HTTP §2.4.1](../../01-CampusClaw多Agent运行时/chat-http-v1-design.md#241-get-session-models)。
-调用方依据自己提交的 name 与参数区分查询/修改，不要求服务端回显命令或增加类型判别字段。
-
-所有成功 result 禁止 command、changed、sourceEventSeq，不用新包装、commandId 或 eventId 替代。
-内部 DTO 可以保留结果分派、是否更新和最后 Entry 序号，但不能直接序列化。
-不按命令分别新建 Command 响应 VO；复用 `runtimeapi.vo` 下既有业务 VO，三个新增只读业务 VO 也归该边界。
-列表始终非 null，Session 的 displayName 即使 null 也保留；Help 的 displayName 必填非空。
-成功 HTTP 200、application/json、Cache-Control: no-store、Content-Language；Controller 只收发 VO。
-错误使用真实 HTTP 状态与仅 resCode/resMsg 的 ResultBean，不使用流内错误。
-完整 400/404/409/422/500/503 映射由操作 13 唯一维护。
+- 文本为 Markdown，按 Accept-Language 选择 zh-CN 或 en-US 模板，`Content-Language` 返回实际语言；技能描述、Agent 介绍原样插入，不翻译。中英文完整示例由[操作 13](../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。
+- 模型写成 `[modelId](model:modelId)` 链接，由 Mate 转发时替换为显示名，Runtime 不读取模型显示名，规则见[命令系统 §4.3.2](../README.md#builtin-text)（待实现）。
+- 文本是展示结果，不是可解析契约，前端不得从文本中提取状态。
+- 删除 `ModelCommandResultDTO`、`HelpCommandResultDTO`、`SkillsCommandResultDTO` 与对应只读 VO；Handler 返回内部结果，`CommandResponseAssembler` 只负责生成文本。领域 Entry、事件与同值不写 Entry 的规则不变。
+- 成功结果禁止 command、changed、sourceEventSeq，不用新包装、commandId 或 eventId 替代。
+- 成功 HTTP 200、application/json、Cache-Control: no-store、Content-Language；Controller 只收发 VO。
+- 错误使用真实 HTTP 状态与仅 resCode/resMsg 的 ResultBean，不使用流内错误。model、thinking、mode 写入失败为 500 SESSION_UPDATE_FAILED，INVALID_SESSION_UPDATE_REQUEST 在命令场景映射为 400 INVALID_COMMAND_REQUEST（实现基线均折叠为 COMMAND_EXECUTION_FAILED）。完整映射由操作 13 唯一维护，并在[命令系统 §4.3.3](../README.md#command-errors)汇总。
 
 ### 8.1 共享投影与一致性
 
-CommandResponseAssembler 在应用层按内部结果类型选择业务投影；Session 路径委派
-RuntimeSessionResponseAssembler，模型查询使用 AvailableModelsResponseVO，不调用其他 HTTP Controller。
-查询取一份权威 Session 快照；修改在锁/事务内返回提交后的 RuntimeSessionDTO，或同值时的当前 DTO。
-完整资源从这份数据组装，不能用旧 Catalog 拼字段，也不能提交后无约束地重新 GET 拼入并发修改结果。
-这要求内部 Name/Model/Thinking 结果能携带权威 Session 数据，不能只保留已裁剪的字段再反向查询。
+文本由 Handler 返回的权威结果生成：修改在锁/事务内得到提交后的 RuntimeSessionDTO，或同值时的当前 DTO；不能用旧 Catalog 拼字段，也不在提交后重新 GET 拼入并发修改结果。
+前端看到文本后读取 GET Session，读到的是读取时刻的最新状态，可能已包含其他并发修改；文本只说明本次命令的结果。
 
-同值更新返回当前资源，updatedAt 和内部版本不变，不写 Entry；发生变更时沿用内部资源版本规则。
+同值更新不改变 updatedAt 和内部版本，不写 Entry；发生变更时沿用内部资源版本规则。
 全部 Claw 接口不提供客户端条件更新或请求回执重放令牌；数据库事务仍检查状态、能力与提交字段。
 领域 Entry 继续内部持久化，客户端用 GET Session/Events 对账；删除公开序号不替 Events v2 决定新的身份或恢复协议。
 
 ### 8.2 源码证据、差距与理由
 
-响应复用以既有 CampusClaw API 为依据。以下是历史证据，当前实现状态见 §8.3；历史核对固定在
+响应复用以既有 CampusClaw API 为依据。以下是历史证据（Builtin 复用业务资源的旧决策已被 2026-10-20 的文本结果取代），当前实现状态见 §8.3；历史核对固定在
 `6f52fddc87a03c20916fc7b6ef1de87f6a7a8cf5`，设计基线为 `bb3bd26d5cc52efede08645dfe266af0b31e3490`。
 以下路径均相对于 pi-mono-java；既有 pi 命令/Session 行为基线不变。
 
@@ -260,7 +258,7 @@ RuntimeSessionResponseAssembler，模型查询使用 AvailableModelsResponseVO�
 
 ### 8.3 当前 Runtime 实现与验收边界
 
-2026-09-22 按用户指定的 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45` 核对。下表路径相对
+2026-09-22 按用户指定的 `pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45` 核对，是历史快照；2026-10-20 在 main `628dca25` 的复核见[命令系统源码证据 §9](../source-evidence.md#slash-alignment-evidence)。下表路径相对
 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/`。
 
 | 能力 | 源码与符号 | 当前状态 |
@@ -276,7 +274,7 @@ RuntimeSessionResponseAssembler，模型查询使用 AvailableModelsResponseVO�
 `425354eb` 的 Builtin 应用与响应、`ca4b79f4` 的共享入口已包含在核验提交中。
 这证明实现存在，不证明所有错误码、并发、真实压缩和企业集成都已验收。未重跑 Java 测试；
 既有 Help 专项测试结果保持原归属。清单英文描述差距见[语言专项](../source-evidence.md#331-清单字段与语言专项核对)，
-Mate 公共接入仍见其独立设计；不能笼统表述为“Builtin 全部目标已经完成”。
+Mate 公共接入不在本设计范围；不能笼统表述为“Builtin 全部目标已经完成”。
 
 当前接口设计已取消客户端条件请求与 ETag，数据库原子性继续保留；[无客户端条件令牌的当前目标与实现差距](../../08-CampusClaw定时任务/source-evidence.md#schedule-header-free-contract)记录 2026-10-04 的 Java `553dcd5e` 复核，旧表中的 If-Match/ETag 为实现事实，移除仍待实现。
 
@@ -289,19 +287,20 @@ sync-campusclaw 和 diff --check；最终 HTTP PR 执行完整 mvnw verify。
 - 八项稳定排序、重名启动失败、单次快照、Builtin 不调用 Skill Source。
 - Skills 查询只展示满足 Skill 域严格名称规则的已验证绑定元数据；加载、命令发现和执行的一致性由共享规则验收，不保留宽松加载分支。
 - 缺失/类型错误/未知字段/Slash/非法或未知名称/超长参数。
-- 跨接口比较 Session/Models 的完整字段与类型、查询/修改/同值场景、Session 来自提交快照；响应不依赖 ETag，所有成功结果无 command/changed/sourceEventSeq，不泄漏内部 DTO。
-- Help 无参、空白归一、拒绝非空参数与附件；idle/running 均无副作用；显示名回退与空数组。
+- 每个 Builtin 成功只返回 `{text}`，中英文模板与 Content-Language、模型输出为 `model:` 链接、修改/同值场景的文本来自提交快照；所有成功结果无 command/changed/sourceEventSeq，不泄漏内部 DTO。
+- 参数统一检查：不接受参数的命令带参数 400，rename/model/thinking/mode 空参数 400；running 时 model/thinking/mode/compact 一律 409，help/status/rename/skills 可用。
+- Help 无参、空白归一、拒绝非空参数与附件；idle/running 均无副作用；显示名回退与暂无介绍文本。
 - Help 的 useCases 远端 → 保存 → 重载 → 重启往返不丢失；旧缓存显式刷新、刷新失败保留旧值、单次完整快照与并发发布一致性。
 - Name Unicode/UTF-8 字节边界、并发、幂等、重启和 GET Session。
-- 仅名称的 Session POST 不携带条件或幂等请求令牌；并发不同字段互不覆盖，同字段后成功提交生效；running 可改名且不返回 SESSION_BUSY；与 `/name` 运行同一组 Unicode/字节边界反例。
-- Mode 查询、plan/build 切换与同值幂等；非法枚举、附件拒绝、计划能力缺失；running/审核等待（含同值）拒绝；并发消息接受、模式事件与配置事务回滚；网络不确定不重放，不代替计划批准。
+- 仅名称的 Session POST 不携带条件或幂等请求令牌；并发不同字段互不覆盖，同字段后成功提交生效；running 可改名且不返回 SESSION_BUSY；与 `/rename` 运行同一组 Unicode/字节边界反例。
+- Mode 空参数 400、plan/build 切换与同值幂等；非法枚举、附件拒绝、计划能力缺失；running/审核等待（含同值）拒绝；并发消息接受、模式事件与配置事务回滚；网络不确定不重放，不代替计划批准。
 - Model/Thinking 忙状态、能力、自动关闭、事件序号和 统一 POST 锁内字段合并回归。
 - Compact 空历史、真实压缩、容量、锁竞争、超时、断线和清理；拒绝排队续跑，中断绑定衔接另评审。
 - 无通用命令或 Name 历史；POST Events SSE 完全不变。
-- openGauss 跨进程：创建 → Name/Model/Thinking → Help/Status/Skills → Compact → GET Session/Events。
+- openGauss 跨进程：创建 → Rename/Model/Thinking → Help/Status/Skills → Compact → GET Session/Events。
 
 `command_response_contract.py` 和 `test_command_response_contract.py` 由 `validate-chat-api.py --full` 统一执行，
-直接比较各操作的资源形状，不另存 Session 字段清单。门禁同时检查仅名称的 Session POST
+检查每个 Builtin 成功只返回文本、Session POST 的资源形状，不另存 Session 字段清单。门禁同时检查仅名称的 Session POST
 的无条件请求、错误码、running 准入、同值结果和命名边界，并覆盖 JSON/HTML 字节同步、
 PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查原尺寸与文档缩放视图。
 以上文档门禁不单独证明 Java 行为。Help 的缓存往返、Agent 级互斥、查询、响应投影和端到端路由结论已由
@@ -311,6 +310,8 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.19.0 | 2026-10-21 | 清单冷缓存时 Mate 不可达改为 503 AGENT_SERVICE_UNAVAILABLE；文本中的模型改为 `model:` 链接，由 Mate 替换为显示名（均待实现）。 |
+| 2.18.0 | 2026-10-20 | 按 2026-10-20 对齐结论：`name` 改名 `rename`，rename/model/thinking/mode 参数必填，参数统一检查，running 时 model/thinking/mode 一律 409，成功只返回 Markdown 文本（待实现）。 |
 | 2.17.0 | 2026-10-18 | 独立的 GET Models 接口已删除：`/model` 空参查询仍返回 currentModelId、models，取值与 ListSessionCommandValues 的 model 相同。 |
 | 2.16.0 | 2026-10-16 | Help 描述符不返回 argumentType，表示不带参数；原 hints 已移除。 |
 | 2.15.0 | 2026-10-16 | 命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands`，不再按 Session 状态过滤；缓存缺失时准备 Agent，错误改为 404/422；同步全局类图锚点与证据链接。 |

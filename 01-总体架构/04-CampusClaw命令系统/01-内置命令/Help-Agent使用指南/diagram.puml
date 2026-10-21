@@ -2,7 +2,6 @@
 top to bottom direction
 skinparam backgroundColor white
 skinparam shadowing false
-skinparam defaultFontName SansSerif
 skinparam defaultFontSize 13
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
@@ -10,66 +9,63 @@ skinparam nodesep 20
 skinparam ranksep 35
 skinparam linetype ortho
 hide empty members
-title Help Metadata Detail - Supplement to the Global Command Diagram
-' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/HelpCommandContributor.java definition.
-' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/readonly/AgentHelpQueryService.java query and visibleText.
-' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached, withAgentLock, toIdentity, toRuntime and AgentIdentity.
-' Source evidence: pi-mono-java@53eff85c7f41de23eb434e027782f5085a8b8e45 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandResponseAssembler.java help.
-' Historical evidence: pi-mono-java@d1cdb708e3e124cae009b10b985f5832b6dbde01 had the same chain with the field named userCases.
-' Observed behavior: Help reads one locked complete snapshot, projects authored metadata and returns an immutable three-field response.
-' Design reason: keep cache and response detail out of the global diagram without hiding the implemented responsibility chain.
+title Help 元数据下钻（全局命令类图的补充）
+' 源码证据：pi-mono-java@628dca25a694d9d056b15f012e1223d68091ab66 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/HelpCommandContributor.java definition。
+' 源码证据：同提交 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/readonly/AgentHelpQueryService.java query、visibleText。
+' 源码证据：同提交 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java prepareCached、withAgentLock、toIdentity、toRuntime 与 AgentIdentity。
+' 源码证据：同提交 modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandResponseAssembler.java help。
+' 历史证据：pi-mono-java@d1cdb708e3e124cae009b10b985f5832b6dbde01 已有同一链路，字段当时误名为 userCases。
+' 已观察行为：Help 在 Agent 锁内读取一份完整快照，投影作者元数据，返回三字段的只读 VO。
+' 设计原因：缓存与结果细节不进入全局图；成功结果改为由三项元数据生成的 Markdown 文本。
+' 待实现：CommandResponseAssembler 生成文本，删除 HelpCommandResultDTO 对外投影用的 AgentHelpResponseVO。
 
-class CommandExecutionContext <<request snapshot>>
-class HelpCommandContributor <<singleton>> {
+class CommandExecutionContext <<请求快照>>
+class HelpCommandContributor <<单例>> {
   +definition(): BuiltinCommandDefinition
 }
-class AgentHelpQueryService <<application service>> #E3F2E1 {
-  +query(session, arguments): HelpCommandResultDTO
+class AgentHelpQueryService <<应用服务>> #E3F2E1 {
+  +query(session): Agent 介绍
 }
-class AgentRuntimeManager <<singleton>> {
+class AgentRuntimeManager <<单例>> {
   +prepareCached(agentId)
 }
-class PreparedAgentRuntime <<complete snapshot>> #E3F2E1
-class "AgentIdentity / agent.json" as AgentIdentity <<stored metadata>> {
+class PreparedAgentRuntime <<完整快照>> #E3F2E1
+class "AgentIdentity / agent.json" as AgentIdentity <<保存的元数据>> {
   name / displayName
   description[]
   useCases[]
 }
-class "HelpCommandResultDTO" as HelpData <<immutable request data>> #E3F2E1
-class CommandResponseAssembler <<singleton>>
-class AgentHelpResponseVO <<immutable response>> #E3F2E1 {
-  displayName
-  description[]
-  useCases[]
+class "Agent 介绍（内部结果）" as HelpData <<请求内只读>> #E3F2E1
+class CommandResponseAssembler <<单例>>
+class "Markdown 文本结果" as HelpText <<待实现>> #E3F2E1 {
+  text
 }
 
-HelpCommandContributor ..> CommandExecutionContext : handler lambda reads Session
-HelpCommandContributor --> AgentHelpQueryService : delegates query
-AgentHelpQueryService --> AgentRuntimeManager : one cached read
-AgentRuntimeManager --> PreparedAgentRuntime : complete snapshot
-AgentRuntimeManager --> AgentIdentity : publish / reload
-AgentHelpQueryService ..> HelpData : whitelist projection
-CommandResponseAssembler ..> HelpData : result DTO
-CommandResponseAssembler ..> AgentHelpResponseVO : business VO
+HelpCommandContributor ..> CommandExecutionContext : 读取会话绑定
+HelpCommandContributor --> AgentHelpQueryService : 委派查询
+AgentHelpQueryService --> AgentRuntimeManager : 读取一次缓存
+AgentRuntimeManager --> PreparedAgentRuntime : 完整快照
+AgentRuntimeManager --> AgentIdentity : 发布 / 重载
+AgentHelpQueryService ..> HelpData : 白名单投影
+CommandResponseAssembler ..> HelpData : 内部结果
+CommandResponseAssembler ..> HelpText : 按请求语言生成
 
 note bottom of AgentIdentity
-Save and reload useCases in agent.json.
-Refresh metadata explicitly outside Help.
-Read and publication share the Agent lock.
+useCases 随 agent.json 保存与重载。
+元数据在 Help 之外显式刷新。
+读取与发布共用 Agent 级锁。
 end note
 
-note bottom of AgentHelpResponseVO
-Exactly three business fields; absent text is [].
-No command discriminator or internal receipt.
-No prompt, bindings, or runtime objects.
+note bottom of HelpText
+显示名标题、介绍与使用场景列表。
+介绍未填写时说明暂无介绍。
+不含 Prompt、绑定信息或运行时对象。
 end note
 
 legend bottom left
-This is a Help-only detail view, not the global Command structure.
-Help uses authored Agent metadata, not the command catalog.
-No model/tool call, implicit refresh, Session Entry or execution lease.
-CommandExecutionContext retains the common request catalog.
-DTOs belong to runtimeapi.dto.command; VOs to runtimeapi.vo.
-All shown Help classes and relations are implemented at the source baseline.
+这是 Help 的下钻图，不是全局命令结构。
+Help 使用作者维护的 Agent 元数据，不使用命令清单。
+不调用模型或工具，不隐式刷新，不写会话 Entry，不占执行容量。
+文本结果待实现；其余类与关系在源码基线中已存在。
 endlegend
 @enduml

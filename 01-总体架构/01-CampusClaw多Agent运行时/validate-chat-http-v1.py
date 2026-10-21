@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from render_chat_http_v1 import build_operation_html, load_contract, contract_text
-from command_catalog_contract import validate_catalog_examples
-from command_response_contract import validate_response_reuse
+from command_catalog_contract import validate_catalog_examples, validate_command_values, validate_descriptor
+from command_response_contract import EXECUTE_ERROR_CODES, validate_response_reuse
 from help_review_projection import load_help_model
 from request_header_contract import validate_request_headers, validate_no_client_tokens
 
@@ -41,13 +41,13 @@ def topic_diagram(design_path: Path) -> Path:
 
 
 HELP_ROOT = REPOSITORY_ROOT / "01-总体架构/04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南"
-HELP_RESULT_FIELDS = {"displayName", "description", "useCases"}
+HELP_RESULT_FIELDS = {"text"}
 EXPECTED_OPERATION_COUNT = 7
 EXPECTED_OPERATIONS = {
     ("POST", "/agents/{agentId}/sessions"),
     ("GET", "/sessions/{sessionId}"),
     ("DELETE", "/sessions/{sessionId}"),
-    ("GET", "/sessions/{sessionId}/commands/{commandName}/values"),
+    ("GET", "/agents/{agentId}/commands/{commandName}/values"),
     ("POST", "/sessions/{sessionId}"),
     ("GET", "/agents/{agentId}/commands"),
     ("POST", "/sessions/{sessionId}/command"),
@@ -353,20 +353,14 @@ def validate_response_contract(
             validate_session_update(operation, codes)
     elif key == ("DELETE", "/sessions/{sessionId}"):
         require(("409", "SESSION_BUSY") in codes, "Delete Session must reject active execution")
-    elif key == ("GET", "/sessions/{sessionId}/commands/{commandName}/values"):
-        from command_catalog_contract import validate_command_values
-        execute = json.loads((CONTRACT_ROOT / "操作/13-execute-session-command.json").read_text(encoding="utf-8"))
-        model_query = next(item for item in execute["operation"]["responses"] if item.get("id") == "200-model-query")
-        validate_command_values(operation, next(iter(model_query["bodies"].values()))["result"])
+    elif key == ("GET", "/agents/{agentId}/commands/{commandName}/values"):
+        create = json.loads((CONTRACT_ROOT / "操作/01-create-session.json").read_text(encoding="utf-8"))
+        created = next(item for item in create["operation"]["responses"] if item["status"] == "201")
+        validate_command_values(operation, next(iter(created["bodies"].values()))["result"])
     elif key == ("GET", "/agents/{agentId}/commands"):
         require("Builtin 与 Skill Command 由用户统一负责设计、实现和集成" in SLASH_DESIGN_PATHS[0].read_text(encoding="utf-8"),
                 "Command catalog must reflect unified Builtin and Skill ownership")
         validate_catalog_examples(operation)
-        for status, code in (("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "AGENT_NOT_FOUND"),
-                             ("404", "SESSION_NOT_FOUND"), ("422", "AGENT_NOT_AVAILABLE")):
-            require((status, code) in codes, f"Agent command catalog is missing {status} {code}")
-        from command_catalog_contract import accepts_optional_session
-        require(accepts_optional_session(operation), "Agent command catalog must take sessionId as an optional query")
         require(("503", "AGENT_NOT_AVAILABLE") not in codes,
                 "Agent command catalog prepares the Agent instead of returning 503")
         for response in operation["responses"]:
@@ -384,21 +378,17 @@ def validate_response_contract(
         for phrase in ("262144", "fileIds"):
             require(phrase in operation["requestBody"]["description"],
                     f"POST Command request contract is incomplete: {phrase}")
+        for phrase in ("去掉首尾空白", "不接受参数", "参数必填", "不再提供无参查询"):
+            require(phrase in operation["requestBody"]["description"],
+                    f"POST Command argument rule is incomplete: {phrase}")
         codes = response_codes(operation)
-        for expected in {
-            ("400", "INVALID_COMMAND_REQUEST"), ("404", "COMMAND_NOT_FOUND"),
-            ("409", "SESSION_BUSY"), ("422", "AGENT_NOT_AVAILABLE"),
-            ("422", "MODEL_NOT_AVAILABLE"), ("422", "THINKING_NOT_SUPPORTED"),
-            ("422", "PLAN_MODE_UNAVAILABLE"),
-            ("500", "COMMAND_EXECUTION_FAILED"), ("500", "SESSION_NAME_UPDATE_FAILED"),
-            ("503", "MANAGER_UNAVAILABLE"), ("503", "RUNTIME_CAPACITY_EXCEEDED"),
-        }:
+        for expected in EXECUTE_ERROR_CODES:
             require(expected in codes, f"POST Command is missing {expected}")
         successes = [response for response in operation["responses"] if response["status"] == "200"]
         for response in successes:
             skill = response["id"] == "200-skill-message"
             require(response["headers"].get("Content-Type") == ("text/event-stream" if skill else "application/json"),
-                    "Skill must use shared SSE; Builtin must retain JSON")
+                    "Skill must use shared SSE; Builtin must return text JSON")
             require(response["headers"].get("Cache-Control") == "no-store", "Missing no-store")
             require(("default" in response["bodies"]) == skill, "response body branch differs")
         require(any(r["id"] == "200-skill-message" for r in successes), "Skill SSE example missing")
@@ -441,7 +431,7 @@ def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str
     }:
         require(expected in codes, f"Session POST is missing {expected}")
     serialized = json.dumps(operation, ensure_ascii=False)
-    for phrase in ("UTF-8", "80", "idle/running", "/name", "名称不写入 Session Entry",
+    for phrase in ("UTF-8", "80", "idle/running", "/rename", "名称不写入 Session Entry",
                    "整笔", "显式 null", "重复", "目标模型", "不启动", "未提交",
                    "最新记录", "后一次成功提交", "不自动重放"):
         require(phrase in serialized, f"Session update contract is incomplete: {phrase}")
@@ -461,11 +451,10 @@ def validate_session_update(operation: dict[str, Any], codes: set[tuple[str, str
 
 
 def validate_help_descriptor(descriptor: dict[str, Any]) -> None:
-    from command_catalog_contract import validate_descriptor
     validate_descriptor(descriptor)
     require(descriptor["name"] == "help" and descriptor["type"] == "builtin"
             and descriptor["description"] == "介绍当前智能体的用途和使用场景"
-            and "argumentType" not in descriptor,
+            and "argumentType" not in descriptor and "argumentRequired" not in descriptor,
             "Help descriptor must advertise only the no-argument Agent guide")
 
 
@@ -474,13 +463,13 @@ def validate_help_body(body: dict[str, Any]) -> None:
             and body["resMsg"] == "success", "Help success ResultBean differs")
     result = body["result"]
     require(isinstance(result, dict) and set(result) == HELP_RESULT_FIELDS,
-            "Help must expose exactly three business fields, never commands or internal metadata")
-    require(isinstance(result["displayName"], str) and bool(result["displayName"].strip()),
-            "Help displayName must be a non-blank Agent name")
-    for field in ("description", "useCases"):
-        require(isinstance(result[field], list), f"Help {field} must be a non-null array")
-        require(all(isinstance(item, str) and bool(item.strip()) and item == item.strip()
-                    for item in result[field]), f"Help {field} items must be normalized non-blank strings")
+            "Help must return only its Markdown text, never structured fields, commands or internal metadata")
+    text = result["text"]
+    require(isinstance(text, str) and text == text.strip() and bool(text.strip()),
+            "Help text must be a non-empty, trimmed Markdown string")
+    heading = text.split("\n", 1)[0]
+    require(heading.startswith("## ") and bool(heading[3:].strip()),
+            "Help text must start with the Agent display name as a Markdown heading")
 
 
 def help_successes(operation: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -495,14 +484,14 @@ def validate_help_operation(operation: dict[str, Any]) -> None:
     for response in successes.values():
         for body in response["bodies"].values():
             validate_help_body(body)
-    empty = successes["200-help-empty"]["bodies"]["zh-CN"]["result"]
-    require(empty["description"] == [] and empty["useCases"] == [], "Help empty response differs")
-    populated = successes["200-help"]["bodies"]["zh-CN"]["result"]
-    require(bool(populated["description"]) and bool(populated["useCases"]), "Missing populated Help example")
+    empty = successes["200-help-empty"]["bodies"]["zh-CN"]["result"]["text"]
+    require("暂无介绍" in empty and "\n- " not in empty, "Help empty response must say there is no introduction")
+    populated = successes["200-help"]["bodies"]["zh-CN"]["result"]["text"]
+    require("\n- " in populated and "暂无介绍" not in populated, "Missing populated Help example with use cases")
     examples = operation["requestBody"].get("examples", [])
     require(any(example.get("value") == {"name": "help"} for example in examples),
             "POST Command must show the no-argument Help request")
-    for phrase in ("Help 只接受空参数", "缺省/null/空白", "非空参数", "INVALID_COMMAND_REQUEST"):
+    for phrase in ("help、status、compact、skills 不接受参数", "INVALID_COMMAND_REQUEST"):
         require(phrase in operation["requestBody"]["description"], f"Missing Help request rule: {phrase}")
     require(("422", "AGENT_NOT_AVAILABLE") in response_codes(operation), "Missing Help cache failure")
 
@@ -561,7 +550,7 @@ def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
                     "Help visible Header values or descriptions differ from Runtime")
     for placeholder in ("<JWT>", "<APPKEY>", "<ACCESS_TOKEN>"):
         require(placeholder not in visible, "Help visible HTML still contains obsolete Header placeholders")
-    for phrase in ("作用", "name", "help", "description", "useCases", "AGENT_NOT_AVAILABLE", "已确认"):
+    for phrase in ("作用", "name", "help", "text", "暂无介绍", "AGENT_NOT_AVAILABLE", "已确认"):
         require(phrase in visible, f"Help no-script surface is missing {phrase}")
     guide = (HELP_ROOT / "README.md").read_text(encoding="utf-8")
     for phrase in ("显式刷新", "toIdentity", "toRuntime", "进程重启", "schemaVersion", "Agent 级锁"):

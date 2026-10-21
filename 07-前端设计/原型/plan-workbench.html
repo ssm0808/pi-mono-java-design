@@ -25,7 +25,7 @@
 </head>
 <body>
 <details class="demo-panel" open><summary>原型场景与模拟事件 <span class="muted">· 设计评审</span></summary><div class="demo" aria-label="设计演示控制，不属于产品">
- <strong>交互原型 · 1.3.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">Build 空闲</option><option value="planIdle">Plan 空闲</option><option value="research">调研中</option><option value="question">Plan 提问</option><option value="buildQuestion">Build 提问</option><option value="clarifying">无工具时普通澄清</option><option value="slash">Slash 命令</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
+ <strong>交互原型 · 1.4.0</strong><select id="scenario" aria-label="演示场景"><option value="review">待审核方案</option><option value="idle">Build 空闲</option><option value="planIdle">Plan 空闲</option><option value="research">调研中</option><option value="question">Plan 提问</option><option value="buildQuestion">Build 提问</option><option value="clarifying">无工具时普通澄清</option><option value="slash">Slash 命令</option><option value="executing">实施进度</option><option value="recovering">恢复审核</option><option value="stopped">已停止</option></select>
  <button id="receipt" class="secondary">模拟服务端回执</button><button id="advance">下一步事件</button><button id="disconnect">断开连接</button><button id="other-client">其他端已处理</button><button id="reject-mode">模式更新失败</button><span class="divider"></span><a href="../技术设计/plan-interaction.md">设计说明</a><span class="muted">本地模拟，无网络或工具执行</span>
 </div></details>
 <div class="app" id="app">
@@ -331,46 +331,52 @@
  $('question-form').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.isComposing||e.repeat||e.keyCode===229))e.preventDefault();});
  $('question-card').addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!composing){e.preventDefault();$('question-card').open=false;$('question-card').querySelector('summary').focus();}});
  // Separate local command buffers. Server fixtures own availability, never mode captions.
- // argumentType 决定参数输入方式：text 用文本框，options 只能从可选值中单选，缺省表示不接收参数。
+ // argumentType 决定参数输入方式：text 用文本框，options 只能从可选值中单选，缺省表示不接收参数；argumentRequired 为 true 时参数为空不能执行。
  const catalogIdle=[
-  {name:'help',type:'builtin',description:'了解助手的用途与使用场景'}, {name:'status',type:'builtin',description:'查看当前会话状态'},
-  {name:'name',type:'builtin',description:'查看或设置会话名称',argumentType:'text'}, {name:'model',type:'builtin',description:'查看或切换模型',argumentType:'options'},
-  {name:'thinking',type:'builtin',description:'查看或切换思考模式',argumentType:'options'}, {name:'mode',type:'builtin',description:'查看或切换 plan/build 工作模式',argumentType:'options'}, {name:'compact',type:'builtin',description:'压缩当前会话上下文'},
-  {name:'skills',type:'builtin',description:'查看可用技能'}, {name:'skill:inspection-plan',type:'skill',description:'整理园区巡检计划',argumentType:'text'}
+  {name:'help',type:'builtin',description:'介绍当前智能体的用途和使用场景'}, {name:'status',type:'builtin',description:'查看当前会话状态'},
+  {name:'rename',type:'builtin',description:'修改会话名称',argumentType:'text',argumentRequired:true}, {name:'model',type:'builtin',description:'切换模型',argumentType:'options',argumentRequired:true},
+  {name:'thinking',type:'builtin',description:'开启或关闭深度思考',argumentType:'options',argumentRequired:true}, {name:'mode',type:'builtin',description:'切换计划/实施模式',argumentType:'options',argumentRequired:true}, {name:'compact',type:'builtin',description:'压缩当前会话上下文'},
+  {name:'skills',type:'builtin',description:'列出当前智能体可用的技能'}, {name:'skill:inspection-plan',type:'skill',description:'整理园区巡检计划',argumentType:'text',argumentRequired:false}
  ];
- // 选项型命令的可选值，对应 GET /commands/{name}/values 的 {currentValue, values}；mode 的当前值取会话模式
- const commandValues={model:{currentValue:'模型 A',values:['模型 A','模型 B']},thinking:{currentValue:'on',values:['on','off']}};
+ // 选项型命令的可选值，对应 GET /agents/{agentId}/commands/{name}/values 的 {currentValue, values}；mode 的当前值取会话模式
+ const commandValues={model:{currentValue:'campus-standard',values:['campus-standard','campus-long-context']},thinking:{currentValue:'on',values:['on','off']}};
+ // 显示名由前端文案决定；没有文案的值原样显示（model 显示名来源待确认，直接显示 modelId）
+ const valueLabels={thinking:{on:'开启',off:'关闭'},mode:{plan:'计划',build:'实施'}};
+ function valueLabel(name,value){return valueLabels[name]?.[value]??value;}
  function valuesOf(name){return name==='mode'?{currentValue:mode,values:['plan','build']}:commandValues[name];}
- function catalog(){return ready()?catalogIdle:catalogIdle.filter(c=>c.type!=='skill'&&c.name!=='compact');}
+ // 清单不随会话状态变化；非空闲时只有 help、status、rename、skills 可执行，其余置灰（服务端返回 409 SESSION_BUSY）
+ function catalog(){return catalogIdle;}
+ function busy(c){return !!c&&!ready()&&!['help','status','rename','skills'].includes(c.name);}
  function isOptions(c){return c?.argumentType==='options';}
- // 参数能否执行：无参数命令不能带参数；选项型参数须是可选值之一，会话非空闲时只能查询（参数为空）
- function argumentsValid(c,args){return !args||(isOptions(c)?ready()&&valuesOf(c.name).values.includes(args):!!c?.argumentType);}
- // 默认勾选当前值；手输值不在可选值中时同样回到当前值。当前值不可选或会话非空闲时不勾选，执行即查询
- function defaultValue(c,args){const {currentValue,values}=valuesOf(c.name);return !ready()?'':values.includes(args)?args:values.includes(currentValue)?currentValue:'';}
- function argumentHint(c){return isOptions(c)?(ready()?'用上下键选择，回车、数字键或点击即执行':'当前只能查看当前值，回车执行查询'):c?.argumentType==='text'?(c.type==='skill'?'补充要求（可选）':'输入新值，留空则查看当前值'):'';}
+ // 参数能否执行：无参数命令不能带参数；选项型参数须是可选值之一
+ function argumentsValid(c,args){return !args||(isOptions(c)?valuesOf(c.name).values.includes(args):!!c?.argumentType);}
+ function missingRequired(c,args){return !!c?.argumentRequired&&!args.trim();}
+ // 默认勾选当前值；手输值不在可选值中时同样回到当前值。当前值不可选时不勾选，此时回车不执行
+ function defaultValue(c,args){const {currentValue,values}=valuesOf(c.name);return values.includes(args)?args:values.includes(currentValue)?currentValue:'';}
+ function argumentHint(c){return isOptions(c)?(busy(c)?'会话非空闲时不可执行，草稿已保留':'用上下键选择，回车、数字键或点击即执行'):c?.argumentType==='text'?(c.argumentRequired?'输入新名称':'补充要求（可选）'):'';}
  // 选项型命令选中后，可选值在命令清单的位置弹出（参考 Codex 的模型选择），清单打开时让位
  function valuesOpen(){return cmd.active&&isOptions(cmd.selected)&&!cmd.palette;}
  // 选项型命令聚焦可选值列表，用 aria-activedescendant 指向高亮项；可选值不可点时焦点落在执行按钮
- function focusCommand(c){if(isOptions(c)&&ready())$('command-values').focus();else(c?.argumentType==='text'?$('draft'):ready()?$('send'):$('command-run')).focus();}
- function chooseValue(value){if(!ready()||pending||!valuesOf(cmd.selected.name).values.includes(value))return;cmd.args=value;renderCommands();focusCommand(cmd.selected);}
- // 点选可选值即执行，与回车一致；会话非空闲时只能查询，点选无效
- function runValue(value){if(!ready()||pending)return;chooseValue(value);executeCommand();}
+ function focusCommand(c){if(isOptions(c)&&!busy(c))$('command-values').focus();else(c?.argumentType==='text'?$('draft'):ready()?$('send'):$('command-run')).focus();}
+ function chooseValue(value){if(busy(cmd.selected)||pending||!valuesOf(cmd.selected.name).values.includes(value))return;cmd.args=value;renderCommands();focusCommand(cmd.selected);}
+ // 点选可选值即执行，与回车一致；会话非空闲时不可执行，点选无效
+ function runValue(value){if(busy(cmd.selected)||pending)return;chooseValue(value);executeCommand();}
  // 上下键与 Home/End 在可选值间移动高亮，首尾循环
  function moveValue(key){const {values}=valuesOf(cmd.selected.name),i=values.indexOf(cmd.args),last=values.length-1;if(!values.length)return;
   chooseValue(values[key==='Home'?0:key==='End'?last:key==='ArrowDown'?(i<0||i===last?0:i+1):(i<=0?last:i-1)]);}
  function renderValues(c){const list=$('command-values');$('values-palette').hidden=!valuesOpen();list.replaceChildren();list.removeAttribute('aria-activedescendant');if(!isOptions(c))return;
-  const {currentValue,values}=valuesOf(c.name);const keys=document.createElement('kbd');keys.setAttribute('aria-hidden','true');keys.textContent=ready()?'↑↓ · 1–9 · 回车':'回车查询';
+  const {currentValue,values}=valuesOf(c.name);const keys=document.createElement('kbd');keys.setAttribute('aria-hidden','true');keys.textContent=busy(c)?'不可执行':'↑↓ · 1–9 · 回车';
   $('values-title').replaceChildren(`${c.name} 的可选值`,keys);list.setAttribute('aria-label',`${c.name} 的可选值`);
-  // 高亮项就是待提交的参数；当前值不可选或会话非空闲时没有高亮项，执行即查询
-  values.forEach((value,i)=>{const option=document.createElement('div'),active=value===cmd.args,number=document.createElement('span'),name=document.createElement('strong'),mark=document.createElement('span');
-   option.id=`workbench-value-${i}`;option.className='command-option';option.dataset.value=value;option.setAttribute('role','option');option.setAttribute('aria-selected',String(active));if(!ready()||pending)option.setAttribute('aria-disabled','true');
-   number.className='value-index';number.setAttribute('aria-hidden','true');number.textContent=String(i+1);name.textContent=value;mark.textContent=value===currentValue?'当前':'';option.append(number,name,mark);
+  // 高亮项就是待提交的参数；当前值不可选时没有高亮项；会话非空闲时保留草稿但不高亮
+  values.forEach((value,i)=>{const option=document.createElement('div'),active=!busy(c)&&value===cmd.args,number=document.createElement('span'),name=document.createElement('strong'),mark=document.createElement('span');
+   option.id=`workbench-value-${i}`;option.className='command-option';option.dataset.value=value;option.setAttribute('role','option');option.setAttribute('aria-selected',String(active));if(busy(c)||pending)option.setAttribute('aria-disabled','true');
+   number.className='value-index';number.setAttribute('aria-hidden','true');number.textContent=String(i+1);name.textContent=valueLabel(c.name,value);mark.textContent=value===currentValue?'当前':'';option.append(number,name,mark);
    if(active)list.setAttribute('aria-activedescendant',option.id);option.onmousedown=e=>e.preventDefault();option.onclick=()=>runValue(value);list.append(option);});}
  function commandMatches(){const name=/^\/([^\s]*)/u.exec(cmd.query)?.[1];return name===undefined?[]:catalog().filter(c=>c.name.startsWith(name));}
- function commandValid(){const current=catalog().find(c=>c.name===cmd.selected?.name);return !!current&&argumentsValid(current,cmd.args)&&current.type!=='skill';}
+ function commandValid(){const current=catalog().find(c=>c.name===cmd.selected?.name);return !!current&&!busy(current)&&argumentsValid(current,cmd.args)&&!missingRequired(current,cmd.args)&&current.type!=='skill';}
  function commandAllowed(){return (ready()||canStop())&&!pending;}
  function clearCommand(focus=true){if(cmd.active)$('draft').value=cmd.message;Object.assign(cmd,{active:false,palette:false,selected:null,args:'',query:'/',index:0,replacement:null});if(focus)$('draft').focus();}
- function chooseCommand(c){if(!c||composing)return;const args=cmd.query.match(/^\/[^\s]+\s+([\s\S]*)$/u)?.[1]||'';
+ function chooseCommand(c){if(!c||composing||busy(c))return;const args=cmd.query.match(/^\/[^\s]+\s+([\s\S]*)$/u)?.[1]||'';
   if(args&&!c.argumentType){$('command-error').textContent='此命令不接受参数';$('command-error').hidden=false;return;}
   cmd.args=cmd.replacement?.selected.name===c.name&&!args?cmd.replacement.args:args;if(isOptions(c))cmd.args=defaultValue(c,cmd.args);
   cmd.selected=c;cmd.replacement=null;cmd.palette=false;$('draft').value=cmd.args;render();focusCommand(c);
@@ -388,11 +394,10 @@
   else if(!popupOpen&&dockFolds){[$('progress').open,$('command-result').open]=dockFolds;dockFolds=null;}
   const options=commandMatches();cmd.index=Math.max(0,Math.min(cmd.index,options.length-1));
   $('command-palette').hidden=!cmd.palette;$('command-chip').hidden=!cmd.selected;$('command-name').textContent=cmd.selected?.name||'';
-  $('command-list').replaceChildren();options.forEach((c,i)=>{const option=document.createElement('div');option.id=`workbench-command-${i}`;option.className='command-option';option.dataset.name=c.name;option.setAttribute('role','option');option.setAttribute('aria-selected',String(i===cmd.index));const name=document.createElement('strong'),desc=document.createElement('span');name.textContent=c.name;desc.textContent=c.description;option.append(name,desc);option.onmousedown=e=>e.preventDefault();option.onclick=()=>chooseCommand(c);$('command-list').append(option);});
+  $('command-list').replaceChildren();options.forEach((c,i)=>{const option=document.createElement('div');option.id=`workbench-command-${i}`;option.className='command-option';option.dataset.name=c.name;option.setAttribute('role','option');option.setAttribute('aria-selected',String(i===cmd.index));if(busy(c))option.setAttribute('aria-disabled','true');const name=document.createElement('strong'),desc=document.createElement('span');name.textContent=c.name;desc.textContent=busy(c)?`${c.description} · 当前不可用`:c.description;option.append(name,desc);option.onmousedown=e=>e.preventDefault();option.onclick=()=>chooseCommand(c);$('command-list').append(option);});
   $('command-empty').hidden=!!options.length;
   const descriptor=catalog().find(c=>c.name===cmd.selected?.name);
-  // 会话非空闲时选项型草稿回到查询；选项型命令只显示可选值，无参数命令仅在误带参数时显示文本框
-  if(!ready()&&isOptions(cmd.selected))cmd.args='';
+  // 选项型命令只显示可选值，无参数命令仅在误带参数时显示文本框
   $('draft').hidden=!!cmd.selected&&(isOptions(cmd.selected)||(!cmd.selected.argumentType&&!cmd.args));
   renderValues(cmd.selected);$('command-hint').textContent=argumentHint(cmd.selected);
   $('draft').placeholder=cmd.selected?argumentHint(descriptor)||'请输入请求内容':cmd.active?'输入名称筛选命令':'补充目标、约束或期望结果，或输入 / 选择命令…';
@@ -400,10 +405,10 @@
   for(const key of ['role','aria-controls','aria-expanded','aria-autocomplete','aria-activedescendant'])$('draft').removeAttribute(key);
   if(cmd.active&&!cmd.selected){$('draft').setAttribute('role','combobox');$('draft').setAttribute('aria-autocomplete','list');$('draft').setAttribute('aria-controls','command-list');$('draft').setAttribute('aria-expanded',String(cmd.palette));if(cmd.palette&&options.length)$('draft').setAttribute('aria-activedescendant',`workbench-command-${cmd.index}`);}
   $('command-run').hidden=ready()||!cmd.selected;$('command-run').disabled=!commandAllowed()||!commandValid()||cmd.palette;
-  let error=cmd.selected&&!descriptor?'当前状态下此命令不可用，草稿已保留。':cmd.selected&&!argumentsValid(descriptor,cmd.args)?'当前只可查询。请先清除参数，再明确执行。':cmd.selected?.type==='skill'?'公共 Skill 执行尚未接入。':'';
+  let error=cmd.selected&&!descriptor?'当前状态下此命令不可用，草稿已保留。':cmd.selected&&busy(descriptor)?'会话非空闲时不可执行，草稿已保留。':cmd.selected&&!argumentsValid(descriptor,cmd.args)?'当前调用不可执行，草稿已保留；请清除参数或重新选择命令。':cmd.selected?.type==='skill'?'公共 Skill 执行尚未接入。':'';
   if(cmd.active&&Array.from(cmd.args).length>2048)error='参数过长，请缩短后再提交。';
   $('command-error').textContent=error;$('command-error').hidden=!error;
-  if(cmd.active&&ready()){$('send').disabled=!cmd.selected||cmd.palette||!!error||!commandAllowed();$('send').setAttribute('aria-label',cmd.selected?`运行 ${cmd.selected.name}`:'选择命令后运行');}
+  if(cmd.active&&ready()){$('send').disabled=!cmd.selected||cmd.palette||!!error||!commandAllowed()||missingRequired(descriptor,cmd.args);$('send').setAttribute('aria-label',cmd.selected?`运行 ${cmd.selected.name}`:'选择命令后运行');}
   if(cmd.active){$('input-error').hidden=true;$('input-help').textContent='选择命令后明确执行 · Esc 收起，再按一次退出';}
   $('command-run').disabled ||= !!error;
   $('command-name').disabled=$('command-remove').disabled=phase==='commandPending';
@@ -413,10 +418,10 @@
   write('command',{name:cmd.selected.name,args:cmd.args,from:phase});phase='commandPending';render();
  }
  function showCommandResult(invocation){
-  // 回执后才更新当前值；勾选本身只是草稿
-  if(invocation.name==='mode'&&invocation.args)mode=invocation.args;else if(commandValues[invocation.name]&&invocation.args)commandValues[invocation.name].currentValue=invocation.args;
-  const texts={help:'园区运维助手\n分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${mode==='plan'?'Plan':'Build'}`,name:`会话名称：${invocation.args||$('title').textContent}`,model:`当前模型：${commandValues.model.currentValue}`,thinking:`深度思考：${commandValues.thinking.currentValue==='on'?'开启':'关闭'}`,mode:`当前工作模式：${mode}`,compact:'本次无需压缩上下文。',skills:'inspection-plan · 整理园区巡检计划'};
-  if(invocation.name==='name'&&invocation.args)$('title').textContent=invocation.args;
+  // 回执只带 Markdown 文本；会话状态在回执后由读取 Session 刷新，不从文本解析。勾选本身只是草稿
+  if(invocation.name==='mode')mode=invocation.args;else if(commandValues[invocation.name])commandValues[invocation.name].currentValue=invocation.args;
+  const texts={help:'园区运维助手：分析告警、组织巡检，协助形成处置方案。',status:`当前会话：${labels[phase]} · ${valueLabel('mode',mode)}模式`,rename:`会话名称已改为 ${invocation.args}。`,model:`已切换到 ${invocation.args}。`,thinking:invocation.args==='on'?'已开启深度思考。':'已关闭深度思考。',mode:`已切换到${valueLabel('mode',invocation.args)}模式。`,compact:'当前没有可压缩的内容。',skills:'inspection-plan：整理园区巡检计划'};
+  if(invocation.name==='rename')$('title').textContent=invocation.args;
   $('command-result').hidden=false;$('command-result').open=true;$('command-result-text').textContent=texts[invocation.name];
  }
  function commandKey(e){if(!cmd.active)return false;if(e.isComposing||composing||e.keyCode===229)return true;if(e.repeat&&e.key==='Enter'){e.preventDefault();return true;}
@@ -443,6 +448,6 @@
  const entry=new URLSearchParams(location.search).get('scene');if(['question','buildQuestion','slash','review'].includes(entry)){$('scenario').value=entry;reset(entry);}
 })();
 </script>
-<script src="preview.js?v=1.0.1"></script>
+<script src="preview.js?v=1.0.2"></script>
 </body>
 </html>

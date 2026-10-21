@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""Regression checks for source-derived Help and retired Mate Command artifacts."""
+"""Regression checks for the source-derived Help page and Runtime-only command tooling."""
 
 import copy
-import importlib.util
-import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,11 +9,7 @@ from help_review_projection import HELP_ERROR_IDS, project_help_model
 from render_chat_http_v1 import load_contract
 
 ROOT = Path(__file__).resolve().parent
-MATE_ROOT = ROOT.parents[1] / "02-服务与接口/06-mate-service聊天命令API"
-sys.path.insert(0, str(MATE_ROOT))
-SPEC = importlib.util.spec_from_file_location("mate_command_gate", MATE_ROOT / "validate-chat-command-v1.py")
-MATE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(MATE)
+RETIRED_MATE_TOPIC = "06-mate-service聊天命令API"
 
 
 class DocumentMaintenanceTest(unittest.TestCase):
@@ -32,7 +25,7 @@ class DocumentMaintenanceTest(unittest.TestCase):
         builtin["headers"][0]["description"] = "测试源说明"
         operation["parameters"][0]["description"] = "测试路径说明"
         operation["requestBody"]["description"] = "测试请求说明"
-        operation["responses"][0]["bodies"]["zh-CN"]["result"]["description"] = ["测试介绍"]
+        operation["responses"][0]["bodies"]["zh-CN"]["result"]["text"] = "## 测试助手\n\n测试介绍"
         projected = project_help_model(source)
         self.assertEqual(projected["api"]["version"], "test-version")
         self.assertEqual(projected["operation"]["parameters"], operation["parameters"])
@@ -71,35 +64,20 @@ class DocumentMaintenanceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             project_help_model(source)
 
-    def test_mate_retains_catalog_and_options_without_approving_public_boundary(self):
-        common, models = MATE.load_contract()
-        MATE.validate_contract(common, models)
-        MATE.validate_retirement()
-        self.assertEqual(len(models), 2)
-        extra = copy.deepcopy(models[0])
-        extra["operation"]["method"] = "POST"
-        with self.assertRaises(RuntimeError):
-            MATE.validate_contract(common, models + [extra])
-        common["api"]["visibility"] = "Public · 已确认"
-        with self.assertRaises(RuntimeError):
-            MATE.validate_contract(common, models)
+    def test_help_projection_is_text_only(self):
+        view = project_help_model(self.runtime)["operation"]
+        for response in view["responses"]:
+            if response["status"] == "200":
+                for body in response["bodies"].values():
+                    self.assertEqual(set(body["result"]), {"text"})
+        self.assertIn("Markdown", view["description"])
 
-    def test_retired_mate_files_cannot_return(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            operations = root / "接口契约/操作"
-            operations.mkdir(parents=True)
-            (operations / "01-list-chat-commands.json").touch()
-            (operations / "02-list-chat-command-options.json").touch()
-            MATE.validate_retirement(root)
-            for relative in ("接口契约/操作/02-execute-chat-command.json", "设计图/diagram.puml",
-                             "设计图/public_command_boundary.svg", "设计图/public_sse_projection.svg"):
-                retired = root / relative
-                retired.parent.mkdir(parents=True, exist_ok=True)
-                retired.touch()
-                with self.subTest(path=relative), self.assertRaises(RuntimeError):
-                    MATE.validate_retirement(root)
-                retired.unlink()
+    def test_runtime_tooling_does_not_depend_on_retired_mate_command_topic(self):
+        for path in sorted(ROOT.glob("*.py")) + sorted(ROOT.glob("*.cjs")):
+            if path.name == Path(__file__).name:
+                continue
+            with self.subTest(path=path.name):
+                self.assertNotIn(RETIRED_MATE_TOPIC, path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

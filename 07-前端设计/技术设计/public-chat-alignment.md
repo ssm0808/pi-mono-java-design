@@ -4,7 +4,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 版本 / 日期 | 1.11.0 / 2026-10-04 |
+| 版本 / 日期 | 1.12.0 / 2026-10-20 |
 | 设计仓基线 | `2ee2a3211da68ad87b0d9cab353e691b00bdaebd` |
 | 实现源码基线 | `pi-mono-java@dfb90cac4e233e09a0b8f047f7e9f4682f5ad238` 仅作历史迁移证据；当前 Runtime 前端见[实现状态](../source-evidence.md#current-implementation) |
 | 性质 | Mate 公共接入为 待实现；内部 Runtime 前端已有实现，公司认证及 Chat/Session 边界保持 |
@@ -166,8 +166,8 @@ Assistant `content` 保留 rawMarkdown 并使用现有安全渲染骨架；User/
 
 ## 7. 配置、命令及身份集成
 
-Composer 模型/思考/模式、Builtin model/name/thinking/status 与恢复读取共用 ConfigurationStore。
-成功响应的完整 Session 必须原子替换；model 空参只更新 Models，不覆盖 Session。
+Composer 模型/思考/模式、Builtin rename/model/thinking/mode 与恢复读取共用 ConfigurationStore。
+Builtin 命令成功只返回展示文本，随后读取的完整 Session 必须原子替换，不从文本解析配置（待实现）。
 Gateway 不发送 If-Match/Idempotency-Key，不要求 ETag，也不添加同用途的 body/query 令牌；后端锁内合并提交字段，同字段后成功提交生效。网络结果不确定时保留草稿并只读核对，不自动重发更新。
 相同配置不提示“已变更”；切模型可能同时关闭 thinking，以完整资源为准，不把旧开关值覆盖回来。
 模型不可用/集合为空时解释状态并禁用修改；已有名称不应由 modelId 字符串猜出供应商或能力。
@@ -189,7 +189,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 | F3 EventReducer / Timeline | 架构变化 + 安全加固；共享权威状态与纯文本边界 | 重复 completed、迟到 delta、空正文、工具缺结果、拒绝不等于整轮失败、纯文本 JSON/HTML/URL 不激活 |
 | F4 Confirmation / Stop | 产品约束 + 安全加固；控制动作必须绑定原目标 | allow 省略理由、deny 可选原因、双击、跨端过期、停止与确认竞争、回执不当终态、旧终态不释放新消息 |
 | F5 HistoryRecovery | 架构变化；恢复是读取，不是重执行 | 断线前后、无回执不确定、末页仍运行、空页/读取失败区分、实时尾部保留、游标失效、权限撤销清空 |
-| F6 Configuration / Slash | 产品约束；顶部和命令入口一致 | 完整资源原子更新、请求不携带条件或幂等令牌、无 ETag 依赖、结果未知只读对账、model 查询不覆盖 Session、Skill 不进入 Builtin 临时结果 |
+| F6 Configuration / Slash | 产品约束；顶部和命令入口一致 | 完整资源原子更新、请求不携带条件或幂等令牌、无 ETag 依赖、结果未知只读对账、命令文本不用于更新配置、Skill 不进入 Builtin 临时结果 |
 
 原型只模拟 fixture 状态，不发网络、不执行工具、不上传用户文件。回执和终态分别由评审控制触发，
 以便验证“已接受不等于已完成”。布局检查应覆盖 1440/1024/768/390，所有可交互控件至少 44px；
@@ -203,6 +203,7 @@ Builtin 仍临时展示；Skill 按内部 B13 已成为消息执行，但 Mate �
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.12.0 | 2026-10-20 | Builtin 命令结果只作展示，配置统一以随后读取的完整 Session 更新。 |
 | 1.11.0 | 2026-10-04 | 公共和内部配置适配取消条件令牌及 ETag，完整资源更新与只读对账保持。 |
 | 1.10.0 | 2026-09-22 | 增加 Redis 首帧快照接入、连接代次隔离与不可用降级的目标门禁。 |
 | 1.9.0 | 2026-09-17 | 公共和内部工具活动统一消费 displayName，并明确可选字段的接入规则。 |

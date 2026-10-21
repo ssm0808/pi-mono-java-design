@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.74.0 |
+| 文档版本 | 1.76.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新的 Header 移除核验见 §8.4，历史核验保留在 §8.1～§8.3 |
-| 更新日期 | 2026-10-17 |
+| 更新日期 | 2026-10-21 |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
@@ -37,6 +37,8 @@ Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、
 创建不加载执行对象、不调用模型，也不创建 MessageEntry。`AgentSession + Agent`、SYSTEM.md、Skills 与有效 Runtime 工具 profile 在首次执行时装配；工具集合由 [工具系统](../02-CampusClaw工具系统/README.md) 维护。配置校验在记录提交前完成，失败不暴露 sessionId。此时序与本次读取的 Java f61906b9 创建入口一致，核验范围见 [源码证据 §4](source-evidence.md#4-session-创建与-http-入口核对)。
 
 HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI 异名文件当作别名；发布方须保证完整快照。Model Manager 对有效模型绑定与调用具有最终权威，目录快照不替代实际执行时的可用性检查。
+
+本实例没有该 Agent 的完整缓存时，创建在 Agent 锁内从 Mate 准备一次。Mate 超时、连接失败或返回 5xx 时返回可重试的 503 AGENT_SERVICE_UNAVAILABLE（带 Retry-After）；Agent 停用、Mate 返回 4xx、配置非法或目录发布失败仍为 422 AGENT_NOT_AVAILABLE。命令清单与可选值冷缓存时共用同一规则（2026-10-21 确认，待实现；实现基线都折叠为 422）。
 
 创建不要求 Idempotency-Key 或 If-Match，每次成功 POST 都产生新 Session。响应丢失后无条件重试可能产生孤立 Session；由后台超时清理未绑定记录，不能把网络重试描述为幂等创建。
 
@@ -102,7 +104,7 @@ Session scope 的可选模型由 §2.4.5 的命令可选值接口提供。统一
 
 #### 2.4.1 Session 可选模型
 
-独立的 `GET /sessions/{sessionId}/models` 已删除（2026-10-18）。会话可选模型改由 [§2.4.5](#245-get-session-command-values) 的 `GET /sessions/{sessionId}/commands/model/values` 返回，`/model` 无参执行也返回同一份数据（字段为 currentModelId、models）。取值规则不变：实时读取 Model Manager，返回 Agent enabledModels 与当前可用模型的交集，保持 Agent 配置顺序、不分页；可以为空；已保存的当前模型可能因后续停用而不在候选中。清单不是执行预约，更新仍需重新验证。模型展示名与供应商能力仍由 Mate/Model Manager 目录负责；不公开 baseUrl、凭据、价格、请求 Headers 或供应商参数。Manager 不可用返回 MANAGER_UNAVAILABLE。
+独立的 `GET /sessions/{sessionId}/models` 已删除（2026-10-18）。可选模型改由 [§2.4.5](#245-get-session-command-values) 的 `GET /agents/{agentId}/commands/model/values?sessionId=` 返回：带 sessionId 时 currentValue 为会话当前模型，不带时为 Agent 默认模型（待实现）。`/model` 不再有无参查询。取值规则不变：实时读取 Model Manager，返回 Agent enabledModels 与当前可用模型的交集，保持 Agent 配置顺序、不分页；可以为空；已保存的当前模型可能因后续停用而不在候选中。清单不是执行预约，更新仍需重新验证。模型展示名与供应商能力仍由 Mate/Model Manager 目录负责；不公开 baseUrl、凭据、价格、请求 Headers 或供应商参数。Manager 不可用返回 MANAGER_UNAVAILABLE。
 
 #### 2.4.2 POST Session 统一更新
 
@@ -110,7 +112,7 @@ Session scope 的可选模型由 §2.4.5 的命令可选值接口提供。统一
 
 | 输入 | 准入与合并 |
 |---|---|
-| 仅 displayName | idle/running 均可调用；共用 /name 的名称规范化，不修改 active execution |
+| 仅 displayName | idle/running 均可调用；与 /rename 共用一次名称规范化，不修改 active execution |
 | 携带 modelId、thinking 或 mode 的任意组合 | 必须 idle；即使这些字段与当前值相同也检查 busy，不能借改名绕过配置准入 |
 | modelId 与 thinking 一起提交 | 先确定目标模型，显式 thinking=true 按目标模型验证；不支持则整笔失败 |
 | modelId 实际变化，thinking 省略 | 新模型支持思考时保留；不支持则自动关闭，原因 modelCapability |
@@ -118,7 +120,7 @@ Session scope 的可选模型由 §2.4.5 的命令可选值接口提供。统一
 | mode=build | 不依赖计划能力；不启动模型、不批准计划、不替代计划确认 |
 | 多字段请求 | 全部校验通过才写入；模型/思考/模式失败时名称也不更新 |
 
-名称规则沿用 /name：去除首尾空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。modelId 沿用 ClawConstants.RuntimeApi.MODEL_ID_REGEX。thinking 仍为 boolean，false 映射 off，true 使用受管非 off 强度；关闭不隐藏既有思考原文。mode 仅为小写 plan/build，与 state=idle/running 分离。
+名称规则沿用 /rename：去除首尾空白、保留内部空白，拒绝空值、CR/LF、C0/C1、Unicode 双向覆盖/隔离字符及超过 80 UTF-8 字节。modelId 沿用 ClawConstants.RuntimeApi.MODEL_ID_REGEX。thinking 仍为 boolean，false 映射 off，true 使用受管非 off 强度；关闭不隐藏既有思考原文。mode 仅为小写 plan/build，与 state=idle/running 分离。
 
 请求不声明执行凭据 Header；JSON 请求体使用必填 Content-Type: application/json，Accept-Language 可选。沿用 §2 的统一 Header 边界，不要求客户端先读版本，不因缺少或携带旧版本条件返回 428/412。上游继续负责凭据真实性与动作授权，Runtime 不增加本地认证。
 
@@ -172,7 +174,7 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 | 原子持久化 | 两实例分别改名与修改模式时保留各自结果；同字段后成功提交生效；省略字段以最新值合并，模型/thinking 仍按能力归一及整体验证；锁内 busy/能力失败时所有字段不变；多字段只升一次内部版本；领域事件插入失败时全部回滚；thinking-only 与并发模型切换不能使用旧能力放行 |
 | 响应与消费者 | GET/Create/Command 的 Session 投影包含 mode；统一更新复用 GET 结构且无 ETag；前端不生成、保存或发送版本条件与请求键，每个选择器只提交对应字段，以返回 Session 同步派生的 thinking，结果不确定先只读对账 |
 | Header 与无变化 | 无这两个请求头可调用；额外传入按未知 Header 忽略，不产生专门 400/412/428；同值仍检查 busy/能力，成功不改变 updatedAt/resourceVersion、不新增历史 |
-| 路由替换 | 移除属性专用 PUT 及其请求 VO/调用点（确认无其他消费者后删除）；不保留 PATCH 或兼容写别名；/name、/model、/thinking 命令仍保留既有入口 |
+| 路由替换 | 移除属性专用 PUT 及其请求 VO/调用点（确认无其他消费者后删除）；不保留 PATCH 或兼容写别名；/rename、/model、/thinking 命令仍保留既有入口 |
 | 模式接入 | 按计划专题实现模式持久化、Prompt 与能力检查后再开放 plan；不以接口契约已确认声称计划执行已实现 |
 
 计划审核保持独立的事件交互边界，Session 响应不增加待审核目标字段；客户端恢复与服务端执行内校验见[计划模式 §6.2](../06-CampusClaw计划模式/README.md#62-恢复与结果不确定)。
@@ -181,13 +183,23 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 
 管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。下一次消息接受时如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
 
-#### 2.4.5 GET Session Command Values
+<a id="245-get-session-command-values"></a>
 
-`GET /sessions/{sessionId}/commands/{commandName}/values` 返回会话中某个选项型命令（命令清单里 argumentType 为 options）的当前值与可选值，结构是 `{currentValue, values}`，值与该命令的参数相同，不带显示名。model、thinking、mode 都走这一个接口：model 的值是 modelId，取值规则见 §2.4.1；thinking 按会话当前模型实时计算，支持时为 on、off，不支持时只有 off，规则与[操作 07](接口契约/操作/07-update-session.json)的能力校验一致；mode 当前为 plan、build。其他命令返回 404 COMMAND_VALUES_NOT_FOUND。精确响应由[操作 09](接口契约/操作/09-list-session-command-values.json)维护。
+#### 2.4.5 GET Agent Command Values
 
-为什么是一个接口而不是每个命令一个：调用方要的都是同一件事，即"这个命令现在能选什么、当前是什么"，结构也相同。合成一个后，新增选项型命令只在 Runtime 登记取值逻辑，接口、Mate 与前端都不变；按命令分开时，每加一个命令就要新增一个 Runtime 接口和一个 Mate 适配。这与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（`interactive-mode.ts:733-773` 的 `getArgumentCompletions`），而不是由客户端分别调用不同查询。命令清单仍只用 argumentType 说明参数形态，不列值，因为可选值随会话和当前模型变化，清单在没有会话时也要能查。
+`GET /agents/{agentId}/commands/{commandName}/values?sessionId=` 返回某个选项型命令（命令清单里 argumentType 为 options）的当前值与可选值，结构是 `{currentValue, values}`，值与该命令的参数相同，不带显示名。路径从原 `GET /sessions/{sessionId}/commands/{commandName}/values` 改为按 Agent，sessionId 改为可选查询参数（2026-10-20 已确认，待实现）。
 
-原来的 GET Session Models 一并删除：它返回的数据与本接口的 model 取值完全相同，目标设计中已无调用方（Mate 命令选项改调本接口，前端不直接读取）；`/model` 无参执行仍返回 currentModelId、models，结构由[操作 13](接口契约/操作/13-execute-session-command.json)维护。不把可选值加进 Session 资源，因为 Session 资源同时是更新和命令执行的响应，加字段会改变所有这些响应。
+| 命令 | 带 sessionId | 不带 sessionId（新会话初始值） |
+|---|---|---|
+| model | 会话当前模型；values 取值见 §2.4.1 | Agent 默认模型（与创建会话的 `resolveDefaultModel` 相同）；values 同左 |
+| thinking | 会话开关；会话模型支持深度思考时为 on、off，否则只有 off | on；按默认模型计算为 on、off |
+| mode | 会话模式；plan、build | Agent 发布的 mode；plan、build |
+
+其他命令返回 404 COMMAND_VALUES_NOT_FOUND；新增 400 INVALID_AGENT_ID、404 AGENT_NOT_FOUND、422 AGENT_NOT_AVAILABLE 与 503 AGENT_SERVICE_UNAVAILABLE（不带 sessionId 时需要准备 Agent 快照，Mate 不可达为 503）。精确响应由[操作 09](接口契约/操作/09-list-agent-command-values.json)维护，业务规则见[命令系统 §4.2](../04-CampusClaw命令系统/README.md#command-values)。
+
+为什么是一个接口而不是每个命令一个：调用方要的都是同一件事，即"这个命令现在能选什么、当前是什么"，结构也相同。合成一个后，新增选项型命令只在 Runtime 登记取值逻辑，接口与前端都不变。这与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（`interactive-mode.ts:733-773` 的 `getArgumentCompletions`），而不是由客户端分别调用不同查询。为什么按 Agent：新对话在第一条消息前还没有会话，也要能看到模型、深度思考与模式的初始值；不带 sessionId 时 thinking 只按默认模型计算，不接受 modelId 参数，以保持所有选项型命令共用一个结构。
+
+不把可选值加进 Session 资源，因为 Session 资源同时是更新的响应，加字段会改变这些响应。
 
 ### 2.5 执行控制
 
@@ -196,11 +208,12 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 ### 2.6 Built-in Command（已确认，目标实现）
 
 Builtin 与 Skill Command 由用户统一负责设计、实现和集成。
-Builtin 普通 JSON，以及 B13/B14 的 Skill 请求、SSE 与恢复规则已确认；命令清单改为按 Agent 查询，sessionId 为可选查询参数，待评审、待实现；Mate 公共命令独立管理。本节只说明 HTTP 边界，不重复维护命令业务规则。
+Builtin 成功只返回 `{text}`（2026-10-20 已确认，待实现），B13/B14 的 Skill 请求、SSE 与恢复规则已确认；命令清单按 Agent 查询，sessionId 为可选查询参数，已实现；Mate 对外的命令接口不在本设计范围。本节只说明 HTTP 边界，不重复维护命令业务规则。
 
 | 接口 | 精确模型 | 设计职责 |
 |---|---|---|
-| GET /agents/{agentId}/commands?sessionId= | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护清单范围（不带 sessionId 只含 help、skills 与技能命令）、描述符、排序、命令状态规则、Agent 快照准备与重新准入理由 |
+| GET /agents/{agentId}/commands?sessionId= | [操作 12](接口契约/操作/12-list-agent-commands.json) | [Slash 通用模块](../04-CampusClaw命令系统/README.md#31-get-轻量清单已确认)维护清单范围（不带 sessionId 时含 help、rename、model、thinking、mode、skills 与技能命令）、描述符与 argumentRequired、排序、命令状态规则、Agent 快照准备与重新准入理由 |
+| GET /agents/{agentId}/commands/{commandName}/values?sessionId= | [操作 09](接口契约/操作/09-list-agent-command-values.json) | 见 §2.4.5 与 [命令系统 §4.2](../04-CampusClaw命令系统/README.md#command-values) |
 | POST /sessions/{sessionId}/command | [操作 13](接口契约/操作/13-execute-session-command.json) | [Builtin 设计](../04-CampusClaw命令系统/01-内置命令/README.md)维护八个命令的业务、窄服务、事务和实施验收 |
 
 Controller 只收发 VO，Application 完成授权、归一化、一次 Catalog 解析、准入、执行及 DTO→VO。
@@ -215,8 +228,8 @@ POST 重新解析，并在所属锁或事务内检查可变状态；共同结构
 
 #### 2.6.1 普通 JSON 与权威领域事件
 
-Builtin Handler 完成后返回普通 ResultBean JSON，不建立命令 SSE。
-请求、结果与错误由操作 13 维护；与既有 Session/Models 资源复用的映射规则统一见
+Builtin Handler 完成后返回普通 ResultBean JSON，result 只有按请求语言生成的 Markdown `text`，不建立命令 SSE；调用方随后读取 GET Session 刷新状态（待实现）。
+请求、结果与错误由操作 13 维护；各命令的文本内容统一见
 [Builtin §8](../04-CampusClaw命令系统/01-内置命令/README.md#8-json-与错误)。
 不产生通用命令生命周期或 Name 历史；这不改变 POST Events 的独立 SSE 契约。
 所有成功结果移除 command、changed、sourceEventSeq；内部领域 Entry 不变。
@@ -228,17 +241,17 @@ Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 
 [Help 专题](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
 缓存往返、读取/发布互斥、空内容处理、安全展示和实施验收。
 其专项页面直接提取操作 13，不再复制 Header、参数或响应 JSON。
-清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Help 只读完整缓存。
+清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（规则同 [§2.1](#21-session-生命周期)）；Help 只读完整缓存，不访问 Mate。
 
-#### 2.6.3 Name 与配置更新
+#### 2.6.3 Rename 与配置更新
 
-Name 的共享业务规则见 [Builtin §5](../04-CampusClaw命令系统/01-内置命令/README.md#5-name-当前状态)，
+`/rename`（原 `/name`）的共享业务规则见 [Builtin §5](../04-CampusClaw命令系统/01-内置命令/README.md#5-name-当前状态)，
 Model/Thinking 的事务和内部版本规则见 [Builtin §6](../04-CampusClaw命令系统/01-内置命令/README.md#6-model--thinking)。
 Command 保留原有入口；统一 Session POST 复用其校验规则与底层写入职责，两者均不要求版本条件或请求去重 Header。
 
 ![命令与权威 Session 状态](设计图/Command/command_authoritative_state.svg)
 
-[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L51)
+[PlantUML 源码：`command_authoritative_state`](设计图/Command/diagram.puml#L54)
 
 #### 2.6.4 Compact 的执行生命周期
 
@@ -347,7 +360,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 | 操作 | 实际保留的请求 Header 与适用范围 |
 |---|---|
-| CreateSession、GetSession、DeleteSession、ListSessionCommandValues、ListAgentCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
+| CreateSession、GetSession、DeleteSession、ListAgentCommandValues、ListAgentCommands | 可选 Accept-Language；无请求体，不声明 Content-Type 或执行凭据 |
 | ListSessionEvents | 可选 Accept-Language、Accept: application/json；只读历史不创建执行凭据 |
 | UpdateSession | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选 |
 | QuerySkillLoadStatistics | Content-Type: application/json 必填；Accept-Language 与 JSON Accept 可选；管理调用方授权仍由上游/部署边界保证 |
@@ -485,6 +498,8 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.76.0 | 2026-10-21 | 创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（待实现）。 |
+| 1.75.0 | 2026-10-20 | 可选值接口改为 ListAgentCommandValues（`GET /agents/{agentId}/commands/{commandName}/values?sessionId=`），清单新增 argumentRequired、`name` 改为 `rename`、不带 sessionId 时含 rename/model/thinking/mode，Builtin 成功只返回文本，技能命令受理错误码与普通消息一致。 |
 | 1.74.0 | 2026-10-18 | ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），model、thinking、mode 共用，结构 `{currentValue, values}`；非选项型命令返回 404 COMMAND_VALUES_NOT_FOUND。ListSessionModels（`GET /sessions/{sessionId}/models`）一并删除，会话可选模型改由本接口的 model 取值提供，`/model` 无参执行仍返回 currentModelId、models。 |
 | 1.73.0 | 2026-10-17 | ListAgentCommands 去掉 hints 值列表，改为返回 argumentType（name 与技能命令为 text，model、thinking、mode 为 options），不返回占位文字；新增 ListSessionThinkingValues 与 ListSessionModes，按会话返回深度思考与工作模式的当前值和可选值。 |
 | 1.72.0 | 2026-10-17 | 写明 Session 更新由数据库行锁加按字段合并控制并发写入、同字段后写生效而不使用 ETag 的理由、放弃方案与代价，并把 Header 移除标为已实现。 |

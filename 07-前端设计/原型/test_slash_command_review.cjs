@@ -6,6 +6,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM, VirtualConsole } = require(process.env.JSDOM_MODULE || "jsdom");
 const html = fs.readFileSync(path.join(__dirname, "slash-command-review.html"), "utf8");
+const FULL = ["help", "status", "rename", "model", "thinking", "mode", "compact", "skills", "skill:inspection-plan"];
+const AGENT = ["help", "rename", "model", "thinking", "mode", "skills", "skill:inspection-plan"];
 
 function fixture(t, state = "catalog") {
   const errors = [], pending = [];
@@ -41,10 +43,14 @@ function fixture(t, state = "catalog") {
     },
     select(name) { document.querySelector('[data-name="' + name + '"]').click(); },
     state(name) { document.querySelector('[data-state="' + name + '"]').click(); },
-    names: () => [...document.querySelectorAll(".command-name")].map((node) => node.textContent),
+    names: () => [...document.querySelectorAll("#command-list .command-name")].map((node) => node.textContent),
+    disabledNames: () => [...document.querySelectorAll('#command-list [aria-disabled="true"]')].map((node) => node.dataset.name),
     values: () => [...document.querySelectorAll('#command-values [role="option"]')],
     checked: () => document.querySelector('#command-values [aria-selected="true"]')?.dataset.value ?? null,
     calls: () => JSON.parse(window.eval("JSON.stringify(demoInvocations)")),
+    requests: () => JSON.parse(window.eval("JSON.stringify(demoRequests)")),
+    session: () => JSON.parse(window.eval("JSON.stringify(session)")),
+    resultText: () => get("result-body").textContent,
     async complete() {
       pending.splice(0).forEach((callback) => callback());
       await new Promise(setImmediate);
@@ -54,7 +60,7 @@ function fixture(t, state = "catalog") {
 
 test("compact rows preserve catalog order; prefix filtering and ARIA agree", (t) => {
   const f = fixture(t);
-  assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "mode", "compact", "skills", "skill:inspection-plan"]);
+  assert.deepEqual(f.names(), FULL);
   assert.equal(f.document.querySelector(".kind-badge, .palette-head, .mode-line, .slash-icon"), null);
   f.type("/s");
   assert.deepEqual(f.names(), ["status", "skills", "skill:inspection-plan"]);
@@ -92,17 +98,33 @@ test("selection closes palette; no-input hides textarea and needs a new submissi
 
 test("parameters remain separate and preserve text, slash and line breaks", async (t) => {
   const f = fixture(t);
-  f.type("/name 夜间 /巡检\n  第二行");
+  f.type("/rename 夜间 /巡检\n  第二行");
   f.key("Enter");
   assert.equal(f.input.value, "夜间 /巡检\n  第二行");
   assert.equal(f.input.getAttribute("role"), null);
-  assert.equal(f.input.placeholder, "输入新值，留空则查看当前值");
-  assert.equal(f.get("submit-button").getAttribute("aria-label"), "运行 name");
+  assert.equal(f.input.placeholder, "输入新名称");
+  assert.equal(f.get("submit-button").getAttribute("aria-label"), "运行 rename");
   f.key("Enter", { shiftKey: true });
   assert.equal(f.calls().length, 0);
   f.key("Enter");
-  assert.deepEqual(f.calls(), [{ name: "name", arguments: "夜间 /巡检\n  第二行" }]);
+  assert.deepEqual(f.calls(), [{ name: "rename", arguments: "夜间 /巡检\n  第二行" }]);
   await f.complete();
+});
+
+test("required text arguments block execution until filled; optional Skill text does not", (t) => {
+  const f = fixture(t);
+  f.select("rename");
+  assert.equal(f.input.hidden, false);
+  assert.equal(f.get("submit-button").disabled, true);
+  f.key("Enter");
+  assert.equal(f.calls().length, 0);
+  f.type("夜间巡检");
+  assert.equal(f.get("submit-button").disabled, false);
+  f.type("   ");
+  assert.equal(f.get("submit-button").disabled, true);
+  f.click("remove-command"); f.type("/"); f.select("skill:inspection-plan");
+  assert.equal(f.input.placeholder, "补充要求（可选）");
+  assert.equal(f.get("submit-button").disabled, false);
 });
 
 test("plus opens attachments without changing a message or invoking commands", (t) => {
@@ -120,16 +142,16 @@ test("plus opens attachments without changing a message or invoking commands", (
 
 test("Escape closes query first, second exits; replacement Escape restores selection", (t) => {
   const f = fixture(t);
-  f.type("/na"); f.key("Escape");
+  f.type("/re"); f.key("Escape");
   assert.equal(f.get("command-palette").hidden, true);
-  assert.equal(f.input.value, "/na");
+  assert.equal(f.input.value, "/re");
   f.key("Escape");
   assert.equal(f.input.value, "");
-  f.type("/name 已有参数"); f.key("Enter");
+  f.type("/rename 已有参数"); f.key("Enter");
   f.click("selected-command-name");
   f.type("/model");
   f.key("Escape");
-  assert.equal(f.get("selected-command-name").textContent, "name");
+  assert.equal(f.get("selected-command-name").textContent, "rename");
   assert.equal(f.input.value, "已有参数");
   assert.equal(f.get("command-palette").hidden, true);
 });
@@ -180,16 +202,15 @@ test("IME and repeated Enter cannot select or run a command", (t) => {
   assert.equal(f.calls().length, 0);
 });
 
-test("running fixture omits unavailable commands; options only query; normal draft cannot submit", (t) => {
+test("running keeps the full catalog and greys commands that cannot run; normal draft cannot submit", (t) => {
   const f = fixture(t, "running");
-  assert.deepEqual(f.names(), ["help", "status", "name", "model", "thinking", "mode", "skills"]);
+  assert.deepEqual(f.names(), FULL);
+  assert.deepEqual(f.disabledNames(), ["model", "thinking", "mode", "compact", "skill:inspection-plan"]);
   f.select("thinking");
-  assert.equal(f.input.hidden, true);
-  assert.equal(f.checked(), null);
-  assert.equal(f.values().every((option) => option.getAttribute("aria-disabled") === "true"), true);
-  assert.equal(f.document.activeElement, f.get("command-run"));
-  assert.equal(f.get("parameter-hint").textContent, "任务运行中只能查看当前值，回车执行查询");
-  assert.equal(f.get("submit-button").disabled, false);
+  assert.equal(f.get("command-chip").hidden, true);
+  assert.equal(f.calls().length, 0);
+  f.select("rename");
+  assert.equal(f.get("selected-command-name").textContent, "rename");
   f.click("remove-command"); f.type("等待任务结束");
   assert.equal(f.get("submit-button").getAttribute("aria-label"), "停止生成");
   f.key("Enter", {}, f.input);
@@ -218,12 +239,27 @@ test("review tabs retain open palette and invalidate pending mock completion", a
   assert.equal(f.get("result-region").classList.contains("visible"), false);
 });
 
-test("result data is rendered as plain text", async (t) => {
+test("Builtin text is shown as safe Markdown and state is refreshed from GET Session", async (t) => {
   const f = fixture(t, "argument");
   f.type('<img src=x onerror="alert(1)">'); f.click("submit-button");
+  assert.equal(f.session().displayName, "园区巡检");
   await f.complete();
-  assert.equal(f.document.querySelector(".help-description img"), null);
-  assert.match(f.document.querySelector(".help-description").textContent, /<img/);
+  const body = f.get("result-body");
+  assert.equal(body.querySelector("img"), null);
+  assert.match(body.querySelector("strong").textContent, /^<img/);
+  assert.deepEqual(f.requests(), [
+    "POST /campusclaw-service/v1/sessions/session-demo/command",
+    "GET /campusclaw-service/v1/sessions/session-demo"
+  ]);
+  assert.equal(f.session().displayName, '<img src=x onerror="alert(1)">');
+  assert.match(f.get("session-summary").textContent, /^<img/);
+});
+
+test("help result renders headings and lists from the returned text", (t) => {
+  const f = fixture(t, "help");
+  const body = f.get("result-body");
+  assert.equal(body.querySelector("h3").textContent, "园区运维助手");
+  assert.equal(body.querySelectorAll("li").length, 3);
 });
 
 test("running command focus and execution never replace the stop action", async (t) => {
@@ -256,14 +292,11 @@ test("palette temporarily collapses the result and restores its disclosure choic
   assert.equal(result.open, false);
 });
 
-
 test("argumentType alone decides text input, value popup or no input", (t) => {
   const f = fixture(t);
-  f.select("name");
+  f.select("rename");
   assert.equal(f.input.hidden, false);
   assert.equal(f.get("values-palette").hidden, true);
-  f.click("remove-command"); f.type("/"); f.select("skill:inspection-plan");
-  assert.equal(f.input.placeholder, "补充要求（可选）");
   f.click("remove-command"); f.type("/"); f.select("status");
   assert.equal(f.input.hidden, true);
   assert.equal(f.get("values-palette").hidden, true);
@@ -273,7 +306,20 @@ test("argumentType alone decides text input, value popup or no input", (t) => {
   assert.equal(f.get("values-palette").hidden, false);
   assert.equal(f.get("command-values").getAttribute("role"), "listbox");
   assert.match(f.get("values-title").textContent, /^thinking 的可选值/);
-  assert.deepEqual(f.values().map((option) => option.textContent), ["1on", "2off当前"]);
+  assert.deepEqual(f.values().map((option) => option.textContent), ["1开启", "2关闭当前"]);
+});
+
+test("value labels come from frontend copy; values without copy are shown as is", (t) => {
+  const f = fixture(t);
+  f.select("mode");
+  assert.deepEqual(f.values().map((option) => option.textContent), ["1计划", "2实施当前"]);
+  assert.deepEqual(f.values().map((option) => option.dataset.value), ["plan", "build"]);
+  f.key("Escape"); f.type("/"); f.select("model");
+  assert.deepEqual(f.values().map((option) => option.textContent), ["1campus-standard", "2campus-long-context"]);
+  assert.deepEqual(f.requests(), [
+    "GET /campusclaw-service/v1/agents/agent-demo/commands/mode/values?sessionId=session-demo",
+    "GET /campusclaw-service/v1/agents/agent-demo/commands/model/values?sessionId=session-demo"
+  ]);
 });
 
 test("values popup highlights the current value; arrows wrap and Enter executes", async (t) => {
@@ -293,7 +339,8 @@ test("values popup highlights the current value; arrows wrap and Enter executes"
   f.key("Enter");
   assert.deepEqual(f.calls(), [{ name: "thinking", arguments: "on" }]);
   await f.complete();
-  assert.match(f.document.querySelector(".help-description").textContent, /思考模式：on/);
+  assert.match(f.resultText(), /已开启深度思考/);
+  assert.equal(f.session().thinking, "on");
   assert.equal(f.get("values-palette").hidden, true);
 });
 
@@ -301,9 +348,9 @@ test("clicking a value or pressing its number executes right away", async (t) =>
   const f = fixture(t); f.select("mode");
   f.document.querySelector('[data-value="plan"]').click();
   assert.deepEqual(f.calls(), [{ name: "mode", arguments: "plan" }]);
-  assert.equal(f.window.eval("commandValues.mode.currentValue"), "build");
+  assert.equal(f.session().mode, "build");
   await f.complete();
-  assert.equal(f.window.eval("commandValues.mode.currentValue"), "plan");
+  assert.equal(f.session().mode, "plan");
   f.type("/thinking"); f.key("Enter");
   f.key("3");
   assert.equal(f.calls().length, 1);
@@ -327,13 +374,16 @@ test("Escape or an outside click cancels the values popup", (t) => {
   assert.equal(f.calls().length, 0);
 });
 
-test("current value that is not offered stays unhighlighted so Enter queries", (t) => {
+test("current value that is not offered stays unhighlighted and Enter does nothing", (t) => {
   const f = fixture(t); f.select("model");
   assert.equal(f.checked(), null);
   assert.equal(f.get("command-values").getAttribute("aria-activedescendant"), null);
   assert.equal(f.document.activeElement, f.get("command-values"));
+  assert.equal(f.get("submit-button").disabled, true);
   f.key("Enter");
-  assert.deepEqual(f.calls(), [{ name: "model", arguments: "" }]);
+  assert.equal(f.calls().length, 0);
+  f.key("ArrowDown"); f.key("Enter");
+  assert.deepEqual(f.calls(), [{ name: "model", arguments: "campus-standard" }]);
 });
 
 test("options review tab shows the popup with the current value highlighted", (t) => {
@@ -345,16 +395,22 @@ test("options review tab shows the popup with the current value highlighted", (t
   assert.equal(f.get("submit-button").disabled, false);
 });
 
-test("options draft returns to a query when running begins", async (t) => {
+test("an options draft is kept but cannot run while the session is running", async (t) => {
   const f = fixture(t); f.type("/mode plan"); f.key("Enter");
   assert.equal(f.checked(), "plan");
-  f.window.eval("running = true; catalog = runningCatalog; render()");
+  f.window.eval("running = true; render()");
   assert.equal(f.checked(), null);
-  assert.equal(f.get("command-run").disabled, false);
+  assert.equal(f.values().every((option) => option.getAttribute("aria-disabled") === "true"), true);
+  assert.equal(f.get("command-run").hidden, false);
+  assert.equal(f.get("command-run").disabled, true);
+  assert.equal(f.get("inline-error").textContent, "任务运行中不可执行，草稿已保留");
   f.document.querySelector('[data-value="build"]').click();
+  f.click("command-run");
   assert.equal(f.calls().length, 0);
-  f.click("command-run"); await f.complete();
-  assert.deepEqual(f.calls()[0], {name: "mode", arguments: ""});
+  f.window.eval("running = false; render()");
+  assert.equal(f.checked(), "plan");
+  f.click("submit-button"); await f.complete();
+  assert.deepEqual(f.calls(), [{ name: "mode", arguments: "plan" }]);
 });
 
 test("typed value outside the options falls back to the current value", (t) => {
@@ -367,4 +423,29 @@ test("complete mode name selects mode despite the model prefix", (t) => {
   const f = fixture(t); f.type("/mode plan"); f.key("Enter");
   assert.equal(f.get("selected-command-name").textContent, "mode");
   assert.equal(f.checked(), "plan"); assert.equal(f.calls().length, 0);
+});
+
+test("new chat lists Agent commands, reads initial values and creates the session before executing", async (t) => {
+  const f = fixture(t, "newChat");
+  assert.deepEqual(f.names(), AGENT);
+  assert.equal(f.get("session-summary").textContent, "新对话 · 尚未创建会话");
+  assert.equal(f.get("empty-chat").hidden, false);
+  f.select("thinking");
+  assert.equal(f.checked(), "on");
+  f.key("2");
+  assert.deepEqual(f.calls(), [{ name: "thinking", arguments: "off" }]);
+  await f.complete();
+  assert.deepEqual(f.requests(), [
+    "GET /campusclaw-service/v1/agents/agent-demo/commands/thinking/values",
+    "POST /campusclaw-service/v1/sessions",
+    "POST /campusclaw-service/v1/sessions/session-new/command",
+    "GET /campusclaw-service/v1/sessions/session-new"
+  ]);
+  assert.match(f.resultText(), /已关闭深度思考/);
+  assert.match(f.get("session-summary").textContent, /^新对话 · campus-standard · 深度思考关闭 · 实施模式$/);
+  assert.equal(f.get("empty-chat").hidden, false);
+  f.type("/");
+  assert.deepEqual(f.names(), FULL);
+  f.select("help"); f.click("submit-button"); await f.complete();
+  assert.equal(f.requests().filter((request) => request === "POST /campusclaw-service/v1/sessions").length, 1);
 });

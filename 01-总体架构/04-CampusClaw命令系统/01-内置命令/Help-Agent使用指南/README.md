@@ -4,11 +4,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.6.0 |
-| 日期 | 2026-10-16 |
-| 状态 | Help 无参查询、三个业务字段、缓存往返、Agent 级锁、DTO→VO 投影与统一 Command POST 已实现；元数据更新通过显式刷新完成 |
+| 设计版本 | 1.7.0 |
+| 日期 | 2026-10-20 |
+| 状态 | Help 无参查询、缓存往返、Agent 级锁与统一 Command POST 已实现；元数据更新通过显式刷新完成。成功结果由三个业务字段改为 Markdown 文本（2026-10-20 已确认，待实现） |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
-| 当前实现基线 | pi-mono-java `53eff85c7f41de23eb434e027782f5085a8b8e45` |
+| 当前实现基线 | pi-mono-java `53eff85c7f41de23eb434e027782f5085a8b8e45`；2026-10-20 在 `628dca25` 复核结果结构 |
 | 更名前历史证据 | pi-mono-java `d1cdb708e3e124cae009b10b985f5832b6dbde01`；同一链路已实现，场景字段当时误名为 `userCases` |
 | 专项评审页 | [Help HTTP 评审](help-review.html)，直接从 Runtime 操作 13 提取生成 |
 
@@ -22,21 +22,19 @@
 | `/` | 有哪些命令、如何填写参数？ | Command 清单与命令描述符 |
 | `/help` | 当前 Agent 能帮我做什么、适合什么场景？ | Agent 的 displayName/name、description、useCases |
 | `/skills` | 绑定了哪些 Skill？ | 已验证的直接绑定 Skill 名称和描述 |
-| `/status` | 当前 Session 是什么状态？ | Session 状态、模型和 Thinking |
+| `/status` | 当前 Session 是什么状态？ | Session 名称、状态、模型、Thinking、模式与用量 |
 
 已确认 `/help` 只接受空参数，不再支持 `/help model` 等命令详情查询；这些说明留在 `/` 的命令面板。
 用途介绍不是实时权限或能力承诺，不能根据 Tool、Skill、Subagent 的名称自动推断业务场景。
 本次不调用模型生成或翻译介绍，不新增元数据字段、配置文件或数据库表。
 
-以下是虚构元数据的展示示例，不代表某个真实 Agent 的能力：
+以下是虚构元数据生成的文本示例（目标结果，待实现），不代表某个真实 Agent 的能力：
 
-> **园区网络分析助手**
->
-> **我能帮你做什么**
+> ## 园区网络分析助手
 >
 > 帮助理解园区网络状态，整理故障线索与排查建议。
 >
-> **适用场景**
+> **使用场景**
 >
 > - 无线网络连接异常时，梳理排查步骤。
 > - 分析告警和日志，定位可能原因。
@@ -45,9 +43,9 @@
 ## 2. 全局入口与 Help 补充类图
 
 整体系统先看[Slash 完整全局目标类图](../../target_slash_command_global_classes.svg)；
-其 [PlantUML 源码](../../diagram.puml#L124) 为 Slash 与 Builtin 共用的唯一全局主图。
+其 [PlantUML 源码](../../diagram.puml#L125) 为 Slash 与 Builtin 共用的唯一全局主图。
 本专题只下钻 Help 的元数据、缓存和结果投影，不再以 Help 为中心重排全局关系或合并其他命令的职责边界。
-以下类图是局部补充，不代表完整 Command 系统；图中 Help 链路均已在当前实现基线存在。
+以下类图是局部补充，不代表完整 Command 系统；除文本结果外，图中 Help 链路均已在当前实现基线存在。
 
 ![Help 元数据与结果投影补充类图](target_help_metadata_classes.svg)
 
@@ -63,9 +61,8 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 |---|---|---|
 | HelpCommandContributor / Definition 内 Handler lambda | `runtimeapi.service.command.contributor` / 无请求状态的单例 | 已声明无参 Help，从 Context 取 Session 快照并委派公开介绍查询 |
 | AgentHelpQueryService | `runtimeapi.service.command.readonly` / 无请求状态的单例 | 已按 Session agentId 取一个完整缓存快照，按白名单投影并归一显示内容 |
-| HelpCommandResultDTO | `runtimeapi.dto.command` / 请求内只读数据 | 已仅携带 Agent 显示名、介绍和场景，不携带完整运行时对象 |
-| AgentHelpResponseVO | `runtimeapi.vo` / 请求内只读响应 | 三个业务字段，final 字段与只读访问器；不嵌套内部 DTO，不回显命令 |
-| CommandResponseAssembler | `runtimeapi.service.command` / 单例 | 已将 HelpCommandResultDTO 转换为响应 VO，Controller 不承担投影 |
+| Agent 介绍（内部结果） | `runtimeapi.dto` / 请求内只读数据 | 只携带 Agent 显示名、介绍和场景，不携带完整运行时对象；实现基线为 `HelpCommandResultDTO`，按命令区分的结果 DTO 删除后由 Handler 内部结果承载（待实现） |
+| CommandResponseAssembler | `runtimeapi.service.command` / 单例 | 目标按请求语言把三项元数据生成 Markdown 文本（待实现）；实现基线转换为三字段的 `AgentHelpResponseVO`，该 VO 删除 |
 | PreparedAgentRuntime | 既有 Runtime 边界 / 单次查询快照 | Help 的三个业务字段取自同一实例，避免多次读取拼接不同版本 |
 
 上述包名为当前实现落点；没有创建占位 Controller，VO、DTO、Spring Service 也未混进 core/SPI 包。
@@ -76,24 +73,24 @@ Help 不再依赖 `CommandHelpFormatter` 或消费 Catalog 中的命令列表。
 
 | 响应字段 | 元数据来源 | 已确认规则 |
 |---|---|---|
-| displayName | displayName；空白时回退 name | 必填、非空；它是 Agent 名称，不是 `/name` 设置的 Session 名称 |
+| displayName | displayName；空白时回退 name | 必填、非空，作为文本标题；它是 Agent 名称，不是 `/rename` 设置的 Session 名称 |
 | description | description[] | 必填数组；保留作者顺序和内部换行，去除条目两端空白及空白条目 |
 | useCases | useCases[] | 必填数组；同上，不排序、不扩写，不当作自动执行的提示词 |
 
 `description` 和 `useCases` 缺失或 null 时按现有元数据语义归一为 `[]`。
 列表中的 null/非字符串属于无效元数据，不作为可展示条目宽松接收；不绕过缓存完整性校验。
-两组文案都为空仍返回 200，前端显示“维护者尚未填写 Agent 介绍和使用场景”。
-只缺一组时只对该区域显示空状态，不生成看似真实的占位能力描述。
+两组文案都为空仍返回 200，文本只含显示名标题和“暂无介绍。”。
+只缺一组时文本只省略该组，不生成看似真实的占位能力描述。
 
 请求与完整报文统一由 [Runtime 操作 13](../../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)
 维护，[Help 专项页](help-review.html) 只选择其中的 Help 请求、两种成功结果及相关错误。
 不新增 /help HTTP 资源，也不在本文另存可调用报文副本。
-统一响应设计不再回显 command，精确结果为上述三个业务字段；调用方已经知道提交的是 Help。
-这项架构变更只移除入口信息，不改变 Agent 使用指南、缓存与无副作用规则。
+统一响应设计不再回显 command；2026-10-20 起所有 Builtin 成功只返回 `{text}`，Help 的文本由上述三个字段生成：显示名为 `##` 标题，介绍为段落，使用场景为列表（待实现）。
+这项架构变更只改变结果形态，不改变 Agent 使用指南、缓存与无副作用规则。
 跨命令复用依据见 [Builtin 响应源码证据](../README.md#82-源码证据差距与理由)。
 
-输出直接展示为纯文本段落和列表，不执行 HTML、脚本或元数据中声明的操作；不自动加载远程图片。
-Accept-Language 只决定界面空状态和错误消息，不承诺翻译维护者填写的内容。
+前端按 Markdown 展示文本，不执行 HTML、脚本或元数据中声明的操作；不自动加载远程图片。元数据原样插入文本，生成时需转义会被解释为 Markdown 结构的字符。
+Accept-Language 决定文本模板（如“使用场景”“暂无介绍”）和错误消息，不承诺翻译维护者填写的内容。
 这里的 `description` 是返回的 Agent 用途介绍；GET 描述符自身的 description 为“介绍当前智能体的用途和使用场景”（en-US 为 “Introduce this agent's purpose and use cases”），二者含义不同。
 
 Runtime 操作 12（`GET /agents/{agentId}/commands`，带或不带 sessionId 都包含 Help）的 Help 描述符只有 name/type/description，不返回 argumentType；
@@ -130,11 +127,11 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 | 非空 arguments（如 model）或附件 | 400 INVALID_COMMAND_REQUEST；不回到旧的命令详情分支 |
 | Session 不存在/已删除 | 沿用 404 SESSION_NOT_FOUND；先校验 Session 访问范围 |
 | 无完整 Agent 缓存或元数据不可用 | 沿用当前 Runtime 操作 13 的 422 AGENT_NOT_AVAILABLE，不返回伪造介绍 |
-| 完整缓存但 description/useCases 未填写 | 200，缺失数组为 []；与运行时不可用区分 |
+| 完整缓存但 description/useCases 未填写 | 200，文本说明暂无介绍；与运行时不可用区分 |
 | 仅 Session 正在运行 | 不返回 SESSION_BUSY，不获取执行容量或写状态 |
 
 Help 使用 Runtime Command 的 Builtin 请求头示例：JSON Content-Type 必填，JSON Accept 与 Accept-Language 可选，不要求执行凭据。既有上游授权与 ResultBean 规则不变；Help 没有模型、Tool 调用，也不将凭据发送到远端。
-不写 Session Entry、通用命令历史或模型上下文；前端展示临时说明卡片，不伪装成持久化 Assistant 消息。
+不写 Session Entry、通用命令历史或模型上下文；前端以临时说明卡片展示文本，不伪装成持久化 Assistant 消息。
 失败时保留草稿。使用场景不会点击即发送；如后续增加“填入输入框”，必须保留用户确认发送步骤。
 
 ## 5. 源码证据与设计理由
@@ -171,7 +168,7 @@ Runtime 元数据、Builtin 只读查询、DTO→VO 组装和 Runtime HTTP 切�
 `CommandResponseAssemblerTest`、`RuntimeCommandControllerTest` 和 `RuntimeBuiltinCommandOpenGaussIT`，覆盖：
 
 - Agent 显示名与 Session 名称不同；displayName 空白回退 name。
-- description/useCases 顺序不变，空白项移除；缺失数组始终 []。
+- description/useCases 顺序不变，空白项移除；缺失数组始终 []（目标文本中对应区域省略或说明暂无介绍）。
 - 缓存已有非空 useCases 时，重启后 Help 不能变成 []。
 - 一次 Help 查询只取一个完整缓存快照，`prepareCached` 不调用远端 Mate；与并发发布共用 Agent 级锁的实现由三个入口共用 `withAgentLock` 直接证明。
 - 无完整缓存返回现有 422；只有介绍未填写返回 200。
@@ -182,8 +179,7 @@ Runtime 元数据、Builtin 只读查询、DTO→VO 组装和 Runtime HTTP 切�
 
 Help 的精确请求、字段与错误由 Runtime [操作 12](../../../01-CampusClaw多Agent运行时/接口契约/操作/12-list-agent-commands.json)与[操作 13](../../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。专项 HTML 只筛选 Help 场景，直接继承 Runtime 的 Builtin Header 示例、参数、约束、结果与错误，不保留第二份 JSON。Slash 与 Builtin 引用同一张全局主图，本专题只维护元数据下钻图。
 
-mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 GET 投影及公共边界待决。
-不能将本稿直接当作新公共接口；公共认证、bridge 和执行协议仍待重审，不新增公共路径或跨仓实现。
+Mate 对外的聊天命令接口不在本设计范围内，由 Mate 负责人另行设计；本稿不能当作公共接口。
 
 展示生成：运行本专题 `python3 render_help_review.py`，复用 Runtime 共享渲染器；不再使用强制凭据占位符的技能默认模板。
 投影由 Runtime 的 help_review_projection.py 生成；不手工复制 Header、版本或响应。门禁检查派生内容与源等值、可见 HTML 及旧 JSON 不存在。
@@ -195,6 +191,7 @@ mate-service 的旧 Command POST SSE 已废止并删除，专题只保留轻量 
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.0 | 2026-10-20 | Help 成功结果改为由显示名、介绍与使用场景生成的 Markdown 文本（待实现），删除 Mate 投影说明。 |
 | 1.6.0 | 2026-10-16 | Help 描述符不返回 argumentType，表示不带参数；原 hints 已移除。 |
 | 1.5.0 | 2026-10-16 | Help 描述符文案改为“介绍当前智能体的用途和使用场景”。 |
 | 1.4.0 | 2026-10-16 | Help 描述符随命令清单改为按 Agent 查询，同步全局类图锚点与缓存缺失语义。 |

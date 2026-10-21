@@ -454,7 +454,7 @@
           ],
           [
             "displayName",
-            "与 /name 共用一次名称规范化；仅名称更新允许 idle/running。"
+            "与 /rename 共用一次名称规范化；仅名称更新允许 idle/running。"
           ],
           [
             "modelId",
