@@ -38,9 +38,7 @@ Operator -> Mate ++ : 查看运行记录
 activate Operator
 Mate -> Claw ++ : 查询 Run（转发用户的 access-token，Claw 按用户筛选）
 return Run（含 sessionId）
-Mate -> MateStore ++ : 按 sessionId 查 chatId
-return chatId
-return Run（含 chatId，不含 sessionId）
+return Run（sessionId 改名为 chatId，值不变）
 deactivate Operator
 @enduml
 
@@ -64,7 +62,7 @@ Mate -> Claw ++ : POST /schedules（原样转发请求体与用户的 access-tok
 Claw -> Claw : 用 access-token 查出用户 ID，统计该用户接口配置的任务数（不加锁），\n未达上限则保存任务与 user_id
 alt Claw 返回 201
   Claw --> Mate : 定时任务（scheduleId）
-  Mate --> Operator : 201 定时任务（sessionId 换为 chatId，去掉 userId）
+  Mate --> Operator : 201 定时任务（sessionId 改名为 chatId）
 else Claw 明确失败（带错误码）
   Claw --> Mate : 4xx / 5xx 错误码（达到上限为 422 SCHEDULE_QUOTA_EXCEEDED）
   Mate --> Operator : 原错误码
@@ -172,7 +170,7 @@ package "外部边界" as ExtPkg {
   }
   interface ChatMappingService <<Mate 既有：未核验>> {
     + bind(userId, sessionId) : chatId
-    + chatOf(sessionId) / ownerOf(chatId)
+    + ownerOf(chatId)
   }
   interface UnifiedAccountTokenSource <<Mate 既有：未核验>> {
     + accessToken()
@@ -184,7 +182,6 @@ ScheduleRuntimeController --> ScheduledSessionRegistrationService
 ScheduleRuntimeController --> ScheduledAccessTokenService
 ScheduleManagementService --> ClawScheduleClient
 ScheduleManagementService --> ScheduleProjector
-ScheduleProjector --> ChatMappingService
 ScheduledSessionRegistrationService --> ScheduledSessionStore
 ScheduledSessionRegistrationService --> ChatMappingService
 ScheduledAccessTokenService --> UnifiedAccountTokenSource
@@ -207,7 +204,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : GET /schedules?page=1&limit=50&status=active
@@ -216,9 +212,7 @@ Mate -> Claw ++ : GET /schedules（原样转发 query 与用户的 access-token�
 Claw -> Claw : 用 access-token 查出用户 ID，\n按 user_id 与筛选条件分页并统计 total
 alt Claw 返回 200
   Claw --> Mate : schedules、total、nextPage
-  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
-  return chatId
-  Mate --> Operator : 200 schedules、total、nextPage\n（sessionId 换为 chatId，去掉 userId）
+  Mate --> Operator : 200 schedules、total、nextPage\n（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 4xx / 5xx 错误码
   Mate --> Operator : 原错误码
@@ -242,7 +236,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : GET /schedule-runs?scheduleId=...&page=1
@@ -250,8 +243,6 @@ activate Operator
 Mate -> Claw ++ : GET /schedule-runs（原样转发 query 与用户的 access-token）
 Claw -> Claw : 用 access-token 查出用户 ID，\n按所属任务的 user_id 与筛选条件分页并统计 total
 return runs、total、nextPage
-Mate -> MateStore ++ : 按 sessionId 批量查 chatId
-return chatId
 Mate --> Operator : 200 runs、total、nextPage（sessionId 换为 chatId）
 deactivate Mate
 deactivate Operator
@@ -269,7 +260,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : GET /schedules/{scheduleId}
@@ -278,9 +268,7 @@ Mate -> Claw ++ : GET /schedules/{scheduleId}（原样转发，带用户的 acce
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404
 alt Claw 返回成功
   Claw --> Mate : 任务
-  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
-  return chatId
-  Mate --> Operator : 200 任务（sessionId 换为 chatId，去掉 userId）
+  Mate --> Operator : 200 任务（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码
   Mate --> Operator : 原错误码
@@ -302,7 +290,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : POST /schedules/{scheduleId}（只含要改的字段）
@@ -311,9 +298,7 @@ Mate -> Claw ++ : POST /schedules/{scheduleId}（原样转发请求体，带用�
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404
 alt Claw 返回成功
   Claw --> Mate : 合并保存后的任务
-  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
-  return chatId
-  Mate --> Operator : 200 任务（sessionId 换为 chatId，去掉 userId）
+  Mate --> Operator : 200 任务（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码；字段错误
   Mate --> Operator : 原错误码
@@ -335,7 +320,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : DELETE /schedules/{scheduleId}
@@ -344,9 +328,7 @@ Mate -> Claw ++ : DELETE /schedules/{scheduleId}（带用户的 access-token）
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404；\n否则删除任务及其 Run
 alt Claw 返回成功
   Claw --> Mate : 删除回执
-  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
-  return chatId
-  Mate --> Operator : 200 删除回执（sessionId 换为 chatId，去掉 userId）
+  Mate --> Operator : 200 删除回执（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码
   Mate --> Operator : 原错误码；重复删除同样为 404
@@ -368,7 +350,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : POST /schedules/{scheduleId}/pause
@@ -377,8 +358,6 @@ Mate -> Claw ++ : POST /schedules/{scheduleId}/pause（无请求体，带用户�
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404
 alt Claw 返回成功
   Claw --> Mate : paused 任务（pausedReason 为 manual）
-  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
-  return chatId
   Mate --> Operator : 200 paused 任务；已受理的运行不取消
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码
@@ -401,7 +380,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : POST /schedules/{scheduleId}/unpause
@@ -410,8 +388,6 @@ Mate -> Claw ++ : POST /schedules/{scheduleId}/unpause（无请求体，带用�
 Claw -> Claw : 用 access-token 查出用户 ID；任务不存在、已删除或 user_id 不是该用户返回 404
 alt Claw 返回成功
   Claw --> Mate : active 任务
-  Mate -> MateStore ++ : 对话中创建的任务按 sessionId 查 chatId
-  return chatId
   Mate --> Operator : 200 active 任务
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_NOT_FOUND 等错误码；不能恢复时 409 SCHEDULE_ACTIVATION_REJECTED
@@ -434,7 +410,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 participant "Mate 运行时接口" as MateRt
 autonumber
@@ -450,9 +425,7 @@ else 对话中创建的任务
   Claw -> Claw : 在关联会话追加一轮；会话正忙记 session_busy_error
 end
 return Run（sessionId 或 error 二选一）
-Mate -> MateStore ++ : 按 sessionId 查 chatId
-return chatId
-Mate --> Operator : 200 Run（sessionId 换为 chatId）
+Mate --> Operator : 200 Run（sessionId 改名为 chatId）
 deactivate Mate
 deactivate Operator
 @enduml
@@ -469,7 +442,6 @@ skinparam defaultFontSize 14
 skinparam sequenceMessageAlign center
 actor "运营人员" as Operator
 participant "Mate 管理接口" as Mate
-database "Mate 存储" as MateStore
 participant "Claw" as Claw
 autonumber
 Operator -> Mate ++ : GET /schedule-runs/{runId}
@@ -478,9 +450,7 @@ Mate -> Claw ++ : GET /schedule-runs/{runId}（带用户的 access-token）
 Claw -> Claw : 用 access-token 查出用户 ID；Run 不存在或所属任务的 user_id\n不是该用户返回 404 SCHEDULE_RUN_NOT_FOUND
 alt Claw 返回成功
   Claw --> Mate : Run
-  Mate -> MateStore ++ : 按 sessionId 查 chatId
-  return chatId
-  Mate --> Operator : 200 Run（sessionId 换为 chatId）
+  Mate --> Operator : 200 Run（sessionId 改名为 chatId）
 else Claw 返回错误码
   Claw --> Mate : 404 SCHEDULE_RUN_NOT_FOUND 等错误码
   Mate --> Operator : 原错误码

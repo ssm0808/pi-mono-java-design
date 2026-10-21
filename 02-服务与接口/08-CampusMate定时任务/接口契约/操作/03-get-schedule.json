@@ -1,7 +1,7 @@
 {
   "api": {
     "title": "CampusMate 定时任务管理 API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "basePath": "/mate-service/v1",
     "visibility": "Public · 待评审 · 待实现"
   },
@@ -9,7 +9,7 @@
     "method": "GET",
     "path": "/schedules/{scheduleId}",
     "summary": "读取定时任务详情",
-    "description": "用户打开某个定时任务，查看保存的任务内容、Agent、时间规则和当前计划摘要。Mate 把用户的 access-token 转给 Claw，Claw 按任务的创建者判断归属，不属于当前用户与不存在一样返回 404；Mate 把 sessionId 换成 chatId；运行记录另从 Run 列表读取。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "description": "用户打开某个定时任务，查看保存的任务内容、Agent、时间规则和当前计划摘要。Mate 把用户的 access-token 转给 Claw，Claw 按任务的创建者判断归属，不属于当前用户与不存在一样返回 404；Mate 把 sessionId 改名为 chatId；运行记录另从 Run 列表读取。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
     "parameters": [
       {
         "in": "path",
@@ -152,7 +152,7 @@
         "status": "500",
         "tabLabel": "500 · SCHEDULE_READ_FAILED",
         "label": "Internal Server Error",
-        "summary": "Claw 中的任务记录损坏或投影失败，不转成 404。Mate 读取 Chat 映射（投影 chatId）失败时返回 Mate 通用 500。",
+        "summary": "Claw 中的任务记录损坏或投影失败，不转成 404。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
