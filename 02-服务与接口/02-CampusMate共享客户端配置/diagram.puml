@@ -80,3 +80,191 @@ Client instances and DTOs remain independent.
 Capability query is pending implementation; other server evidence varies by operation.
 endlegend
 @enduml
+
+@startuml claw_mate_overall_sequence
+' Java 基线：628dca25a694d9d056b15f012e1223d68091ab66；2026-10-21 拉取 main。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java rebuild、resolveSkills。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateToolResolver.java listAgentTools。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateRemoteToolHandler.java callTool。
+' 源码：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java。
+' 已观察行为：调用顺序与 Mate 接口已实现；目标：待实现的只是 Claw 内部的路径目录与共享通道，图中消息不变。
+' 设计原因：服务级总览只表达 Claw 与 Mate 的交互，Runtime、Tool、Provider 并入 Claw，在 3.3 节下钻。
+title 创建园区工单时 Claw 调用 Mate（BU4）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+autonumber
+actor "园区用户" as User
+participant "Claw" as Claw
+participant "Mate" as Mate
+User -> Claw ++ : 请 Agent 创建园区工单
+activate User
+Claw -> Mate ++ : 读取 Agent 运行定义
+return 提示词、默认模型及绑定 Skill
+Claw -> Mate ++ : 读取绑定 Skill 的文件
+return Skill 文件
+Claw -> Mate ++ : 读取 Agent 绑定的工具
+return 绑定工具列表
+Claw -> Mate ++ : 查询工具定义
+return 工单工具定义
+Claw -> Mate ++ : 请求模型推理（流式）
+return 调用工单工具的决定
+Claw -> Mate ++ : 执行工单工具（带本次凭据）
+return 工单创建结果
+return 返回工单处理结果
+deactivate User
+@enduml
+
+@startuml campusmate_client_target_classes
+' Java 基线：628dca25a694d9d056b15f012e1223d68091ab66；2026-10-21 拉取 main。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/config/CampusMateClientProperties.java Endpoints（待删除）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/util/MateRestUtil.java（待删除）。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java send（迁入通道）。
+' 源码：modules/ai/src/main/java/com/campusclaw/ai/provider/mate/CampusMateProvider.java validateChatPath（待删除）。
+' 目标：待实现；接口目录与地址放 common，短请求通道放 coding-agent-cli，三个业务客户端只依赖通道。
+' 依赖方向：common <- ai <- agent-core <- coding-agent-cli；ai 不依赖 coding-agent-cli，所以目录必须在 common。
+' 基线：Codex Provider + EndpointSession；Anthropic Java SDK ClientOptions + 各 Service。
+title CampusMate 客户端：全局目标类图
+skinparam backgroundColor white
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 40
+skinparam ranksep 50
+
+package "common" as CommonPkg {
+  enum CampusMateOperation <<待实现>> {
+    MODEL_CHAT
+    AGENT_INFO
+    AGENT_RUNTIME
+    SKILL_INFO
+    TOOL_METADATA_QUERY
+    TOOL_EXECUTE
+    SCHEDULED_ACCESS_TOKEN
+    + method() : String
+    + pathTemplate() : String
+  }
+  class CampusMateOrigin <<待实现>> {
+    - origin : URI
+    + {static} of(baseUrl) : CampusMateOrigin
+    + resolve(operation, pathValues...) : URI
+  }
+}
+
+package "ai" as AiPkg {
+  class CampusMateProvider {
+    - endpoint : URI
+    - webClient : WebClient
+    + stream(model, context, options)
+  }
+}
+
+package "coding-agent-cli：配置" as ConfigPkg {
+  class CampusMateClientProperties <<record，改造>> {
+    + baseUrl : CampusMateOrigin
+    + http : Http
+  }
+  class "CampusMateClientProperties.Http" as HttpOptions <<record，待实现>> {
+    + connectTimeout : Duration
+    + requestTimeout : Duration
+    + maxResponseBytes : int
+  }
+  class MateToolProperties <<改造>> {
+    + enabled : boolean
+    + executeTimeout : Duration
+  }
+}
+
+package "coding-agent-cli：短请求通道" as ChannelPkg {
+  class CampusMateHttpClient <<Spring 单例，待实现>> {
+    - httpClient : HttpClient
+    - origin : CampusMateOrigin
+    + call(request) : JsonNode
+  }
+  class CampusMateRequest <<record，待实现>> {
+    + operation : CampusMateOperation
+    + pathValues : List<String>
+    + body : String
+    + headers : Map<String, String>
+    + timeout : Duration
+  }
+  class CampusMateCallException <<待实现>> {
+    + kind : FailureKind
+    + resCode : String
+  }
+  enum FailureKind <<待实现>> {
+    UNREACHABLE
+    REJECTED
+    TOO_LARGE
+    INVALID
+    BUSINESS_FAILURE
+  }
+}
+
+package "coding-agent-cli：业务客户端" as ClientPkg {
+  class MateServiceClient <<改造>> {
+    + getAgentRuntime(agentId) : AgentRuntime
+    + querySkillInfo(skillId) : SkillInfo
+  }
+  class HttpMateToolClient <<改造>> {
+    + listAgentTools(agentId) : List<MateToolMeta>
+    + listSkillTools(skillId) : List<MateToolMeta>
+    + callTool(toolId, args, credentials) : ToolResult
+  }
+  class MateAccessTokenClient <<改造>> {
+    + accessToken() : String
+  }
+}
+
+CampusMateOperation <-- CampusMateOrigin : 按目录生成地址
+CampusMateProvider --> CampusMateOrigin : 校验地址
+CampusMateProvider --> CampusMateOperation : MODEL_CHAT
+CampusMateClientProperties *-- HttpOptions
+CampusMateClientProperties --> CampusMateOrigin : 启动时校验
+CampusMateHttpClient --> CampusMateClientProperties : 地址、超时、上限
+CampusMateHttpClient ..> CampusMateRequest : 发送
+CampusMateHttpClient ..> CampusMateCallException : 失败时抛出
+CampusMateCallException *-- FailureKind
+CampusMateRequest --> CampusMateOperation
+MateServiceClient --> CampusMateHttpClient
+HttpMateToolClient --> CampusMateHttpClient
+MateAccessTokenClient --> CampusMateHttpClient
+HttpMateToolClient ..> MateToolProperties : 工具执行超时
+
+legend bottom
+  通道统一判定：未收到响应或 5xx 为不可达，4xx 为被拒绝；超过响应上限为过大；非 JSON 对象为无效；resCode 非 "0" 为业务失败。
+  模型推理保留自己的连接与超时（见 Model 专题第 5 节），只共用接口目录与地址。
+  删除：MateRestUtil、CampusMateClientProperties.Endpoints（待实现）。
+endlegend
+@enduml
+
+@startuml campusmate_short_request_sequence
+' Java 基线：628dca25a694d9d056b15f012e1223d68091ab66；2026-10-21 拉取 main。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/MateRemoteToolHandler.java callTool。
+' 源码：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java invokeTool、toToolResult。
+' 目标：待实现；HttpMateToolClient 改用 CampusMateHttpClient 发送，不再经过 MateRestUtil。
+' 设计原因：超时、响应上限与失败判定只在通道生效，是本设计的独立边界，因此单列为参与者。
+title 执行一次 Mate 工具（UC6）
+hide footbox
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+autonumber
+participant "工具执行" as Exec
+participant "Tool 客户端" as ToolClient
+participant "Mate 调用通道" as Channel
+participant "Mate" as Mate
+[-> Exec ++ : 执行工单工具
+Exec -> ToolClient ++ : 执行工具（工具标识、参数、本次凭据）
+ToolClient -> Channel ++ : 发送工具执行请求（工具执行超时）
+Channel -> Channel : 按接口目录生成地址（编码路径变量）
+Channel -> Mate ++ : 执行工具（本次凭据）
+return 统一响应
+Channel -> Channel : 校验状态、大小与业务结果码
+return 执行结果
+ToolClient -> ToolClient : 转换为工具结果
+return 工具结果
+[<-- Exec : 返回工具结果
+deactivate Exec
+@enduml

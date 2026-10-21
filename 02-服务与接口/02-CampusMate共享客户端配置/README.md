@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.13.1 |
+| 文档版本 | 2.14.0 |
 | 状态 | 原有统一连接配置已实现；模型能力查询、定时执行增量与模型调用并发上限待实现，具体范围见 §2 |
-| 更新日期 | 2026-10-20 |
+| 更新日期 | 2026-10-21 |
 | pi-mono-java 源码基线 | 历史 `320d790726a70aada6100052952d5494d2a378ac`；本次局部核验 `553dcd5e2ff682f9684810a043b442b37a02e54a` |
 | mate-service 历史源码基线 | `956b547f5ca12ca89e68f73012f92a4406b0c9fa`；新增执行接口未实现，不由旧基线外推 |
 | 适用边界 | CampusClaw -> CampusMate Model、受管 Runtime、Tool 与定时执行凭据接口 |
@@ -12,6 +12,8 @@
 ## 1. 职责与目标配置
 
 本专题维护 CampusClaw 调用 CampusMate 的连接配置：唯一服务地址、唯一 operation 路径目录，以及各客户端独立的传输参数。模型调用、Runtime 发现与 Tool 执行的业务契约分别由所属模块维护。定时运行时 Claw 无入参向 Mate 获取统一账号 `access-token`，该接口与 Mate 侧其余定时任务设计统一在 [mate-service 定时任务设计](../08-mate-service定时任务/README.md#scheduled-access-token)维护；本专题只记录 Claw 侧路径配置 `campusmate.endpoints.scheduled-access-token-path`。
+
+[客户端收敛设计](shared-client-design.md)（待评审、待实现）提出把下文 `campusmate.endpoints` 的路径写进代码中的接口目录、短请求共用一个通道；评审通过前，本文仍描述当前有效配置。
 
 Mate 与 CampusMate 是同一个服务，所有连接与路径使用以下 `campusmate` 目标配置树。目标路径共8项，调用 Mate 的路径全部集中在 `campusmate.endpoints`，定时任务获取 access-token 的路径也在其中；当前源码已实现其中7项配置绑定，模型能力查询尚待实现，不能把目标目录等同于已发布服务。
 
@@ -233,6 +235,7 @@ Provider 的目标类名为 `CampusMateProvider`，身份为 `campusmate`；具�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.14.0 | 2026-10-21 | 新增[客户端收敛设计](shared-client-design.md)：路径写进代码目录、短请求共用一个通道、超时按调用类型分组（待评审）。 |
 | 2.13.1 | 2026-10-20 | 定时取 access-token 的调用方由证书校验保证，不再是暂缓的服务认证风险。 |
 | 2.13.0 | 2026-10-20 | 调用 Mate 的路径集中到 `campusmate.endpoints`：定时 access-token 路径改为 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`），目标路径目录共8项。 |
 | 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [mate-service 定时任务设计](../08-mate-service定时任务/README.md)，本专题改为链接。 |
