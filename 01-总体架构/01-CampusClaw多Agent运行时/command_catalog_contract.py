@@ -68,7 +68,8 @@ def expected_argument_required(command):
 SESSION_SUCCESS_IDS = {"200-commands", "200-no-skills"}
 AGENT_SUCCESS_ID = "200-agent-commands"
 CATALOG_ERROR_CODES = {("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "AGENT_NOT_FOUND"),
-                       ("404", "SESSION_NOT_FOUND"), ("422", "AGENT_NOT_AVAILABLE")}
+                       ("404", "SESSION_NOT_FOUND"), ("422", "AGENT_NOT_AVAILABLE"),
+                       ("503", "AGENT_SERVICE_UNAVAILABLE")}
 
 
 def accepts_optional_session(operation):
@@ -146,7 +147,8 @@ AGENT_VALUE_IDS = ("200-model-agent", "200-thinking-agent", "200-mode-agent")
 VALUE_EXAMPLE_IDS = SESSION_VALUE_IDS + AGENT_VALUE_IDS
 VALUE_ERROR_CODES = {("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "SESSION_NOT_FOUND"),
                      ("404", "AGENT_NOT_FOUND"), ("404", "COMMAND_VALUES_NOT_FOUND"),
-                     ("422", "AGENT_NOT_AVAILABLE"), ("503", "MANAGER_UNAVAILABLE")}
+                     ("422", "AGENT_NOT_AVAILABLE"), ("503", "AGENT_SERVICE_UNAVAILABLE"),
+                     ("503", "MANAGER_UNAVAILABLE")}
 
 
 def value_examples(operation):

@@ -498,7 +498,7 @@
         "status": "422",
         "tabLabel": "422 · AGENT_NOT_AVAILABLE",
         "label": "Unprocessable Entity",
-        "summary": "Agent 存在但无法准备完整快照（包括本实例无缓存且从 Mate 准备失败）；不返回只含 Builtin 的残缺清单。",
+        "summary": "Agent 存在但无法准备完整快照（已停用、Mate 返回 4xx 或配置非法）；Mate 不可达见 503。不返回只含 Builtin 的残缺清单。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -510,6 +510,27 @@
           "en-US": {
             "resCode": "AGENT_NOT_AVAILABLE",
             "resMsg": "The current Agent runtime is unavailable."
+          }
+        }
+      },
+      {
+        "id": "503-agent-service-unavailable",
+        "status": "503",
+        "tabLabel": "503 · AGENT_SERVICE_UNAVAILABLE",
+        "label": "Service Unavailable",
+        "summary": "本实例没有该 Agent 的完整缓存，从 Mate 准备时请求超时、连接失败或 Mate 返回 5xx；调用方可按 Retry-After 重试（待实现，实现基线折叠为 422 AGENT_NOT_AVAILABLE）。",
+        "headers": {
+          "Content-Language": "zh-CN",
+          "Retry-After": "3"
+        },
+        "bodies": {
+          "zh-CN": {
+            "resCode": "AGENT_SERVICE_UNAVAILABLE",
+            "resMsg": "Agent 配置服务暂时不可用，请稍后重试。"
+          },
+          "en-US": {
+            "resCode": "AGENT_SERVICE_UNAVAILABLE",
+            "resMsg": "The Agent configuration service is temporarily unavailable. Try again later."
           }
         }
       }

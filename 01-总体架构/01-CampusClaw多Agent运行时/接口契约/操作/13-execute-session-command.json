@@ -278,7 +278,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "text": "**园区网络故障分析**\n\n- 状态：运行中\n- 模型：园区工单分析模型\n- 深度思考：开启\n- 工作模式：实施\n- 累计用量：2336 tokens（输入 1280，输出 320，缓存读取 640，缓存写入 96）"
+              "text": "**园区网络故障分析**\n\n- 状态：运行中\n- 模型：[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)\n- 深度思考：开启\n- 工作模式：实施\n- 累计用量：2336 tokens（输入 1280，输出 320，缓存读取 640，缓存写入 96）"
             }
           }
         }
@@ -341,7 +341,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "text": "已切换到 **园区工单分析模型**。该模型不支持深度思考，已关闭深度思考。"
+              "text": "已切换到 **[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)**。该模型不支持深度思考，已关闭深度思考。"
             }
           }
         }
@@ -362,7 +362,7 @@
             "resCode": "0",
             "resMsg": "success",
             "result": {
-              "text": "当前已是 **园区工单分析模型**，未修改。"
+              "text": "当前已是 **[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)**，未修改。"
             }
           }
         }
@@ -1011,7 +1011,7 @@
           ],
           [
             "响应与权威快照",
-            "所有 Builtin 成功结果只返回 Markdown 文本，按 Accept-Language 选择 zh-CN 或 en-US 模板；模型名称取自模型信息，没有名称时回退 modelId，技能描述原样插入。文本是展示结果，调用方不得从中解析状态，成功后统一 GET Session 刷新界面。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry，文本说明未变化。"
+            "所有 Builtin 成功结果只返回 Markdown 文本，按 Accept-Language 选择 zh-CN 或 en-US 模板；模型写成 `[modelId](model:modelId)` 链接，由 Mate 转发时替换为显示名，技能描述原样插入。文本是展示结果，调用方不得从中解析状态，成功后统一 GET Session 刷新界面。配置同值成功保留原 updatedAt 与内部版本，不写领域 Entry，文本说明未变化。"
           ],
           [
             "Skill 执行",

@@ -175,6 +175,9 @@ CampusClaw 核对实现 PR #364 的 `pi-mono-java@22310e66e93b2cd3f7bcacf9195823
 | `service/command/skill/SkillCommandExecutionService.java:127-145` · translate | 白名单不含 EVENT_SERVICE_UNAVAILABLE、EVENT_ACCEPTANCE_FAILED，折叠为 COMMAND_EXECUTION_FAILED | 补齐受理链错误码，与普通消息一致，待实现 |
 | `event/RuntimeMessageEventService.java:181-182` | 首帧不能写入事件流时抛 503 EVENT_SERVICE_UNAVAILABLE | 普通消息已有该码；技能命令共用同一受理链 |
 | `session/RuntimeSessionService.java:67`；`model/RuntimeModelManager.java:21` · resolveDefaultModel | 创建会话时按 Agent 快照解析默认模型 | 不带 sessionId 的 model 初始值复用同一方法 |
+| `service/command/CommandCatalogService.java:91-107` · prepareAgent；`runtimeapi/agent/FileAgentDirectoryResolver.java:31-55` · resolve | 清单与创建会话都调用 `prepare(agentId)`；IllegalArgumentException 为 AGENT_NOT_FOUND，任何 AgentRuntimeException 都为 422 AGENT_NOT_AVAILABLE | 2026-10-21 确认（T2）：Mate 不可达改为 503 AGENT_SERVICE_UNAVAILABLE，其余仍为 422，待实现 |
+| `runtime/MateServiceClient.java:134-165` · send；`runtime/AgentRuntimeErrorCode.java:17-19` | 中断、IOException（含超时）与任何非 2xx 都抛 MATE_REQUEST_FAILED，4xx 与 5xx 不区分 | 中断、超时、连接失败与 5xx 映射 503；4xx、响应非法或过大、配置缺失、目录发布失败仍为 422 |
+| `runtimeapi/session/RuntimeSessionUpdateService.java:114-115` | 名称只在请求提交 displayName 时写入；全仓主代码未找到按首条消息生成标题的逻辑 | 2026-10-21 确认（T13）：自动生成标题只能在名称为空时填写 |
 
 Codex 对照：2026-10-20 隔离 fetch `openai/codex` main `b2aa07db8ac892a865de888dd08726680fcf873c`。
 

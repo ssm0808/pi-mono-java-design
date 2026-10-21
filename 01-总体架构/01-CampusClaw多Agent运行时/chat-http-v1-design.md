@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.75.0 |
+| 文档版本 | 1.76.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新的 Header 移除核验见 §8.4，历史核验保留在 §8.1～§8.3 |
-| 更新日期 | 2026-10-20 |
+| 更新日期 | 2026-10-21 |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
@@ -37,6 +37,8 @@ Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、
 创建不加载执行对象、不调用模型，也不创建 MessageEntry。`AgentSession + Agent`、SYSTEM.md、Skills 与有效 Runtime 工具 profile 在首次执行时装配；工具集合由 [工具系统](../02-CampusClaw工具系统/README.md) 维护。配置校验在记录提交前完成，失败不暴露 sessionId。此时序与本次读取的 Java f61906b9 创建入口一致，核验范围见 [源码证据 §4](source-evidence.md#4-session-创建与-http-入口核对)。
 
 HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI 异名文件当作别名；发布方须保证完整快照。Model Manager 对有效模型绑定与调用具有最终权威，目录快照不替代实际执行时的可用性检查。
+
+本实例没有该 Agent 的完整缓存时，创建在 Agent 锁内从 Mate 准备一次。Mate 超时、连接失败或返回 5xx 时返回可重试的 503 AGENT_SERVICE_UNAVAILABLE（带 Retry-After）；Agent 停用、Mate 返回 4xx、配置非法或目录发布失败仍为 422 AGENT_NOT_AVAILABLE。命令清单与可选值冷缓存时共用同一规则（2026-10-21 确认，待实现；实现基线都折叠为 422）。
 
 创建不要求 Idempotency-Key 或 If-Match，每次成功 POST 都产生新 Session。响应丢失后无条件重试可能产生孤立 Session；由后台超时清理未绑定记录，不能把网络重试描述为幂等创建。
 
@@ -193,7 +195,7 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 | thinking | 会话开关；会话模型支持深度思考时为 on、off，否则只有 off | on；按默认模型计算为 on、off |
 | mode | 会话模式；plan、build | Agent 发布的 mode；plan、build |
 
-其他命令返回 404 COMMAND_VALUES_NOT_FOUND；新增 400 INVALID_AGENT_ID、404 AGENT_NOT_FOUND 与 422 AGENT_NOT_AVAILABLE（不带 sessionId 时需要准备 Agent 快照）。精确响应由[操作 09](接口契约/操作/09-list-agent-command-values.json)维护，业务规则见[命令系统 §4.2](../04-CampusClaw命令系统/README.md#command-values)。
+其他命令返回 404 COMMAND_VALUES_NOT_FOUND；新增 400 INVALID_AGENT_ID、404 AGENT_NOT_FOUND、422 AGENT_NOT_AVAILABLE 与 503 AGENT_SERVICE_UNAVAILABLE（不带 sessionId 时需要准备 Agent 快照，Mate 不可达为 503）。精确响应由[操作 09](接口契约/操作/09-list-agent-command-values.json)维护，业务规则见[命令系统 §4.2](../04-CampusClaw命令系统/README.md#command-values)。
 
 为什么是一个接口而不是每个命令一个：调用方要的都是同一件事，即"这个命令现在能选什么、当前是什么"，结构也相同。合成一个后，新增选项型命令只在 Runtime 登记取值逻辑，接口与前端都不变。这与 pi 的做法一致：可选值由挂在命令上的补全按会话实时取（`interactive-mode.ts:733-773` 的 `getArgumentCompletions`），而不是由客户端分别调用不同查询。为什么按 Agent：新对话在第一条消息前还没有会话，也要能看到模型、深度思考与模式的初始值；不带 sessionId 时 thinking 只按默认模型计算，不接受 modelId 参数，以保持所有选项型命令共用一个结构。
 
@@ -239,7 +241,7 @@ Help 通过普通 POST Command 提供无参 Agent 使用指南，不新增 HTTP 
 [Help 专题](../04-CampusClaw命令系统/01-内置命令/Help-Agent使用指南/README.md)唯一维护元数据映射、
 缓存往返、读取/发布互斥、空内容处理、安全展示和实施验收。
 其专项页面直接提取操作 13，不再复制 Header、参数或响应 JSON。
-清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Help 只读完整缓存。
+清单与 POST Help 在 Agent 不可用时都返回 422 AGENT_NOT_AVAILABLE；清单冷缓存时先准备 Agent，Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（规则同 [§2.1](#21-session-生命周期)）；Help 只读完整缓存，不访问 Mate。
 
 #### 2.6.3 Rename 与配置更新
 
@@ -496,6 +498,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.76.0 | 2026-10-21 | 创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（待实现）。 |
 | 1.75.0 | 2026-10-20 | 可选值接口改为 ListAgentCommandValues（`GET /agents/{agentId}/commands/{commandName}/values?sessionId=`），清单新增 argumentRequired、`name` 改为 `rename`、不带 sessionId 时含 rename/model/thinking/mode，Builtin 成功只返回文本，技能命令受理错误码与普通消息一致。 |
 | 1.74.0 | 2026-10-18 | ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），model、thinking、mode 共用，结构 `{currentValue, values}`；非选项型命令返回 404 COMMAND_VALUES_NOT_FOUND。ListSessionModels（`GET /sessions/{sessionId}/models`）一并删除，会话可选模型改由本接口的 model 取值提供，`/model` 无参执行仍返回 currentModelId、models。 |
 | 1.73.0 | 2026-10-17 | ListAgentCommands 去掉 hints 值列表，改为返回 argumentType（name 与技能命令为 text，model、thinking、mode 为 options），不返回占位文字；新增 ListSessionThinkingValues 与 ListSessionModes，按会话返回深度思考与工作模式的当前值和可选值。 |

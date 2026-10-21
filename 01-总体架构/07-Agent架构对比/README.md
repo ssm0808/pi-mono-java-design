@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.108.0 |
-| 更新日期 | 2026-10-20 |
+| 文档版本 | 1.109.0 |
+| 更新日期 | 2026-10-21 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -96,7 +96,7 @@ CampusClaw 的命令清单改为按 Agent 查询 `GET /agents/{agentId}/commands
 证据见 [Agent 清单作用域核对](../04-CampusClaw命令系统/source-evidence.md#agent-catalog-evidence)。
 
 M05 接口对齐于 2026-10-20 核对 Java main `628dca25` 与 Codex `main@b2aa07db`。Codex 先 `thread/start`（可带 model）建线程，再由 `turn/start` 携带 model、effort、collaborationMode，设置总有作用对象；CampusClaw 同样要求新对话先创建会话再执行命令，不新增 Agent 级执行入口，但设置通过会话命令而不是消息请求提交，前端不按命令名分支。
-这一轮的取舍：不带 sessionId 的清单改为“对新会话有作用或帮助了解 Agent”的命令（help、rename、model、thinking、mode、skills 与技能命令），可选值接口改为按 Agent 查询并返回新会话初始值；`name` 改名 `rename`，rename、model、thinking、mode 参数必填并新增 argumentRequired；Builtin 成功只返回本地化 Markdown 文本，调用方再读 GET Session；技能命令受理错误码与普通消息一致。收益是新对话也能先设置再提问、前端统一处理结果；代价是只执行命令也会生成一个空对话，Builtin 后多一次 GET Session，均为待实现的接口架构变更。
+这一轮的取舍：不带 sessionId 的清单改为“对新会话有作用或帮助了解 Agent”的命令（help、rename、model、thinking、mode、skills 与技能命令），可选值接口改为按 Agent 查询并返回新会话初始值；`name` 改名 `rename`，rename、model、thinking、mode 参数必填并新增 argumentRequired；Builtin 成功只返回本地化 Markdown 文本，调用方再读 GET Session；技能命令受理错误码与普通消息一致。收益是新对话也能先设置再提问、前端统一处理结果；代价是只执行命令也会生成一个空对话，Builtin 后多一次 GET Session，均为待实现的接口架构变更。2026-10-21 补充：冷缓存时 Mate 不可达改为可重试的 503 AGENT_SERVICE_UNAVAILABLE（创建会话同改），Agent 停用仍为 422；文本中的模型写成 `model:` 链接，由 Mate 转发时替换为显示名，Runtime 不为显示名额外请求 Mate，代价是未经 Mate 的调用方只看到 modelId。
 证据见 [接口对齐核验](../04-CampusClaw命令系统/source-evidence.md#slash-alignment-evidence)。
 
 待补证项是持续维护范围，不能用于讲述已经实现的能力。涉及该模块的新设计应补齐受影响的问题，
@@ -801,6 +801,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.109.0 | 2026-10-21 | M05 补充 Mate 不可达返回 503 与模型显示名由 Mate 替换 `model:` 链接。 |
 | 1.108.0 | 2026-10-20 | M05 记录 2026-10-20 命令接口对齐：新对话清单范围、按 Agent 的可选值、rename 与 argumentRequired、Builtin 文本结果，删除 Mate 命令选项分层。 |
 | 1.107.2 | 2026-10-20 | A20 的验证方式改为性质测试，实现状态更新为已在 `main@2b9a6ad` 实现、现网普查未完成。 |
 | 1.107.1 | 2026-10-20 | A20 去掉 networknt 测试依赖与差分对照。 |

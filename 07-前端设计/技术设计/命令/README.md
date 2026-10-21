@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.18.0 |
-| 更新日期 | 2026-10-20 |
+| 文档版本 | 1.19.0 |
+| 更新日期 | 2026-10-21 |
 | 本次前端修订基线 | 设计仓 `5fff2e0c0b6c418dc26b7a003569da49d1036e9c` |
 | Runtime 命令契约 | 清单、可选值与执行三个接口见[命令系统 §4.4](../../../01-总体架构/04-CampusClaw命令系统/README.md#command-interaction-flow)；对照实现 `pi-mono-java@628dca25a694d9d056b15f012e1223d68091ab66`，本文标“待实现”的行为在该提交中尚不存在 |
 | pi-mono-java 交互源码基线 | 当前 PR #301 提交见[实现状态](../../source-evidence.md#current-implementation)；早期结构证据保留在 §2.1 |
@@ -219,7 +219,7 @@ Session Event 或服务端。进入命令时暂存的消息及附件在取消或
 用户应从可用选项完成配置，不必手工记住模型 ID。选中 argumentType=options 的命令后，前端调用
 `GET /campusclaw-service/v1/agents/{agentId}/commands/{commandName}/values?sessionId=`（新对话不带 sessionId，待实现），Composer 不显示参数文本框，候选在命令清单的位置弹出（参考 Codex 的模型选择）：标题为“命令 的可选值”，每行左侧序号、中间显示名、右侧标“当前”，默认高亮 currentValue，高亮的 value 即命令草稿；回车、数字键或点击即执行，Esc 或点到弹层外取消命令并恢复消息草稿。currentValue 不在候选中（如已停用的模型）时不高亮，回车不执行，用户需先移动高亮或直接点选。新对话的 currentValue 是创建会话时将采用的初始值。三个命令的弹出列表前端实现待合入；原型用同一弹出列表演示选值、执行和结果展示。
 
-可选值只返回 value，显示名由前端决定：thinking 的 on/off 显示为“开启/关闭”，mode 的 plan/build 显示为“计划/实施”，文案按“命令名 + 值”维护在前端多语言资源中；没有文案的值原样显示。model 的显示名来源待确认（§13）：现有前端接口只给出 modelId，确认前列表直接显示 modelId。
+可选值只返回 value，显示名由前端决定：thinking 的 on/off 显示为“开启/关闭”，mode 的 plan/build 显示为“计划/实施”，文案按“命令名 + 值”维护在前端多语言资源中；没有文案的值原样显示。model 的显示名由 Mate 转发可选值时补充（字段由 Mate 负责人设计，待实现）；有显示名时展示显示名，没有时直接显示 modelId，不由 modelId 猜测供应商或能力。
 
 | 命令 | 控件与数据来源 | 正常调用 | 失败与状态变化 |
 |---|---|---|---|
@@ -319,7 +319,7 @@ GET Session 失败时文本照常展示，状态区按会话读取失败处理�
 页面刷新、Chat 切换或用户关闭后消失。
 
 Builtin 结果统一为 Markdown 文本，结果区复用 Assistant 正文的受限 Markdown 渲染器，语法范围与降级规则见[内容渲染 §9.2](../内容渲染.md#92-支持语法与降级)：
-raw HTML 转义显示，不加载远程图片，相对链接与非 http(s) 协议不可点击。文本按 Accept-Language 由 Runtime 生成，技能描述等作者内容原样出现在文本中，同样受这些规则约束；各命令的文本内容由命令系统维护。
+raw HTML 转义显示，不加载远程图片，相对链接与非 http(s) 协议不可点击。文本中的模型由 Runtime 写成 `[modelId](model:modelId)`，Mate 转发时替换为显示名；未经替换的 `model:` 链接只显示链接文字（modelId）。文本按 Accept-Language 由 Runtime 生成，技能描述等作者内容原样出现在文本中，同样受这些规则约束；各命令的文本内容由命令系统维护。
 
 | 已提交调用 | 结果 | 展示与状态更新 |
 |---|---|---|
@@ -341,6 +341,7 @@ Help 文本中的使用场景只是展示内容，不可点击即发送；未来
 | 命令不存在 / 404 | Composer 内联 | 全部命令草稿 | 自动刷新 GET 一次，不重放 POST |
 | 当前忙 / 409 SESSION_BUSY | Composer 内联 | 全部命令草稿 | 刷新权威 Session 与清单，重新计算可用操作 |
 | Agent 不存在或不可用 / 404 或 422 AGENT_NOT_AVAILABLE | Palette 或结果区 | 全部草稿 | 展示产品错误；仅显式重试 |
+| Agent 配置服务暂不可用 / 503 AGENT_SERVICE_UNAVAILABLE（清单、可选值或新对话建会话，待实现） | Palette 或 Composer 内联 | 全部草稿 | 提示稍后重试；不自动重放，用户可手动重试 |
 | 技能不可用 / 422 SKILL_NOT_AVAILABLE | Composer 内联 | 全部命令草稿 | 说明该技能当前无法使用，刷新清单；仅显式重试 |
 | 事件服务繁忙 / 503 EVENT_SERVICE_UNAVAILABLE 或 RUNTIME_CAPACITY_EXCEEDED | Composer 内联 | 全部命令草稿 | 提示稍后重试；不自动重放，用户可手动再次执行 |
 | 技能受理写入失败 / 500 EVENT_ACCEPTANCE_FAILED | 结果区警告 | 全部命令草稿 | 提示受理失败；仅显式重试 |
@@ -511,8 +512,8 @@ interface CommandGateway {
 | 待确认项 | 未确认前的前端行为 |
 |---|---|
 | Mate 对外命令接口（清单、可选值、执行）的路径、认证和错误映射，由 Mate 负责人另行设计 | 只允许 Mock 与受控开发适配；生产执行 fail closed，不猜测 URL，不回退到 Runtime 或普通 Events |
-| 【缺口】model 选项的显示名来源 | 现有前端接口只返回 modelId，没有已确认的模型名称来源；确认前弹出列表直接显示 modelId，不由 modelId 猜测供应商或能力 |
-| 新对话先执行 /rename 后，Mate 若按第一条消息自动生成标题是否覆盖该名称 | 待与 Mate 负责人确认；前端始终以 GET Session 的名称为准，不在本地保留旧名 |
+| model 的显示名由 Mate 补充（2026-10-21 确认） | 可选值的显示名字段与文本中 `model:` 链接的替换由 Mate 负责人设计；Mate 实现前弹出列表与结果文本都显示 modelId |
+| 自动标题不覆盖 /rename（2026-10-21 确认） | 会话名称只由 rename 或更新会话写入，自动生成标题只能在名称为空时填写；前端始终以 GET Session 的名称为准，不在本地保留旧名 |
 | 变更命令的公共状态准入与事务边界 | 不使用客户端条件或幂等令牌、不要求 ETag；不做乐观修改，结果未知时只读对账 |
 | Mate 公共 Skill request/result 映射 | 内部 B13 不自动升级公共状态；不开放生产 Skill，不显示虚构通用成功卡 |
 | Skill 附件引用、所有权和有效期 | type=skill 允许展示附件入口；公共接入前生产附件提交保持关闭 |
@@ -522,6 +523,7 @@ interface CommandGateway {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.19.0 | 2026-10-21 | 新增 503 AGENT_SERVICE_UNAVAILABLE 的处理；model 显示名由 Mate 补充，结果文本中的 `model:` 链接未替换时显示 modelId；自动标题不覆盖 /rename。 |
 | 1.18.0 | 2026-10-20 | 清单与可选值按 Agent 读取并支持新对话先建会话再执行，rename、model、thinking、mode 参数必填，Builtin 结果统一为 Markdown 文本并在成功后读取 Session，选项显示名由前端提供。 |
 | 1.17.0 | 2026-10-19 | 选项型命令改为在清单位置弹出可选值（参考 Codex 模型选择）：默认高亮当前值，上下键切换，回车、数字键或点击即执行；当前值不可选或运行中不高亮，执行即查询。 |
 | 1.16.0 | 2026-10-18 | 同步 Runtime 选项取值合并为一个接口：新增选项型命令只需 Runtime 登记取值、Mate 补文案，前端仍不改。 |

@@ -7,8 +7,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.18.0 |
-| 更新日期 | 2026-10-20 |
+| 文档版本 | 2.19.0 |
+| 更新日期 | 2026-10-21 |
 | 设计仓基线 | `0eaa70ff365bf4d4e328b3473809341ca4cfc58d` |
 | CampusClaw 分析基线 | `d84dd3d6a306b7587c70b29e0100e741dacef989` |
 | Help 专项源码基线 | `53eff85c7f41de23eb434e027782f5085a8b8e45`；Help 查询、useCases 缓存往返、Agent 级锁、响应投影与 Command POST 已实现 |
@@ -118,7 +118,7 @@ Help 只从 Context 取 Session 绑定，经 AgentHelpQueryService 查询一个�
 GET 的 Help 描述符只有 name/type/description，不返回 argumentType，不允许执行参数；Agent 命令清单按[轻量契约](../README.md#31-get-轻量清单已确认)排序，不按 Session 状态过滤。
 Help 不刷新：读取最近成功发布的完整 Agent 缓存；无快照为 422 AGENT_NOT_AVAILABLE，只有文案缺失则返回说明暂无介绍的文本。
 显示名取 Agent 显示名，空白回退 Agent name；不是 `/rename` 的 Session 名称。介绍与场景原样插入文本，不调用模型、不写历史或模型上下文。
-清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE；不改变上述 POST Help 的 422。
+清单查询不暴露内部准入原因；缓存缺失时先按 Agent 准备完整快照，Agent 不存在为 404 AGENT_NOT_FOUND，准备失败为 422 AGENT_NOT_AVAILABLE，Mate 不可达为可重试的 503 AGENT_SERVICE_UNAVAILABLE（待实现）；不改变上述 POST Help 的 422。
 Skills 不触发刷新：无完整快照返回 AGENT_NOT_AVAILABLE；完整空快照返回说明暂无技能的文本，否则按名称稳定排序列出名称与描述。
 
 ## 5. Name 当前状态
@@ -216,14 +216,14 @@ Builtin 请求拒绝 fileIds 与未知字段；共享入口已按 Builtin/Skill 
 | help | 显示名标题、介绍与使用场景列表；介绍未填写时说明暂无介绍 | displayName、description[]、useCases[] |
 | status | 会话名称、运行状态、模型名称、深度思考、工作模式与累计用量 | 完整 Session |
 | rename | 新名称；同名时说明未修改 | 完整 Session |
-| model | 切换后的模型名称；因模型能力关闭深度思考时一并说明；同值时说明未修改 | 完整 Session；无参时 currentModelId、models[] |
+| model | 切换后的模型（`model:` 链接）；因模型能力关闭深度思考时一并说明；同值时说明未修改 | 完整 Session；无参时 currentModelId、models[] |
 | thinking | 已开启或已关闭；同值时说明未修改 | 完整 Session |
 | mode | 已切换到计划或实施模式；选 build 说明不批准计划、不启动执行 | 完整 Session |
 | compact | 已压缩，或当前没有可压缩的内容 | compacted:boolean |
 | skills | 技能名称与描述列表；没有绑定时说明暂无技能 | skills[{name, description}] |
 
 - 文本为 Markdown，按 Accept-Language 选择 zh-CN 或 en-US 模板，`Content-Language` 返回实际语言；技能描述、Agent 介绍原样插入，不翻译。中英文完整示例由[操作 13](../../01-CampusClaw多Agent运行时/接口契约/操作/13-execute-session-command.json)维护。
-- 模型名称从 Mate 模型管理的模型信息中读取，没有名称时回退 modelId；“模型管理补名称字段”是待实现要求。
+- 模型写成 `[modelId](model:modelId)` 链接，由 Mate 转发时替换为显示名，Runtime 不读取模型显示名，规则见[命令系统 §4.3.2](../README.md#builtin-text)（待实现）。
 - 文本是展示结果，不是可解析契约，前端不得从文本中提取状态。
 - 删除 `ModelCommandResultDTO`、`HelpCommandResultDTO`、`SkillsCommandResultDTO` 与对应只读 VO；Handler 返回内部结果，`CommandResponseAssembler` 只负责生成文本。领域 Entry、事件与同值不写 Entry 的规则不变。
 - 成功结果禁止 command、changed、sourceEventSeq，不用新包装、commandId 或 eventId 替代。
@@ -287,7 +287,7 @@ sync-campusclaw 和 diff --check；最终 HTTP PR 执行完整 mvnw verify。
 - 八项稳定排序、重名启动失败、单次快照、Builtin 不调用 Skill Source。
 - Skills 查询只展示满足 Skill 域严格名称规则的已验证绑定元数据；加载、命令发现和执行的一致性由共享规则验收，不保留宽松加载分支。
 - 缺失/类型错误/未知字段/Slash/非法或未知名称/超长参数。
-- 每个 Builtin 成功只返回 `{text}`，中英文模板与 Content-Language、模型名称回退 modelId、修改/同值场景的文本来自提交快照；所有成功结果无 command/changed/sourceEventSeq，不泄漏内部 DTO。
+- 每个 Builtin 成功只返回 `{text}`，中英文模板与 Content-Language、模型输出为 `model:` 链接、修改/同值场景的文本来自提交快照；所有成功结果无 command/changed/sourceEventSeq，不泄漏内部 DTO。
 - 参数统一检查：不接受参数的命令带参数 400，rename/model/thinking/mode 空参数 400；running 时 model/thinking/mode/compact 一律 409，help/status/rename/skills 可用。
 - Help 无参、空白归一、拒绝非空参数与附件；idle/running 均无副作用；显示名回退与暂无介绍文本。
 - Help 的 useCases 远端 → 保存 → 重载 → 重启往返不丢失；旧缓存显式刷新、刷新失败保留旧值、单次完整快照与并发发布一致性。
@@ -310,6 +310,7 @@ PlantUML 生成/ASCII/XML/链接/行锚点及 diff 检查。图形还需检查�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.19.0 | 2026-10-21 | 清单冷缓存时 Mate 不可达改为 503 AGENT_SERVICE_UNAVAILABLE；文本中的模型改为 `model:` 链接，由 Mate 替换为显示名（均待实现）。 |
 | 2.18.0 | 2026-10-20 | 按 2026-10-20 对齐结论：`name` 改名 `rename`，rename/model/thinking/mode 参数必填，参数统一检查，running 时 model/thinking/mode 一律 409，成功只返回 Markdown 文本（待实现）。 |
 | 2.17.0 | 2026-10-18 | 独立的 GET Models 接口已删除：`/model` 空参查询仍返回 currentModelId、models，取值与 ListSessionCommandValues 的 model 相同。 |
 | 2.16.0 | 2026-10-16 | Help 描述符不返回 argumentType，表示不带参数；原 hints 已移除。 |

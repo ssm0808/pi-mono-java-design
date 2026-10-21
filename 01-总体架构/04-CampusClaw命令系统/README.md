@@ -14,10 +14,10 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.7.0 |
-| 更新日期 | 2026-10-20 |
+| 文档版本 | 2.8.0 |
+| 更新日期 | 2026-10-21 |
 | 模块 | M05 · Command 与 Skill · Slash Command 通用模块 |
-| 设计状态 | 按 Agent 查询清单、type/argumentType、按会话的可选值接口、mode 与描述国际化已在 main `628dca25` 实现；2026-10-20 对齐的清单范围、rename、argumentRequired、按 Agent 的可选值、必填参数、Builtin 文本结果与 Skill 错误码待实现。逐项见 [§8.1](#current-runtime-status) |
+| 设计状态 | 按 Agent 查询清单、type/argumentType、按会话的可选值接口、mode 与描述国际化已在 main `628dca25` 实现；2026-10-20 对齐的清单范围、rename、argumentRequired、按 Agent 的可选值、必填参数、Builtin 文本结果、Skill 错误码与 Mate 不可达的 503 待实现。逐项见 [§8.1](#current-runtime-status) |
 | 源码基线 | `pi-mono-java` main `628dca25a694d9d056b15f012e1223d68091ab66`，2026-10-20 核验三个命令接口；其他能力沿用 [§8.1](#current-runtime-status) 所列核验提交 |
 | 主基线 | OpenCode dev `e25b7abf8955a4fa1b02b935964cb47db4c3a02a`（命令清单路由为 Experimental）；Codex main `b2aa07db8ac892a865de888dd08726680fcf873c`（2026-10-20，新会话设置）与 `6b991972c5b539198dcea9bac4fc14e57559c3af`；pi main `4954d760504c11df9b2cbdc040346107b6a8153d` |
 
@@ -27,15 +27,15 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 
 ### 评审结论
 
-2026-10-20 Lotus 逐个接口对齐了 ListAgentCommands、ListAgentCommandValues 与 ExecuteSessionCommand，结论见 T9～T13；其余章节尚未整体评审。
+2026-10-20 Lotus 逐个接口对齐了 ListAgentCommands、ListAgentCommandValues 与 ExecuteSessionCommand，结论见 T1～T3、T9～T12；其余章节尚未整体评审。
 
 ### 评审 Todo
 
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
 | T1 | ~~清单接口与范围~~ 已确认（2026-10-20）：`GET /agents/{agentId}/commands?sessionId=`，不填 sessionId 时返回 help、rename、model、thinking、mode、skills 与技能命令，填写时返回完整命令；不按运行状态过滤 | Lotus | [D1](#key-decisions) · [§4.1](#31-get-轻量清单已确认) |
-| T2 | 确认冷缓存时清单按创建会话的方式准备 Agent（可能访问 Mate），错误码与创建会话一致 | Lotus | [D2](#key-decisions) |
-| T3 | 确认旧路径直接下线，不保留兼容期（含 `name` 改为 `rename`、可选值接口改为 Agent 路径） | Lotus | [§5.3](#compatibility) |
+| T2 | ~~冷缓存时怎样准备 Agent~~ 已确认（2026-10-21）：清单与可选值按创建会话的方式准备 Agent，可能访问 Mate；Mate 不可达返回可重试的 503 AGENT_SERVICE_UNAVAILABLE，创建会话同样改 | Lotus | [D2](#key-decisions) · [§4.1](#31-get-轻量清单已确认) · [§4.2](#command-values) |
+| T3 | ~~旧路径是否保留兼容期~~ 已确认（2026-10-21）：直接下线，含 `name` 改为 `rename`、可选值接口改为 Agent 路径 | Lotus | [§5.3](#compatibility) |
 | T5 | ~~Skill 执行错误码设计与实现不一致~~ 已确认（2026-10-20）：错误码准确对应原因，受理阶段与普通消息一致，见 [§4.3.3](#command-errors) | Lotus | [F11](#failure-recovery) |
 | T6 | ~~Builtin 描述按 Accept-Language 本地化的契约~~ 已确认（2026-10-16）：Builtin 国际化，Skill 原样返回 | Lotus | [§4.1](#31-get-轻量清单已确认) · [源码证据 §6](source-evidence.md#331-清单字段与语言专项核对) |
 | T8 | ~~参数形态与可选值的归属~~ 已确认（2026-10-17）：Runtime 清单返回 argumentType，不返回 hints 或占位文字。已调整（2026-10-20）：可选值接口改为按 Agent 查询，sessionId 可选 | Lotus | [D7](#key-decisions) · [§4.2](#command-values) |
@@ -43,7 +43,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 | T10 | ~~参数是否可省略~~ 已确认（2026-10-20）：`name` 改名 `rename`；rename、model、thinking、mode 参数必填，不再有无参查询；技能命令参数可选；清单新增 argumentRequired | Lotus | [D7](#key-decisions) · [§4.3.1](#command-arguments) |
 | T11 | ~~Builtin 响应结构~~ 已确认（2026-10-20）：Builtin 成功只返回 Markdown 文本，前端随后读取 Session 刷新状态，不解析文本 | Lotus | [D4](#key-decisions) |
 | T12 | ~~Mate 公共命令接口~~ 已确认（2026-10-20）：从本设计删除，由 Mate 负责人另行设计；原 T4、T7 关闭 | Lotus | [§4](#interface-protocol) |
-| T13 | Mate 若按第一条消息自动生成对话标题，可能覆盖新对话里先执行的 /rename，需与 Mate 负责人确认 | Lotus | [§4.4](#command-interaction-flow) |
+| T13 | ~~自动标题是否覆盖 /rename~~ 已确认（2026-10-21）：不覆盖。会话名称只由 rename 或更新会话写入；任何自动生成标题的逻辑只能在名称为空时填写 | Lotus | [§4.4](#command-interaction-flow) |
 
 ### 需求信息
 
@@ -129,7 +129,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
 | D1 | 命令清单归属谁，新对话展示哪些命令 | OpenCode `command.list` 按实例所在的工作位置列出，不带会话；Codex `skills/list` 按工作路径（cwd）列出；pi `get_commands` 在会话进程内，因为一个 RPC 进程就是一个会话 | 命令来源只取决于 Agent：固定 Builtin 加 Agent 绑定的 Skill；新对话在发出第一条消息前就要能展示 `/` 清单，并能设置模型、深度思考与模式 | 清单归属 Agent：`GET /agents/{agentId}/commands` 接受可选查询参数 sessionId。判断标准是“执行后会对新会话产生作用，或帮助用户了解 Agent”：不填时返回 help、rename、model、thinking、mode、skills 与技能命令，status、compact 只在填写时出现。每个 Builtin 在定义上声明是否只用于已有会话。执行仍归属会话，`POST /sessions/{sessionId}/command` 在锁内最终准入 | 带 sessionId 时多一次会话查询；完整清单不隐藏运行中不可执行的命令，前端必须按 [§4.3.1](#command-arguments) 集中限制 |
-| D2 | 清单遇到本实例没有 Agent 完整缓存时怎么办 | OpenCode、pi 在本地进程启动时加载命令来源，没有远端回源；Codex 可显式 `force_reload` | 按 Agent 查询时可能还没有任何会话，冷缓存是常态；不能返回残缺清单 | 与创建会话共用 `AgentRuntimeManager.prepare`：有完整缓存直接用，缺失时在 Agent 锁内从 Mate 准备一次；不提供强制刷新；错误码与创建会话一致 | 首次查询可能访问 Mate，耗时变长；Mate 暂时不可用时返回 422 而不是可重试的 503，前端提供手动重试 |
+| D2 | 清单遇到本实例没有 Agent 完整缓存时怎么办 | OpenCode、pi 在本地进程启动时加载命令来源，没有远端回源；Codex 可显式 `force_reload` | 按 Agent 查询时可能还没有任何会话，冷缓存是常态；不能返回残缺清单 | 与创建会话共用 `AgentRuntimeManager.prepare`：有完整缓存直接用，缺失时在 Agent 锁内从 Mate 准备一次；不提供强制刷新；错误码与创建会话一致：Mate 超时、连接失败或返回 5xx 为可重试的 503 AGENT_SERVICE_UNAVAILABLE，Agent 停用、Mate 返回 4xx 或配置非法为 422 AGENT_NOT_AVAILABLE（待实现） | 首次查询可能访问 Mate，耗时变长；Mate 故障时新对话的清单、可选值与创建会话一起不可用 |
 | D3 | 清单与执行如何保持一致 | OpenCode 执行时按名称重新取 Command；pi 每次 prompt 重新展开 Skill | 清单可能过期；绑定和会话状态随时变化 | GET 与 POST 各自解析一份请求级快照，按名称查找同一 Definition；描述与会话无关，准入只在执行时按会话检查，`ResolvedCommandDTO` 不再携带可用性 | 每次执行都重新解析来源，不能复用 GET 的结果 |
 | D4 | Builtin 与技能命令用什么响应 | OpenCode 会话命令 POST 返回 JSON 消息，事件流独立；pi 的 Skill 展开后作为普通 prompt | Builtin 是一次性修改或说明；技能命令会跑完整一轮推理并可能等待确认；前端不按命令名分支 | 同一 POST 入口：Builtin 成功只返回 `{text}`，内容为按 Accept-Language 生成的 Markdown，前端统一展示后 `GET /sessions/{sessionId}` 刷新状态；技能命令返回与普通消息相同的请求级 SSE | 前端每次 Builtin 后多一次 GET Session；文本不是可解析契约，需要状态时必须读 Session |
 | D5 | 是否保存通用命令记录 | DeepSeek Harness 有 CommandExecution 与命令日志（alpha） | 现有会话、领域 Entry 和事件已能对账 | 不生成 commandId，不保存通用命令生命周期；状态变化复用会话和既有领域 Entry | 无法按命令维度审计，需要时只能从领域 Entry 与事件推断 |
@@ -241,7 +241,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 
 - 执行顺序：读取会话、去掉 arguments 首尾空白、按名称精确查找、按定义统一检查参数（[§4.3.1](#command-arguments)）、准入、锁内复核、调用 Handler、生成文本。合法但未注册的名称为 COMMAND_NOT_FOUND；Builtin 名称正则不覆盖 `skill:*`。
 - 参数检查集中在 `CommandExecutionService`，删除 Help、Status、Skills、Compact 服务里各自的检查（实现基线中 Help 用 `isBlank`，其余用 `isEmpty`，口径不一致，见 [源码证据 §9](source-evidence.md#slash-alignment-evidence)）。待实现。
-- 成功结果只有 `{text}`：按 Accept-Language 选择 zh-CN 或 en-US 模板，模型名称取自 Mate 模型管理的模型信息，没有名称时回退 modelId；结果不含会话资源、command、changed、sourceEventSeq，也不返回 ETag。各命令的文本内容见 [§4.3.2](#builtin-text)。删除 `ModelCommandResultDTO`、`HelpCommandResultDTO`、`SkillsCommandResultDTO` 等按命令区分的结果结构；领域 Entry、事件与同值不写 Entry 的规则不变。待实现。
+- 成功结果只有 `{text}`：按 Accept-Language 选择 zh-CN 或 en-US 模板，模型写成 `[modelId](model:modelId)` 链接，由 Mate 转发时替换为显示名（见 [§4.3.2](#builtin-text)）；结果不含会话资源、command、changed、sourceEventSeq，也不返回 ETag。各命令的文本内容见 [§4.3.2](#builtin-text)。删除 `ModelCommandResultDTO`、`HelpCommandResultDTO`、`SkillsCommandResultDTO` 等按命令区分的结果结构；领域 Entry、事件与同值不写 Entry 的规则不变。待实现。
 - Compact 断线不取消，调用方通过 GET Session/Events 对账，不自动重放；Mate 凭据只在本次 Active Holder 中保留到执行结束，见 [内置命令 §7](01-内置命令/README.md#7-compact-生命周期)。
 
 <a id="execute-skill-sequence"></a>
@@ -303,7 +303,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 - 响应 `Cache-Control: no-store`，不返回 ETag。前端可在页面内存中按 Agent 与范围（有无会话）复用清单（见前端 §5），不做持久缓存。
 - 技能命令都允许可选附件，Builtin 都不接收附件；不按 Skill 建附件白名单，允许附件不代表任意格式都能处理。
 
-错误（校验顺序见 [§3.3](#list-commands-sequence)）：400 INVALID_AGENT_ID / INVALID_SESSION_ID，404 SESSION_NOT_FOUND（不回退为新对话清单），404 AGENT_NOT_FOUND，422 AGENT_NOT_AVAILABLE（不返回残缺清单）。
+错误（校验顺序见 [§3.3](#list-commands-sequence)）：400 INVALID_AGENT_ID / INVALID_SESSION_ID，404 SESSION_NOT_FOUND（不回退为新对话清单），404 AGENT_NOT_FOUND，422 AGENT_NOT_AVAILABLE（不返回残缺清单），503 AGENT_SERVICE_UNAVAILABLE（冷缓存时 Mate 不可达，带 Retry-After，新增）。
 
 <a id="command-values"></a>
 
@@ -320,7 +320,7 @@ Builtin 的逐命令行为见 [内置命令](01-内置命令/README.md)，Skill 
 - 不填 sessionId 时，currentValue 就是创建会话时会得到的初始值，前端据此勾选。
 - 不填 sessionId 时 thinking 只按默认模型计算，不接受 modelId 参数，以保持所有选项型命令共用一个结构。新对话里用户执行 /model 时会先建会话；如果切到不支持深度思考的模型，会话的 thinking 按现有规则自动关闭，之后再打开 /thinking 读到的就是会话的真实值。
 - 可选值是读取时的观察结果，不缓存，不是执行授权；每次打开选项都重新读取，提交的值仍由执行入口终判。
-- 错误：400 INVALID_AGENT_ID（新增）/ INVALID_SESSION_ID，404 SESSION_NOT_FOUND，404 AGENT_NOT_FOUND（新增），404 COMMAND_VALUES_NOT_FOUND（commandName 不是 options 命令），422 AGENT_NOT_AVAILABLE（新增，不填 sessionId 时需要准备 Agent 快照），503 MANAGER_UNAVAILABLE（model、thinking 无法读取 Model Manager；mode 不受影响）。
+- 错误：400 INVALID_AGENT_ID（新增）/ INVALID_SESSION_ID，404 SESSION_NOT_FOUND，404 AGENT_NOT_FOUND（新增），404 COMMAND_VALUES_NOT_FOUND（commandName 不是 options 命令），422 AGENT_NOT_AVAILABLE（新增，不填 sessionId 时需要准备 Agent 快照），503 AGENT_SERVICE_UNAVAILABLE（新增，冷缓存时 Mate 不可达），503 MANAGER_UNAVAILABLE（model、thinking 无法读取 Model Manager；mode 不受影响）。
 
 <a id="execute-command"></a>
 
@@ -361,22 +361,23 @@ mode 的业务与事务见 [内置命令 §6.1](01-内置命令/README.md#mode-c
 Builtin 成功只返回可读文本，前端用同一种方式展示，成功后统一 `GET /sessions/{sessionId}` 刷新标题、模型、模式等界面状态（待实现）。
 
 ```json
-{ "resCode": "0", "resMsg": "success", "result": { "text": "已切换到 **园区工单分析模型**。该模型不支持深度思考，已关闭深度思考。" } }
+{ "resCode": "0", "resMsg": "success", "result": { "text": "已切换到 **[model_011CZq2GkV8aD4NwP7sLmXfR](model:model_011CZq2GkV8aD4NwP7sLmXfR)**。该模型不支持深度思考，已关闭深度思考。" } }
 ```
 
 | 命令 | 文本内容（zh-CN 示例） |
 |---|---|
 | help | Agent 显示名、用途和使用场景列表（Markdown 标题与列表）；介绍未填写时为“暂无介绍。” |
-| status | 会话名称、运行状态、模型名称、深度思考、工作模式与累计用量 |
+| status | 会话名称、运行状态、模型（模型链接）、深度思考、工作模式与累计用量 |
 | rename | “已将会话命名为“园区网络故障分析”。”；同名时“会话名称已是“…”，未修改。” |
-| model | “已切换到 **园区工单分析模型**。”；因模型能力关闭深度思考时一并说明；同值时“当前已是 **…**，未修改。” |
+| model | “已切换到 **（模型链接）**。”；因模型能力关闭深度思考时一并说明；同值时“当前已是 **…**，未修改。” |
 | thinking | “已开启深度思考。”或“已关闭深度思考。”；同值时说明未修改 |
 | mode | “已切换到计划模式。”或“已切换到实施模式。不会批准已有计划，也不会启动执行。” |
 | compact | “已压缩当前会话的上下文。”或“当前会话没有可压缩的内容。” |
 | skills | 技能名称与描述列表；没有绑定时“当前智能体没有可用的技能。” |
 
 - 文本为 Markdown，按 Accept-Language 选择 zh-CN 或 en-US 模板，`Content-Language` 返回实际语言；技能名称、描述与 Agent 介绍原样插入，不翻译。中英文完整示例见 [执行会话命令契约](../01-CampusClaw多Agent运行时/chat-api-review.html#ExecuteSessionCommand)。
-- 模型名称从 Mate 模型管理的模型信息中读取，没有名称时回退 modelId。“模型管理补名称字段”是待实现要求。
+- 模型统一写成 Markdown 链接 `[modelId](model:modelId)`，链接文字与 `model:` 后都是 modelId；modelId 符合 `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`，不含空白与括号，无需转义。Runtime 不读取模型显示名，也不为此额外请求 Mate（2026-10-21 确认，待实现）。
+- Mate 转发时把每个 `model:` 链接整段替换为该模型的显示名，查不到名称时替换为 modelId；替换规则与可选值的显示名字段由 Mate 负责人设计。未经替换的链接，前端按纯文本显示链接文字，不渲染为可点击链接。
 - 文本是展示结果，不是可解析契约，前端不得从文本中提取状态。
 
 <a id="command-errors"></a>
@@ -438,7 +439,7 @@ Builtin 成功只返回可读文本，前端用同一种方式展示，成功后
 - 已有对话的模型不支持深度思考时，第 3 步的 values 只有 off；提交 on 仍由第 4 步的准入拒绝（422 THINKING_NOT_SUPPORTED）。
 - 新对话第 4 步创建会话成功、命令执行失败时，不回滚会话，对话保留，可重试命令（见 F12）。
 - 清单和可选值都只是读取时的观察结果，不是执行授权；执行入口在会话锁内最终准入。
-- 新对话先执行 /rename 后，若 Mate 按第一条消息自动生成标题，可能覆盖用户的命名，待与 Mate 负责人确认（T13）。
+- 会话名称只由 /rename 或更新会话写入，发送第一条消息不改名称。任何自动生成标题的逻辑（无论放在 Runtime 还是 Mate）只能在名称为空时填写，不能覆盖用户已命名的会话（T13）。
 
 ## 5. 架构指标
 
@@ -466,7 +467,8 @@ Builtin 成功只返回可读文本，前端用同一种方式展示，成功后
 | F1 | agentId 或 sessionId 格式错误 | UC1 参数校验 | 未发生 | CampusClaw | 400 INVALID_AGENT_ID / INVALID_SESSION_ID | 清单或可选值读取失败，保留草稿 | — |
 | F1a | 会话不存在、已删除或不属于该 Agent | UC1 确认会话归属 | 未发生 | CampusClaw | 404 SESSION_NOT_FOUND，不回退为新对话清单 | 前端刷新会话 | — |
 | F2 | Agent 不存在 | UC1 准备快照 | 未发生 | CampusClaw | 404 AGENT_NOT_FOUND | 提示 Agent 不存在 | — |
-| F3 | Agent 不可用或从 Mate 准备失败 | UC1 准备快照 | 未发生（失败时保留原有缓存） | CampusClaw | 422 AGENT_NOT_AVAILABLE | 显示“重试”，重试只调 GET | Mate 短暂故障也是 422，不带 Retry-After |
+| F3 | Agent 停用、Mate 返回 4xx 或配置非法 | UC1 准备快照 | 未发生（失败时保留原有缓存） | CampusClaw | 422 AGENT_NOT_AVAILABLE | 提示 Agent 不可用，仅显式重试 | — |
+| F3a | 冷缓存时 Mate 超时、连接失败或返回 5xx | UC1 准备快照 | 未发生（失败时保留原有缓存） | CampusClaw | 503 AGENT_SERVICE_UNAVAILABLE，带 Retry-After（待实现） | 提示稍后重试，重试只调 GET | 实现基线折叠为 422 AGENT_NOT_AVAILABLE |
 | F4 | 会话不存在 | UC2/UC3 读取会话 | 未发生 | CampusClaw | 404 SESSION_NOT_FOUND | 前端刷新会话 | — |
 | F5 | 清单显示可用但会话已运行 | UC2/UC3 锁内准入 | 未发生 | CampusClaw | 409 SESSION_BUSY | 刷新会话状态，保留草稿，等待用户再次操作 | 清单与会话状态不是跨请求原子快照 |
 | F6 | 命令或技能已不再绑定 | UC2/UC3 解析 | 未发生 | CampusClaw | 404 COMMAND_NOT_FOUND | 前端标记清单过期并重新读取 | — |
@@ -490,7 +492,7 @@ Builtin 成功只返回可读文本，前端用同一种方式展示，成功后
 | 指标 | 为什么需要 | 告警条件 |
 |---|---|---|
 | 清单查询触发 Mate 准备的次数与耗时 | D2 接受了首次查询访问 Mate 的代价 | 【缺口】阈值待压测后确定 |
-| 清单查询 AGENT_NOT_AVAILABLE 比例 | 区分 Agent 配置问题与 Mate 故障 | 【缺口】 |
+| 清单查询 AGENT_NOT_AVAILABLE 与 AGENT_SERVICE_UNAVAILABLE 次数 | 分别反映 Agent 配置问题与 Mate 故障 | 【缺口】 |
 | 命令 POST 的 SESSION_BUSY 次数 | D1 把运行中的过滤交给前端，比例升高说明前端状态规则失效 | 【缺口】 |
 | 只有命令、没有消息的会话数量 | D8 接受了新对话执行命令生成空会话的代价 | 【缺口】 |
 
@@ -529,7 +531,7 @@ Builtin 成功只返回可读文本，前端用同一种方式展示，成功后
 | 可选值 | 带 sessionId 返回会话当前值；不带时 model 为默认模型、thinking 为 on、mode 为 Agent 发布值，且与创建会话得到的初始值一致；非 options 命令 404；Agent 不存在 404、不可用 422 |
 | 描述与准入 | `describe()` 不依赖会话；Registry 只按名称查找；运行中 model/thinking/mode/compact 与技能命令被 POST 拒绝，help/status/rename/skills 不受影响 |
 | 参数 | 去首尾空白后统一检查：不接受参数的命令带参数 400，必填参数为空 400，技能命令空参数可执行 |
-| 执行 | 每个 Builtin 只返回 `{text}`、中英文模板与 `Content-Language`、模型名称回退 modelId、同值不写 Entry、无通用命令记录 |
+| 执行 | 每个 Builtin 只返回 `{text}`、中英文模板与 `Content-Language`、模型写成 `model:` 链接、同值不写 Entry、无通用命令记录 |
 | 技能命令 | 正常 SSE、确认分段、原消息中断、公开历史不含正文、正文为空 422 SKILL_NOT_AVAILABLE、首帧背压 503 EVENT_SERVICE_UNAVAILABLE、受理写入失败 500 EVENT_ACCEPTANCE_FAILED 且日志带原始异常 |
 | 前端 | 新对话只传 agentId 读取清单与可选值、执行前先建会话、Builtin 后读取 GET Session、按 argumentRequired 禁止空提交、409 后保留草稿、未命中 Slash 不发普通消息 |
 | 设计门禁 | 运行 `validate-global-class-view.py`、`validate-chat-http-v1.py` 与 `check-diagrams.py --render`；这些检查不证明视觉可读性 |
@@ -565,7 +567,7 @@ Builtin 成功只返回可读文本，前端用同一种方式展示，成功后
 | Skill 统一结构与版本快照 | 待实现 | main `628dca25`：`SkillCommandSource` 已注入 Registry，但主代码只按 BUILTIN 解析，清单绕过 Registry 读取技能 |
 | Skill 使用统计 | 部分实现 | `dad4433d`，见 [统计源码证据](03-Skill加载统计/source-evidence.md) |
 | Claw 前端 Slash | 已实现；新对话、argumentRequired 与文本结果待实现 | 见 [前端命令设计](../../07-前端设计/技术设计/命令/README.md) |
-| 模型管理补名称字段 | 待实现 | Builtin 文本中的模型名称依赖该字段，未提供时回退 modelId |
+| 模型显示名 | 待实现 | Runtime 文本按 `model:` 链接输出；Mate 转发时替换文本中的链接并为可选值补显示名，由 Mate 负责人设计 |
 
 未运行 Java、数据库或前端测试；实现存在不等于契约验收完成。
 
@@ -577,6 +579,7 @@ Builtin 成功只返回可读文本，前端用同一种方式展示，成功后
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.8.0 | 2026-10-21 | 确认 T2、T3、T13：冷缓存时 Mate 不可达改为 503 AGENT_SERVICE_UNAVAILABLE，旧路径直接下线，自动标题不覆盖已有会话名称；文本中的模型改为 `model:` 链接，由 Mate 替换为显示名。 |
 | 2.7.0 | 2026-10-20 | 按与 Lotus 逐个接口对齐的结论更新清单范围、rename、argumentRequired、按 Agent 的可选值、必填参数、Builtin 文本结果与错误码，并删除 Mate 聊天命令接口。 |
 | 2.6.0 | 2026-10-19 | 新增 §3.2.1，说明命令核心采用的设计模式、命名约定与基线对照，并按实现 PR #364 更新 §8.1 状态。 |
 | 2.5.0 | 2026-10-18 | 按 Lotus 决定，model、thinking、mode 的可选值合并为一个 Runtime 接口 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），替代 models、thinking-values 与 modes；D7、T8、§4、§4.4 同步。 |

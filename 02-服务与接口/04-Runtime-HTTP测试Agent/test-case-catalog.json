@@ -118,7 +118,8 @@
         {"id": "HTA-SES-CREATE-002", "priority": "P0", "layer": "service", "status": "active", "scenario": "Agent is missing, unavailable, or has no valid default model", "variants": ["AGENT_NOT_FOUND", "AGENT_NOT_AVAILABLE", "AGENT_MODEL_NOT_CONFIGURED"], "oracle": ["declared HTTP status and resCode", "no Session is persisted", "no session_id is exposed"]},
         {"id": "HTA-SES-CREATE-003", "priority": "P0", "layer": "service", "status": "active", "scenario": "Model Manager is unavailable", "oracle": ["HTTP 503", "resCode is MANAGER_UNAVAILABLE", "Retry-After is present", "no Session is persisted"]},
         {"id": "HTA-SES-CREATE-004", "priority": "P1", "layer": "database", "status": "active", "scenario": "runtime assembly or persistence fails before commit", "oracle": ["HTTP 500 SESSION_INITIALIZATION_FAILED", "database has no partial Session rows", "in-memory holder is released"]},
-        {"id": "HTA-SES-CREATE-005", "priority": "P1", "layer": "process", "status": "active", "scenario": "repeat a successful create request", "oracle": ["two distinct session_id values", "both Sessions are independently readable"]}
+        {"id": "HTA-SES-CREATE-005", "priority": "P1", "layer": "process", "status": "active", "scenario": "repeat a successful create request", "oracle": ["two distinct session_id values", "both Sessions are independently readable"]},
+        {"id": "HTA-SES-CREATE-006", "priority": "P0", "layer": "service", "status": "active", "scenario": "no complete Agent cache and Mate times out, refuses the connection, or returns 5xx", "oracle": ["HTTP 503", "resCode is AGENT_SERVICE_UNAVAILABLE", "Retry-After is present", "no Session is persisted", "a Mate 4xx still returns 422 AGENT_NOT_AVAILABLE"]}
       ]
     },
     {
