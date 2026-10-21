@@ -9,7 +9,7 @@
     "method": "DELETE",
     "path": "/schedules/{scheduleId}",
     "summary": "删除定时任务",
-    "description": "用户不再需要某个定时任务时删除它，之后不再产生新的运行。Mate 把用户的 access-token 转给 Claw，Claw 按任务的创建者判断归属，不属于当前用户与不存在一样返回 404；可见时 Claw 在同一事务内删除，Mate 返回 Claw 删除时的最后配置，sessionId 改名为 chatId。该任务的 Run 随之删除，已生成的会话、定时会话登记与 Chat 记录保留，已受理的运行不取消。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
+    "description": "用户不再需要某个定时任务时删除它，之后不再产生新的运行。Mate 把用户的 access-token 转给 Claw，Claw 按任务的创建者判断归属，不属于当前用户与不存在一样返回 404；可见时 Claw 在同一事务内删除，Mate 返回 Claw 删除时的最后配置，sessionId 改名为 chatId。该任务的 Run 随之删除，已生成的会话、定时会话登记与 Chat 映射保留，已受理的运行不取消。本接口不定义请求头，前端调用时 Mate 框架已完成 access-token 校验。",
     "parameters": [
       {
         "in": "path",

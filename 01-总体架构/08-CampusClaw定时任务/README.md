@@ -1865,7 +1865,7 @@ Claw 侧接口为 `ScheduleSessionRegistry`。登记传 `sessionId`、`scheduleI
 | 登记 `registerSession` | 接口配置的任务每次运行：Claw 固定新 Session 的 ID 后、数据库事务外、准备 Runtime 之前 | Mate 返回的五个字段（sessionId、scheduleId、runId、agentId、userId）与请求相同即成功，继续受理，chatId 忽略；Mate 明确拒绝（该 sessionId 已用不同的 scheduleId 或 runId 登记）或返回不同登记时，本次不受理，Run 记为 `session_creation_rejected_error`；结果未知时转只读核对，不重发登记 |
 | 只读核对 `findSessionRegistration` | 登记结果未知时，在准备期限内反复核对 | 核对到 sessionId、scheduleId、runId 相同的登记即继续受理（agentId、userId 取自本次请求）；期限内仍未知则本次不受理，Run 记为 `unknown_error`，不换新的 Session ID 重试 |
 
-Mate 按请求中的 userId 保存这条归属，并以 sessionId 为 chatId 建立 Chat 记录，之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 侧设计 §3.6、§3.7](../../02-服务与接口/08-CampusMate定时任务/README.md#registration-sequence) 和 [§5.2.1](#failure-recovery) 的 F14。
+Mate 按请求中的 userId 保存这条归属并建立 Chat 映射，之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 侧设计 §3.6、§3.7](../../02-服务与接口/08-CampusMate定时任务/README.md#registration-sequence) 和 [§5.2.1](#failure-recovery) 的 F14。
 
 **当前限制。** Mate 尚未提供登记接口，Claw 的默认实现一律返回服务不可用。因此在 Mate 接口上线或部署方替换实现之前，接口配置的任务到点后会在准备期限内核对失败，Run 记为 `unknown_error`，不会运行；对话中创建的任务不受影响。
 
@@ -1899,7 +1899,7 @@ Claw 需要知道“当前是哪个用户”的地方，统一用该用户的 ac
 - Claw 不持久化凭据引用或 Token。模型一次返回中有需要凭据的工具调用，并且至少一个通过可信解析、参数校验和权限判断时，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；只含无凭据工具、参数错误或权限 ASK 时不取。取 Token 失败时本批需要凭据的工具都不执行，按工具失败返回模型。秘密只在受限执行内存中使用，不进入模型、metadata、Schedule/Run、事件或日志。普通 HTTP 消息仍沿用 [M06 当次 Header 快照规则](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)。凭据来源按根执行的入口区分，不按 Session 的来源区分：定时触发的根执行（含其 Child）用统一账号 access-token；用户在定时任务创建的 Session 里继续对话时，新消息是普通 HTTP 根执行，只用该请求 Header 中的用户凭据，不向 Mate 取统一账号 Token，也不沿用定时执行的 Token；机制见 [§3.11](#session-credentials)。
 - metadata 不进入模型输入，不作为身份、权限或凭据依据。
 - 资源级不可见统一返回 404，不泄露存在性。
-- Mate 公共展示边界（非本次 Claw 契约）：公共任务详情使用公共任务/Run 标识与 Chat 链接；基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId，Mate 只把 sessionId 字段改名为 chatId，值不变；executionId 不直接暴露。
+- Mate 公共展示边界（非本次 Claw 契约）：公共任务详情使用公共任务/Run 标识与 Chat 链接，基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId，Mate 只把 sessionId 字段改名为 chatId，值不变；executionId 不直接暴露。
 - **Claw 对 Mate 的调用边界（首版）。** Claw 只调用三个接口：Session 归属登记与核对、统一账号 access-token，以及管理接口按用户的 access-token 查询用户 ID，接口、时机与失败处理集中见 [§4.8](#mate-calls)。用户功能权限由 Mate 管理入口在调用 Claw 之前检查（T8）；任务与用户的关联保存在 Claw 任务的 user_id，配额也由 Claw 检查；Claw 不回调 Mate 做 authorize 或 registerSchedule，也不保存授权引用。PR #332 的本地身份链路和这类反向调用按本条移除，见[职责核验](source-evidence.md#mate-boundary-review)；归属登记的 Mate 内部契约待实现（T7）。
 
 ### 5.2 稳定性
@@ -2143,7 +2143,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 0.72.0 | 2026-10-21 | Mate 侧的 chatId 直接复用 sessionId（Mate D4），§5.1 的 Mate 公共展示边界与 §4.8.2 的登记说明同步：Mate 只把 sessionId 字段改名为 chatId，不再有“结果入口准备中”。Claw 接口不变。 |
+| 0.72.0 | 2026-10-21 | Mate 侧的 chatId 直接复用 sessionId（Mate D4），§5.1 的 Mate 公共展示边界同步：Mate 只把 sessionId 字段改名为 chatId，不再有“结果入口准备中”。Claw 接口不变。 |
 | 0.71.0 | 2026-10-21 | Mate 不再保存任务归属表 `t_schedule`，任务归属以 Claw `t_schedule.user_id` 为准（D9）：全部 10 个管理接口带 `access-token` 请求头，Claw 查出用户后按 user_id 判断归属，不属于当前用户的任务返回 404、写操作在锁内复查（§4.2 归属判断）；创建配额从 Mate 移到 Claw（§4.4，`campusclaw.schedule.max-api-schedules-per-user` 默认 20，422 `SCHEDULE_QUOTA_EXCEEDED`，对话中创建的任务不计入）；Session 归属登记请求增加 userId（§4.8.2）；删除已不可能出现的 403 功能资格错误。 |
 | 0.70.0 | 2026-10-21 | 列表改为按用户直接查询（D9，关闭 T10）：`t_schedule` 增加不可修改的 `user_id` 与索引 `(user_id, updated_at DESC, id)`；创建、任务列表与 Run 列表增加 `access-token` 请求头，由 Claw 调用户查询接口得到用户 ID（§4.8.3，接口待补充），Mate 不再拉取全部页；Cron 工具创建任务时用本轮 access-token 查询；资源返回只读 userId；缺少或被拒绝的 token 返回 401，查询不可用返回 503。 |
 | 0.69.0 | 2026-10-20 | 任务列表与 Run 列表的 result 增加 total：与筛选条件匹配的总数，与当前页在同一个可重复读事务内 COUNT。 |
