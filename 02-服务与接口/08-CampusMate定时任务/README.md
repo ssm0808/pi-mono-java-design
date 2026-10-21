@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.9.0 |
+| 文档版本 | 1.10.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -337,7 +337,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 |---|---|
 | 2～6 | 可见性检查，同 [§3.5.2](#update-sequence) |
 | 7～8 | 调用 Claw 删除 |
-| 9～11 | Claw 返回成功后删除 `t_schedule` 中的记录；Claw 返回 404 时同样删除记录并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留 |
+| 9～11 | Claw 返回成功后删除 `t_schedule` 中的记录；Claw 返回 404 时同样删除记录并返回 404。已生成的 Session、定时会话登记与 Chat 映射保留；接口定义见 [§4.2.10](#delete-schedule-api) |
 
 <a id="run-sequence"></a>
 
@@ -494,7 +494,7 @@ Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己�
 | Run 列表 | GET `/schedule-runs` | GET `/schedule-runs` | 转发 access-token；指定任务时先检查可见性（[§3.4.2](#run-list-sequence)） |
 | Run 详情 | GET `/schedule-runs/{runId}` | GET `/schedule-runs/{runId}` | 按所属任务检查可见性（[§3.5.7](#run-get-sequence)） |
 
-路径和资源名与 Claw 一致。创建、列表、详情与部分更新接口的完整定义见 [§4.2.6](#create-schedule-api)～[§4.2.9](#update-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
+路径和资源名与 Claw 一致。创建、列表、详情、部分更新与删除接口的完整定义见 [§4.2.6](#create-schedule-api)～[§4.2.10](#delete-schedule-api)；其余接口的请求与响应报文以 Claw [§4.4](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) 为准，按 [§4.2.3](#resource-projection) 投影，[M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) 描述的报文语义（如 `schedule:null` 表示仅手动运行）直接适用于本接口。
 
 <a id="resource-projection"></a>
 
@@ -671,6 +671,39 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 | 500 / SCHEDULE_UPDATE_FAILED | Claw 内部处理失败，没有保存任何修改 | 更新定时任务失败。 / Failed to update the schedule. |
 | 500 / Mate 通用错误码 | Mate 读取 `t_schedule` 或 Chat 映射失败 | 沿用 Mate 通用文案 |
 | 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败，或结果未知（超时、断连）；不自动重试 | 定时任务服务暂不可用，请刷新后确认修改是否已保存。 / The schedule service is temporarily unavailable. Refresh to check whether your changes were saved. |
+
+<a id="delete-schedule-api"></a>
+
+#### 4.2.10 删除定时任务
+
+`DELETE /mate-service/v1/schedules/{scheduleId}`。用户不再需要“工作日园区告警汇总”时删除它，之后不再产生新的运行。Mate 先按 [§3.5](#detail-write) 检查可见性，不可见直接返回 404、不调用 Claw；可见则调用 Claw 删除，成功后删除 `t_schedule` 中的记录，投影 Claw 返回的删除回执，时序见 [§3.5.3](#delete-sequence)。示例由 [接口 HTML](schedule-api-review.html) 展示，源模型为 [05-delete-schedule.json](接口契约/操作/05-delete-schedule.json)。本接口不定义请求头，不转发 access-token，没有 query 参数和请求体。
+
+| 参数 | 规定 |
+|---|---|
+| path.scheduleId | 必填；创建或列表返回的任务 ID，原样传回，不按名称查找；格式由 Claw 校验 |
+
+**成功响应**：HTTP 200，`Cache-Control: no-store`。result 是 Claw 删除时的最后配置（Claw [§4.4.6](../../01-总体架构/08-CampusClaw定时任务/README.md#delete-schedule-review)），按 [§4.2.3](#resource-projection) 投影，形状与详情相同：status 与 pausedReason 保留删除前的值；有 Cron 规则时 upcomingRunsAt 为空数组，lastRunAt 保留；updatedAt 为删除时间。这是一次性回执，页面从列表中移除该任务，之后详情返回 404。
+
+**删除的范围**：
+
+| 对象 | 处理 |
+|---|---|
+| Claw 任务与它的全部 Run | 删除，之后列表与详情都不再返回 |
+| Mate `t_schedule` 记录 | Claw 返回 200 或 404 后删除；对话中创建的任务没有记录 |
+| 已生成的会话、定时会话登记与 Chat 映射 | 保留，用户仍可从对话历史打开 |
+| 已受理、仍在运行的会话 | 不取消，按会话自己的规则结束 |
+
+**重复删除与结果未知**：重复删除不会再次删除，返回 404，页面按已删除处理。超时或断连时返回 503，Mate 不自动重试；与部分更新不同，删除可以直接重发同一请求，再次得到 404 即表示已删除（Claw [§4.4.6](../../01-总体架构/08-CampusClaw定时任务/README.md#delete-schedule-review)）。Claw 已删除但 Mate 删除 `t_schedule` 失败时返回 Mate 通用 500，残留记录只多占一个配额；重发同一请求时 Claw 返回 404，Mate 随之删除该记录。
+
+**错误**
+
+| HTTP / resCode | 条件 | 中 / 英 |
+|---|---|---|
+| 400 / SCHEDULE_REQUEST_INVALID | scheduleId 格式非法、带了 query 参数或非空请求体（Claw） | 定时任务请求无效。 / Invalid schedule request. |
+| 404 / SCHEDULE_NOT_FOUND | 任务不存在、已删除或对当前用户不可见，三种情况结果相同 | 定时任务不存在或不可访问。 / Schedule not found or not accessible. |
+| 500 / SCHEDULE_DELETE_FAILED | Claw 删除事务失败，任务没有删除 | 删除定时任务失败，请稍后重试。 / Failed to delete the schedule. Please try again later. |
+| 500 / Mate 通用错误码 | Mate 读取或删除 `t_schedule`、读取 Chat 映射失败 | 沿用 Mate 通用文案 |
+| 503 / SCHEDULE_SERVICE_UNAVAILABLE | Claw 不可达、证书校验失败，或结果未知（超时、断连）；可重发 | 定时任务服务暂不可用，请稍后重试。 / The schedule service is temporarily unavailable. Please try again later. |
 
 <a id="mate-to-claw"></a>
 
@@ -897,6 +930,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.10.0 | 2026-10-21 | 新增 §4.2.10 删除接口的完整定义：200 删除回执、删除与保留的范围、重复删除与结果未知（可重发）、双语错误表，示例由接口 HTML 展示。 |
 | 1.9.0 | 2026-10-21 | 目录由 `08-mate-service定时任务` 改名为 `08-CampusMate定时任务`；详细时序改为每个接口一张：§3.4 拆为任务列表与 Run 列表，§3.5 拆为详情、部分更新、删除、立即运行、暂停、取消暂停与 Run 详情，新增 §3.8 获取统一账号 access-token；业务总览的消息与 access-token 转发对齐。接口与规则不变。 |
 | 1.8.0 | 2026-10-21 | 新增 §4.2.9 部分更新接口的完整定义：可写字段与 null 规则、200 响应、并发与结果未知、双语错误表，示例由接口 HTML 展示。 |
 | 1.7.0 | 2026-10-21 | 列表改为由 Claw 按用户查询（D2，Claw D9）：创建、列表与 Run 列表把用户的 access-token 原样转给 Claw，由 Claw 查出用户 ID 后写入或筛选（修改 1.4.1 的“不转发 access-token”）；§3.4、§4.2.7 不再拉取全部页，分页与 total 直接用 Claw 返回的值；创建请求不得带 userId；对话任务的可见性改看 Claw 资源的 userId；投影不返回 userId；§5.2.2 删除全量拉取的容量缺口。 |
