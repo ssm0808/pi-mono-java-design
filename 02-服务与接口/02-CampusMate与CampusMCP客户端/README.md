@@ -1,8 +1,8 @@
 # CampusMate 与 CampusMCP 客户端设计
 
-[模块索引](../../README.md#module-index) · [Model](../03-Model/README.md) · [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md) · [mate-service 定时任务](../08-mate-service定时任务/README.md) · [源码证据](source-evidence.md) · [PlantUML 源码](diagram.puml)
+[模块索引](../../README.md#module-index) · [Model](../03-Model/README.md) · [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md) · [CampusMate 定时任务](../08-CampusMate定时任务/README.md) · [源码证据](source-evidence.md) · [PlantUML 源码](diagram.puml)
 
-本文是 Claw 调用上游服务（CampusMate、CampusMCP）的唯一设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织：待对齐事项在[评审 Todo](#review-todo)，接口目录在 [§3.2](#data-model)，可配置项在 [§7.1](#config-items)。模型推理、Agent 运行目录、工具装配和定时任务的业务契约分别由 [Model](../03-Model/README.md)、[多 Agent 运行时](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)、[工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)、[mate-service 定时任务](../08-mate-service定时任务/README.md)维护，本文只管地址、路径、发送和失败判定。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
+本文是 Claw 调用上游服务（CampusMate、CampusMCP）的唯一设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织：待对齐事项在[评审 Todo](#review-todo)，接口目录在 [§3.2](#data-model)，可配置项在 [§7.1](#config-items)。模型推理、Agent 运行目录、工具装配和定时任务的业务契约分别由 [Model](../03-Model/README.md)、[多 Agent 运行时](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)、[工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)、[CampusMate 定时任务](../08-CampusMate定时任务/README.md)维护，本文只管地址、路径、发送和失败判定。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
@@ -211,7 +211,7 @@ Mate 的 5 项与当前默认值逐字相同。CampusMCP 的 2 项按用户 2026
 | 模型推理 | Mate | `POST /mate-service/v1/LLM/chat` | [Model](../03-Model/README.md) |
 | Agent 与 Skill 读取 | Mate | `GET /mate-service/v1/agents/{agentId}`、`/runtime`、`/skill/query/{skillId}` | [多 Agent 运行时](../../01-总体架构/01-CampusClaw多Agent运行时/README.md)、[源码证据](source-evidence.md) |
 | 工具查询与执行 | CampusMCP | `POST /mcp-service/v1/runtime/tools/query`、`/{toolId}/execute` | [工具系统](../../01-总体架构/02-CampusClaw工具系统/README.md)；报文沿用原 Mate 接口（T8 已确认） |
-| 定时 token | Mate | `POST /mate-service/v1/runtime/scheduled-access-token` | [mate-service 定时任务](../08-mate-service定时任务/README.md#scheduled-access-token) |
+| 定时 token | Mate | `POST /mate-service/v1/runtime/scheduled-access-token` | [CampusMate 定时任务](../08-CampusMate定时任务/README.md#scheduled-access-token) |
 
 接口形状约定：路径变量用 `{name}` 并按路径段编码，原因见 [§3.2](#data-model)；请求头只由客户端方法的参数传入，发送组件不自行添加凭据，保证 R6。
 
@@ -438,7 +438,7 @@ Claude Managed Agents 是托管产品，客户端侧以其官方 Java SDK 为证
 | 2.14.0 | 2026-10-21 | 新增客户端收敛设计稿（即上表 0.x，3.0.0 并入本文）：路径写进代码目录、短请求共用一个通道、超时按调用类型分组（待评审）。 |
 | 2.13.1 | 2026-10-20 | 定时取 access-token 的调用方由证书校验保证，不再是暂缓的服务认证风险。 |
 | 2.13.0 | 2026-10-20 | 调用 Mate 的路径集中到 `campusmate.endpoints`：定时 access-token 路径改为 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`），目标路径目录共8项。 |
-| 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [mate-service 定时任务设计](../08-mate-service定时任务/README.md)，本专题改为链接。 |
+| 2.12.1 | 2026-10-19 | 原定时执行凭据草案并入 [CampusMate 定时任务设计](../08-CampusMate定时任务/README.md)，本专题改为链接。 |
 | 2.12.0 | 2026-10-16 | `campusmate.model` 新增 Redis 全局许可开关、模型调用全局并发上限、Redis 不可用时的每实例上限、许可等待时间与租约，模型调用底层改用 JDK HttpClient。 |
 | 2.11.0 | 2026-10-16 | 定时 access-token 路径改用代码中的 `campusclaw.schedule.access-token-path`，目标路径目录回到7项。 |
 | 2.10.0 | 2026-10-15 | 定时任务 Mate 实现类改名为 `MateScheduleSessionRegistry` 与 `MateAccessTokenClient`。 |

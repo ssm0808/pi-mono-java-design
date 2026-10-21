@@ -14,6 +14,7 @@ MODELS = (
     ROOT / "接口契约" / "操作" / "02-list-schedules.json",
     ROOT / "接口契约" / "操作" / "03-get-schedule.json",
     ROOT / "接口契约" / "操作" / "04-update-schedule.json",
+    ROOT / "接口契约" / "操作" / "05-delete-schedule.json",
 )
 OUTPUT = ROOT / "schedule-api-review.html"
 

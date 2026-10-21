@@ -447,7 +447,7 @@ CampusClaw 采用 pi 的前置校验顺序，并为动态 CallTool 增加不可�
 
 | 维度 | 结论 |
 |---|---|
-| 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08 及 [Mate 执行上下文](../../02-服务与接口/08-mate-service定时任务/README.md)；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
+| 所属模块与主设计 | M10 [定时任务主设计](../08-CampusClaw定时任务/README.md)，关联 M01/M03/M04/M06/M08 及 [Mate 执行上下文](../../02-服务与接口/08-CampusMate定时任务/README.md)；本文维护基线差异与理由，具体规则、全局目标类图、实施切片和验收由主设计唯一维护 |
 | 架构问题 | 到期时间由谁拥有，定时器只是唤醒还是执行权威；到期后是回到同一 Session、创建新的 Agent Run，还是由外部平台重新启动进程；重启、空闲、暂停和失败如何对账？ |
 | CampusClaw 目标 | [配置契约](../08-CampusClaw定时任务/README.md#interface)维护完整接口，[定时任务受理流程](../08-CampusClaw定时任务/README.md#normal-acceptance)维护受理与恢复：有 schedule 保存即登记自动计划，省略时只保存，试运行显式触发；接口配置的任务每次运行新建 Session 并复用 Agent，对话中由 Cron 工具创建的任务关联当前会话、每次在该会话追加一轮，会话忙则跳过，删除会话时一起删除，创建、修改、删除需用户确认（参考 DSH 投递回原会话）。首版仅文本、无人工交互，不补跑、遇忙跳过、本次失败/故障不重跑；删除 Schedule/Run 不自动取消已受理执行，Session 独立管理。定时实现合并 coding-agent；失败是否自动暂停整个 Schedule 仍待确认。 |
 | CampusClaw 实现 | 2026-10-10 核验 PR #332 `e9d31e8888a81b7fe95071e705482bb16fa10476`：三张调度表、Mapper、同库受理与根执行启动控制已实现、未合并；完整 head/base/merge-base、字段及差距由[Claw 数据库设计（定时增量）](../../03-数据与存储/Claw数据库设计.md#schedule)维护。其他历史段落仍归原核验提交，不能外推为当前 PR 无实现；真实 GaussDB、多实例与企业部署未验收。 |
@@ -505,7 +505,7 @@ Claw 同日重核 Java main `553dcd5e2ff682f9684810a043b442b37a02e54a`：fileId 
 
 Claude 官方 Beta Deployment 的 schedule 提供 last_run_at/upcoming_runs_at，status 使用 active/paused，归档以 archived_at 表达；metadata 为受限字符串 map。CampusClaw 响应采用对应 lowerCamelCase 时间摘要、小写状态并去除公开 revision，支持可选 metadata。计划时间只是估计，不等于业务完成；内部调度游标继续存在。动态时间摘要仅供展示，不构成更新前置条件；Claw 采用直接删除，资源不增加归档字段或状态。
 
-Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 定时任务不保存凭据引用，所有定时任务统一使用 Mate 配置的同一个账号：模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次该账号的 `access-token`。相比 Claude 按部署挑选 Vault，收益是任务配置不承载秘密选择、实现最简单；代价是所有任务权限相同，用户权限只在配置时检查，创建者失去权限后任务仍照常运行。普通 Session 继续使用本次请求 Header 快照，定时执行的 Token 仅在本批内存供实际 execute 使用，发现不带业务凭据，服务身份不冒充业务凭据。现有 Java Cron 仍使用空凭据，Mate 示例也未实现凭据接口；生产能力未核验。[Mate 配套草案](../../02-服务与接口/08-mate-service定时任务/README.md)与接线均待实现，首版不引入 Vault 集合或完整 sandbox 出站替换体系。
+Claude 通过 vault_ids 引用独立管理的凭据，敏感值只写不回读，运行时按 MCP 目标或受控出站规则使用。CampusClaw 定时任务不保存凭据引用，所有定时任务统一使用 Mate 配置的同一个账号：模型每批需要凭据的工具调用前，Claw 无入参向 Mate 取一次该账号的 `access-token`。相比 Claude 按部署挑选 Vault，收益是任务配置不承载秘密选择、实现最简单；代价是所有任务权限相同，用户权限只在配置时检查，创建者失去权限后任务仍照常运行。普通 Session 继续使用本次请求 Header 快照，定时执行的 Token 仅在本批内存供实际 execute 使用，发现不带业务凭据，服务身份不冒充业务凭据。现有 Java Cron 仍使用空凭据，Mate 示例也未实现凭据接口；生产能力未核验。[Mate 配套草案](../../02-服务与接口/08-CampusMate定时任务/README.md)与接线均待实现，首版不引入 Vault 集合或完整 sandbox 出站替换体系。
 
 公开契约、源码路径与限制见[M10 响应与凭据证据](../08-CampusClaw定时任务/source-evidence.md#creation-metadata-credentials-evidence)，精确创建报文和待决项仍由[配置接口](../08-CampusClaw定时任务/README.md#creation-response-review)维护；不扩写其他模块的历史 SHA 或声称已有长期执行凭据。
 
@@ -600,7 +600,7 @@ Claw 全部接口采用无客户端条件及请求键的产品约束，不返回
 | 每次触发使用已发布 Agent 快照、build 与 cron profile；首版非交互 | 产品约束、安全加固 | 缓存命中不保证 Mate 数据库最新；真实 ASK、自定义问题和审核必须由 Host 结束本根，不能只移除工具名或默认批准。代价是需要人工决定的任务不适用；参数校验错误仍可由模型修正，不自动重放 |
 | 仅支持 Spring 六字段 Cron，名称最长 256；Cron 默认上海时区 | 产品约束（范围与方言选择） | 采用 Claude 的名称上限与仅 Cron 范围，减少单次耗尽、间隔起点及其更新规则；代价是不能表达未来指定时刻单次执行或任意起点固定间隔。复用已有 spring-context；旧 Cron At/Every 的调用者仍需迁移核验，不因新 HTTP 收敛而直接删实现 |
 
-Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配套接口](../../02-服务与接口/08-mate-service定时任务/README.md)仍是待实现草案，生产公司服务身份与授权接线未核验。Claw 不保存凭据引用或秘密，定时运行统一使用 Mate 配置的同一个账号取 access-token，普通 Session 的本次 Header 规则保持；不能据此推导已有长期凭据、完整租户隔离或固定 Agent 历史版本。
+Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配套接口](../../02-服务与接口/08-CampusMate定时任务/README.md)仍是待实现草案，生产公司服务身份与授权接线未核验。Claw 不保存凭据引用或秘密，定时运行统一使用 Mate 配置的同一个账号取 access-token，普通 Session 的本次 Header 规则保持；不能据此推导已有长期凭据、完整租户隔离或固定 Agent 历史版本。
 
 上述新增调度能力为**待实现**。实施与验收集中于[M10 主设计](../08-CampusClaw定时任务/README.md)，重点包括多实例重复触发、受理事务故障、暂停/删除竞争、未知不重放、忙跳过、时区/DST、新 Session 关联及 ASK/自定义提问终止；本条没有运行产品或 GaussDB 测试。现有代码与目标增量分别见[M10 源码证据](../08-CampusClaw定时任务/source-evidence.md)，不以主设计完成代替实现验收。
 
@@ -615,7 +615,7 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 | 停机不补跑、忙跳过、失败故障不重跑 | 产品约束、安全加固；避免积压和副作用重放，代价是可能漏执行、未知结果持续占用；首版不自动暂停（D12），代价是 Agent 不可用时失败 Run 持续累积、需人工暂停 | 旧 Cron 的本地 timer、失败退避、3次失败禁用和2小时 running 清理不能兑现该目标，数据库扫描、原子受理和对账待实现 |
 | 定时代码合并 coding-agent，保留设计职责边界 | 架构变更；共用 Runtime 与同库受理，减少独立 Maven 制品，代价是宿主职责增多；管理/受理和 Dispatcher 分离以避免 Registry 构造环 | 旧 cron 独立模块及15个生产类/7个测试、两处工具 Schema、POM、同步脚本、CODEOWNERS 均需迁移；不新增外部依赖，不把无消费者 JobRunr 占位当成现有运行库 |
 
-精确执行、故障与上线初值见[定时任务受理流程](../08-CampusClaw定时任务/README.md#normal-acceptance)，Mate 路径和字段见[内部契约草案](../../02-服务与接口/08-mate-service定时任务/README.md)。模块合并、同库受理与凭据链均待实现；本次没有运行产品、GaussDB 或多实例测试，也不据部署默认数值宣称容量。
+精确执行、故障与上线初值见[定时任务受理流程](../08-CampusClaw定时任务/README.md#normal-acceptance)，Mate 路径和字段见[内部契约草案](../../02-服务与接口/08-CampusMate定时任务/README.md)。模块合并、同库受理与凭据链均待实现；本次没有运行产品、GaussDB 或多实例测试，也不据部署默认数值宣称容量。
 
 ### 4. 源码与官方契约证据
 

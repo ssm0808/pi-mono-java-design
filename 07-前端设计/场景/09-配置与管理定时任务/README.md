@@ -2,7 +2,7 @@
 
 版本：1.3.1 · 2026-10-19 · M07，业务契约归 M10；页面调用的管理接口见 Mate 侧设计。
 
-[前端设计](../../README.md) · [高保真](../../原型/index.html#scene=schedules&fidelity=high) · [低保真](../../原型/index.html#scene=schedules&fidelity=low) · [独立原型](../../原型/schedule-review.html?state=manual) · [配置契约](../../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [Mate 管理接口](../../../02-服务与接口/08-mate-service定时任务/README.md#management-api)
+[前端设计](../../README.md) · [高保真](../../原型/index.html#scene=schedules&fidelity=high) · [低保真](../../原型/index.html#scene=schedules&fidelity=low) · [独立原型](../../原型/schedule-review.html?state=manual) · [配置契约](../../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [Mate 管理接口](../../../02-服务与接口/08-CampusMate定时任务/README.md#management-api)
 
 ## 用户目标与前置条件
 

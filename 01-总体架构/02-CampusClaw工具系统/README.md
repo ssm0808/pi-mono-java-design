@@ -8,7 +8,7 @@
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
-本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。定时执行所需的可信接口定义与凭据解析由 [Mate 内部能力](../../02-服务与接口/08-mate-service定时任务/README.md)提供，待实现；工具定义的同步、缓存刷新与版本一致性继续由所属专题细化，本页固定模型发现契约与单工具定义一致性要求。
+本设计区分框架工具、Agent 直接关联的业务工具与 Skill 关联的业务工具。“关联”表示 Agent 或 Skill 与业务工具的配置关系，不代表执行授权；实际调用仍须通过权限检查。注册和发现增量见 [§9](#9-工具注册与发现)，当前源码及基线对照见[专项证据](source-evidence.md#skill-tool-discovery-evidence)。定时执行所需的可信接口定义与凭据解析由 [Mate 内部能力](../../02-服务与接口/08-CampusMate定时任务/README.md)提供，待实现；工具定义的同步、缓存刷新与版本一致性继续由所属专题细化，本页固定模型发现契约与单工具定义一致性要求。
 
 `ExitPlanMode`、[TodoUpdate](../06-CampusClaw计划模式/todo-update.md) 和 [AskUserQuestion](../06-CampusClaw计划模式/ask-user-question.md) 已在 Runtime 主线实现，plan/build 共用定义；具体交互及实现范围由[计划专题](../06-CampusClaw计划模式/README.md)维护。Mate 公共桥接状态独立判断。
 
@@ -504,7 +504,7 @@ agent/{agentId}/.campusclaw/
 
 ### 9.3 执行凭据
 
-Agent、Skill 与工具元数据查询不读取或复制业务执行凭据。`MateCredentials` 只属于本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。普通交互执行从本次 HTTP 请求捕获快照，定时执行通过 [Mate 内部能力](../../02-服务与接口/08-mate-service定时任务/README.md)按该 Agent 的绑定决定并解析本次凭据，两种来源均不得借用其他执行的值。Mate 提供定时执行所需的可信接口定义和凭据解析，具体接线待实现；Claw 仍按可信绑定解析工具、校验参数和判断权限。
+Agent、Skill 与工具元数据查询不读取或复制业务执行凭据。`MateCredentials` 只属于本次 Host execution，不从 Session 或历史记录恢复；Agent 代理和 `CallTool` 使用同一规则。普通交互执行从本次 HTTP 请求捕获快照，定时执行通过 [Mate 内部能力](../../02-服务与接口/08-CampusMate定时任务/README.md)按该 Agent 的绑定决定并解析本次凭据，两种来源均不得借用其他执行的值。Mate 提供定时执行所需的可信接口定义和凭据解析，具体接线待实现；Claw 仍按可信绑定解析工具、校验参数和判断权限。
 
 普通交互的实际 execute 请求只透传快照中已提供的 `X-HW-ID`、`Authorization`、
 `X-HW-APPKEY` 与 `access-token`，不改名、不生成缺失值。该快照可随同一次 Runtime
@@ -517,7 +517,7 @@ execution 的 Subagent execution 以只读方式传递，但不存入 Subagent S
 
 定时执行的配置不保存凭据引用。2026-10-13 评审确定统一账号：模型一次返回中有需要凭据的工具调用通过可信解析、参数校验和权限判断后，执行 Adapter 无入参向 Mate 取一次统一账号的 `access-token`，本批共用，只透传这一项；值只存在本批内存快照，不进入 Schedule、Run、Session、Prompt、日志或公开结果。该来源为待实现增量，不将当前 Cron 空凭据实现描述为已支持。
 
-Claw 调用 Mate 定义查询或定时 access-token 接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。接口与失败语义由 [Mate 契约](../../02-服务与接口/08-mate-service定时任务/README.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)。
+Claw 调用 Mate 定义查询或定时 access-token 接口所用的服务间认证，和随后业务 execute 使用的执行凭据分别配置、授权与审计；服务间身份不等于最终业务主体，也不自动授予业务工具权限。发现请求可以使用其受信服务身份，但不得复制执行凭据快照。接口与失败语义由 [Mate 契约](../../02-服务与接口/08-CampusMate定时任务/README.md)维护；定时业务调用仍遵守同一次准备快照和 [非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)。
 
 <a id="tool-display-name"></a>
 
