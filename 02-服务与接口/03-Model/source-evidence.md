@@ -1,6 +1,6 @@
 # Model：源码证据与实现差距
 
-版本：1.4.0 · 2026-10-16。返回[模块主设计](README.md)。
+版本：1.5.0 · 2026-10-22。返回[模块主设计](README.md)。
 
 本文集中保存已读取的源码证据。每项结论仅适用于对应提交与核验范围；目标规则和验收见主设计。独立核验范围分别记录；本次未运行产品测试。
 
@@ -86,6 +86,46 @@ pi 当次通过 ls-remote 确认默认分支 main，并在临时仓库 fetch 得
 
 原型验证（临时 worktree，不是交付代码）：在 Java `1acbbf3f` 上把 `createWebClient` 和测试改为 `JdkClientHttpConnector`，删除 `modules/ai/pom.xml` 的 `reactor-netty-http`，并给 SSE 响应体加 `Flux.timeout`。`./mvnw -pl :campusclaw-ai -am test` 通过，`campusclaw-ai` 366 个测试 0 失败；`campusclaw-coding-agent` 依赖树不再含 `io.netty` 或 `reactor-netty`。首轮全量测试出现 1 次 Reactor `onErrorDropped` 日志，后续两次全量运行未复现，原因未定位；回调线程为 `ForkJoinPool.commonPool`。许可机制（含 Redis 脚本）未做原型，并发与容量结论均未压测。
 
+<a id="model-live-query-evidence"></a>
+
+## 1.5 模型实时查询专项（2026-10-22）
+
+本节支撑 [主设计 §2](README.md#model-source) 的模型来源调整。实现仓与基线均于 2026-10-22 重新 fetch 默认分支；外部基线是默认分支快照，不是稳定发布。本次只读源码，未运行产品测试。
+
+### 1.5.1 CampusClaw
+
+实现仓 `superheromeZzh/pi-mono-java` `main@bc031ed8aa82dac700421163a4cce25d9f023e6b`，路径前缀 `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/`。
+
+| 编号 | 仓库相对路径与符号 | 已观察行为与差距 |
+|---|---|---|
+| J-ML-01 | `runtime/AgentRuntimeManager.java`：`prepare`（L95）、`rebuild`（L136）、`toSettings`（L725）、`validSettings`（L608）、`requireValidRuntime`（L539） | 缓存优先；首次准备时把 runtime 接口返回的 `bindingModels` 及其第一个元素写入 `settings.json`；读取缓存与构建目录都要求模型列表非空且默认模型在列表中，没有模型的 Agent 无法准备目录 |
+| J-ML-02 | 同上：`refresh`（L120） | 主线 `src/main` 中没有调用方；Mate 上的修改不会进入已发布目录 |
+| J-ML-03 | `runtime/MateServiceClient.java`：`getAgentRuntime`（L72）、`AgentRuntime#defaultModel`（L263）、`send/toStatusErrorCode` | 只调用 `/agents/{id}/runtime`；默认模型取第一个非空绑定；5xx 与网络失败归为 `MATE_SERVICE_UNAVAILABLE`，其他非 2xx 归为 `MATE_REQUEST_FAILED`，不读取错误响应的 `resCode` |
+| J-ML-04 | `common/client/HttpMateToolClient.java`：`queryToolIdsByAgentId`（L133）；`ClawConstants.Mate.AGENT_INFO_PATH_TEMPLATE` | 已经不带用户凭据调用 getAgent `GET /mate-service/v1/agents/{id}`，只取 `bindingTools` |
+| J-ML-05 | `runtimeapi/agent/FileAgentDirectoryResolver.java`：`resolve/prepare`；`AgentDirectoryResolver#toPrepareErrorCode`；`runtimeapi/agent/AgentDirectorySnapshots.java`：`from`（L30） | 所有入口经 `resolve` 取得模型快照；默认模型为空报 `AGENT_MODEL_NOT_CONFIGURED`，Mate 不可用报 `AGENT_SERVICE_UNAVAILABLE`，其他准备失败报 `AGENT_NOT_AVAILABLE` |
+| J-ML-06 | `runtimeapi/session/RuntimeSessionService.java`：`create`（L66–67）；`runtimeapi/model/RuntimeModelManager.java`：`resolveNewSessionModel`；`runtimeapi/model/MateRuntimeModelManager.java`：`resolveModel/listAvailableModels` | 新会话用快照默认模型且要求支持深度思考；可选模型直接返回快照列表 |
+| J-ML-07 | `runtimeapi/session/RuntimeSessionModelReconciler.java`：`reconcile`（L68） | 每条消息接受前取快照；会话模型不在列表时换为默认模型并写 `model_changed`（原因 `agentRefresh`） |
+| J-ML-08 | `runtimeapi/runtime/RuntimeSessionEngineRegistry.java`：`requireModelAllowed`（L243）；`tool/agent/SubagentExecutionService.java`：`requireModelAllowed`（L182） | 执行装配和 Subagent 直接读 `PreparedAgentRuntime.metadata().bindingModels()`，不经过快照；本地不再保存模型后必须改用查询结果 |
+| J-ML-09 | `runtimeapi/service/command/SessionModelConfigurationService.java`、`SessionThinkingConfigurationService.java`、`CommandValuesService.java`、`runtimeapi/session/RuntimeSessionUpdateService.java`、`runtimeapi/compaction/RuntimeCompactionService.java`、`schedule/session/ScheduledSessionStarter.java`（L129–130） | 模型选择、切换、深度思考、压缩和定时执行均经 `resolve` 取快照 |
+| J-ML-10 | `runtimeapi/error/RuntimeErrorCode.java` | 已有 `AGENT_MODEL_NOT_CONFIGURED`（422）、`AGENT_SERVICE_UNAVAILABLE`（503）、`MODEL_NOT_AVAILABLE`（422），无需新增错误码 |
+
+Mate 侧依据[元数据设计 §5.1、§6.5](../../03-数据与存储/02-Agent元数据GaussDB/README.md)（设计仓 `main@1dbb984847735a14a5d5f69faefc5fa3ead0f139`）：`bindingModels` 按 `model_order` 返回；更新时要求至少一个模型。缺少模型绑定时的行为已于 2026-10-22 核对 Mate 源码 `superheromeZzh/mate-agent-definition-service` `main@4b957a3a846659f5b7569c9d6133abc070cd2e3c`（该仓最近一次推送为 2026-09-15）：
+
+| 编号 | 仓库相对路径与符号 | 已观察行为 |
+|---|---|---|
+| M-ML-01 | `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`：`getAgent`（L162）→ `assembleAgentInfo`（L540）；`getRuntimeAgent`（L172–179）；`requireModelBindings`（L563） | getAgent 与 runtime 接口都调用 `requireModelBindings`，模型绑定为空时抛 `AgentDataCorruptionException(AGENT_MODEL_BINDING_MISSING)` |
+| M-ML-02 | `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java`：`INTERNAL_ERROR_CODES`（L47）、`resolveStatus`（L177–182） | 该错误码属于内部错误集合，返回 HTTP 500 并记录 error 日志 |
+
+### 1.5.2 外部基线
+
+| 基线 / 提交 | 仓库相对路径与符号 | 已观察行为 |
+|---|---|---|
+| pi `main@7c22a93d0ed02092142fa63823e63d76aa4e2406` | `packages/coding-agent/src/core/sdk.ts`：恢复会话模型（L219–251） | 有历史的会话先恢复记录的模型，不可用时调用 `findInitialModel` 选默认模型并给出提示；仍无模型时用 `formatNoModelsAvailableMessage` 提示配置 |
+| 同上 | `packages/coding-agent/src/core/model-resolver.ts`：`findInitialModel`（L543） | 默认模型来自本地 settings 的 `defaultProvider/defaultModel`；不可用时退到已知 Provider 默认值或第一个可用模型 |
+| Codex `main@86e17e98c7f901277aeeb4649cf1b01462b082f2` | `codex-rs/models-manager/src/manager.rs`：`DEFAULT_MODEL_CACHE_TTL`（L37，300 秒）、`RefreshStrategy`（L91）、`get_default_model`（L207）、`refresh_if_new_etag`、`fetch_and_update_models`（L598 注释） | 远端模型目录缓存 5 分钟并按 ETag 刷新；拉取失败不当作空目录，保留上一次成功的快照 |
+| OpenCode `dev@c93aaae37157d785f76a8e9a9243a6560e286468` | `packages/core/src/models-dev.ts`：缓存 TTL（L331，5 分钟）、`loadFromCache`、`fetchApi` | models.dev 目录存入本地 KV 缓存 5 分钟，并有内置快照兜底；默认模型选择本次未核验 |
+| Claude Managed Agents 官方文档（2026-10-22 读取） | [Sessions](https://platform.claude.com/docs/en/managed-agents/sessions)、[Agent setup](https://platform.claude.com/docs/en/managed-agents/agent-setup) | 用 Agent ID 字符串创建会话时取 Agent 最新版本，传对象可固定版本；会话可覆盖 `model`；Agent 更新是否影响已有会话，文档未说明 |
+
 ## 2. pi 历史固定行为基线
 
 固定提交：`5cd93f688aaab89dbb6dfa4aca535f21796ae185`。
@@ -142,6 +182,7 @@ mate-service 固定基线 `956b547f`：`src/main/java/com/huawei/hicampus/mate/a
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-10-22 | 核验本地目录保存模型的位置、各入口的模型快照来源，以及 pi、Codex、OpenCode 与 Claude Managed Agents 的模型来源做法。 |
 | 1.4.0 | 2026-10-16 | 核验 Reactor Netty 使用点与默认连接池、JDK HttpClient 连接复用与重试、Redis 客户端依赖，以及 pi/Codex 的模型 HTTP 客户端做法。 |
 | 1.3.0 | 2026-09-19 | 补充执行锁内准备、请求额度映射与 pi 摘要证据，登记按执行读窗口和 Mate 输出权威的差距。 |
 | 1.2.0 | 2026-09-19 | 核验 pi 逐模型能力与 Java/Mate 默认值链，登记独立查询、能力快照及未知输出上限的实现差距。 |

@@ -102,7 +102,7 @@
         "status": "422",
         "tabLabel": "422 · AGENT_NOT_AVAILABLE",
         "label": "Unprocessable Content",
-        "summary": "Agent 存在但当前不可用，包括远端或受管目录中的 mode 类型或值非法；缺字段兼容 build。Mate 不可达见 503 AGENT_SERVICE_UNAVAILABLE。",
+        "summary": "Agent 存在但当前不可用，包括远端或智能体本地目录中的 mode 类型或值非法；缺字段兼容 build。Mate 不可达见 503 AGENT_SERVICE_UNAVAILABLE。",
         "headers": {
           "Content-Language": "zh-CN"
         },
@@ -122,7 +122,7 @@
         "status": "503",
         "tabLabel": "503 · AGENT_SERVICE_UNAVAILABLE",
         "label": "Service Unavailable",
-        "summary": "本实例没有该 Agent 的完整缓存，从 Mate 准备时请求超时、连接失败或 Mate 返回 5xx；调用方可按 Retry-After 重试（待实现，实现基线折叠为 422 AGENT_NOT_AVAILABLE）。",
+        "summary": "从 Mate 准备 Agent 运行目录或实时读取 Agent 模型（getAgent，待实现）时请求超时、连接失败或 Mate 返回 5xx；调用方可按 Retry-After 重试（待实现，实现基线折叠为 422 AGENT_NOT_AVAILABLE）。",
         "headers": {
           "Content-Language": "zh-CN",
           "Retry-After": "3"
@@ -143,7 +143,7 @@
         "status": "422",
         "tabLabel": "422 · AGENT_MODEL_NOT_CONFIGURED",
         "label": "Unprocessable Content",
-        "summary": "Agent 没有可由 Model Manager 解析的有效默认模型。",
+        "summary": "实时读取的 Agent 模型（Mate getAgent，待实现）为空，需先在 Mate 为该 Agent 配置模型；或默认模型（第一个绑定模型）不支持深度思考。",
         "headers": {
           "Content-Language": "zh-CN"
         },

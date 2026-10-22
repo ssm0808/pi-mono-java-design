@@ -18,6 +18,7 @@
 ' Mate baseline: 4b957a3a846659f5b7569c9d6133abc070cd2e3c
 ' Source evidence: src/main/java/com/huawei/hicampus/mate/agentdefinition/modelmanager/config/ModelManagerProperties.java: ModelRoute
 ' Pending implementation: per-execution capability query and Mate-owned output limits.
+' 模型来源（2026-10-22，Java main bc031ed8aa82dac700421163a4cce25d9f023e6b）：settings.json 不再保存 defaultModel/bindingModels，改为每个请求调用 Mate getAgent，待实现。
 ' Design reason: query outside locks, then revalidate bindings and Session version at admission.
 ' Architecture change: provider registries route calls but do not discover or authorize models.
 ' Pending implementation: remove ModelRegistry, external model JSON, and the alternate catalog manager.
@@ -51,7 +52,7 @@ skinparam class {
   BorderColor<<pending implementation>> #2563EB
 }
 
-class "Business Agent\n.campusclaw/settings.json" as AgentSettings <<published file>>
+class "Mate getAgent\nGET /mate-service/v1/agents/{agentId}" as MateGetAgent <<pending implementation>>
 package "Web boundary" as Web {
   class "Runtime HTTP Controllers" as Controllers
   class "Request / Response VOs" as VOs
@@ -66,6 +67,7 @@ package "Runtime application - singleton" as Runtime {
     contextWindow : int
   }
   class PreparedAgentRuntime <<agent snapshot>>
+  class "Agent 模型查询" as AgentModelBindings <<pending implementation>>
   interface RuntimeModelManager
   class MateRuntimeModelManager
   class AgentDirectorySnapshotDTO <<binding snapshot>>
@@ -127,7 +129,10 @@ package "Configuration and external I/O" as IO {
 Controllers -down-> Services
 Controllers ..> VOs
 Services --> AgentRuntimeManager : prepare Agent
-AgentSettings -down-> AgentRuntimeManager
+MateServiceClient --> MateGetAgent : 读取绑定模型 [P]
+Services --> AgentModelBindings : 每个请求查询一次 [P]
+AgentModelBindings --> MateServiceClient : getAgent [P]
+AgentModelBindings ..> AgentDirectorySnapshotDTO : 填入默认模型与可选模型 [P]
 Services --> ExecutionModelResolver : before admission [P]
 ExecutionModelResolver --> MateServiceClient : query [P]
 Services --> RuntimeExecutionContextDTO : accept [P]
@@ -185,7 +190,7 @@ legend bottom left
 The whole diagram is a recommended assembly, not an implementation audit.
 Grouped Runtime boxes denote existing collaborators, not new facade classes.
 Provider registries only route an already resolved Model.
-Agent settings fix bindings; each new execution queries its selected model.
+getAgent 实时提供绑定模型，本地目录不再保存模型 [P]; each new execution queries its selected model.
 Query outside Session locks; revalidate before acceptance.
 Tool loops and original-root resumes reuse the execution snapshot.
 Mate controls all output limits, including summaries.
@@ -362,4 +367,44 @@ Provider ->> Permits : 归还该许可
 Permits ->> Redis : 删除该许可
 return 返回最终 Assistant 消息
 deactivate Loop
+@enduml
+
+@startuml agent_model_live_create
+' 源码基线：pi-mono-java main bc031ed8aa82dac700421163a4cce25d9f023e6b（2026-10-22 fetch）
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java：create
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java：resolve、prepare
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java：prepare、toSettings、validSettings
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java：queryToolIdsByAgentId（已调用 getAgent）
+' 已观察行为：默认模型与绑定模型写入 .campusclaw/settings.json，缓存命中后不再访问 Mate；refresh 没有调用方，已删除。
+' 设计原因：模型绑定只以 Mate 为准，每次创建会话实时读取，避免本地缓存陈旧及多实例不一致。
+' 架构变更：本地目录不再保存模型，getAgent 查询待实现；失败分类见 Model §2.7，不在本图。
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 200
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+hide footbox
+autonumber
+
+title 新建会话时读取 Agent 模型
+actor 用户 as User
+participant "Claw" as Claw
+participant "Mate" as Mate
+database "Claw 数据库" as DB
+
+User -> Claw ++ : 为“设备告警处置”Agent 新建会话
+activate User
+Claw -> Claw : 准备 Agent 运行目录（缓存命中不访问 Mate，目录不含模型）
+Claw -> Mate ++ : 查询该 Agent 当前绑定的模型（getAgent，待实现）
+return 绑定模型列表（按配置顺序）
+Claw -> Claw : 取第一个模型为默认模型并校验支持深度思考
+Claw -> DB ++ : 保存新会话（当前模型为默认模型）
+return 该会话
+return 返回会话及其当前模型
+deactivate User
 @enduml

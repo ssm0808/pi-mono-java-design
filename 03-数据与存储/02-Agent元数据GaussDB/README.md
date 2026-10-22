@@ -1,8 +1,8 @@
 # Agent 元数据 GaussDB 表设计
 
 > 文档编号：`SR-AGENT-DB-001`<br>
-> 版本：`v0.19.5`<br>
-> 日期：`2026-10-08`<br>
+> 版本：`v0.20.1`<br>
+> 日期：`2026-10-22`<br>
 > 状态：既有行为以所列旧基线为准；Agent.mode 与 Session 默认值链路为 待实现<br>
 > 设计仓库分析基线：`c892946d867ab1ee81f2684229b0343ce9733cc0`<br>
 > Java 实现分析基线：`mate-service@9dd5d85e2ed6561ad654b11f817ef572cc8bac7c`<br>
@@ -164,7 +164,7 @@ GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https:
 | 已有 Session | 创建时复制默认值并持久化；以后只使用 Session.mode。Agent 更新、目录刷新、消息重试、模型调整或压缩均不得覆盖已有 Session |
 | 更新 | 管理面通过既有 Agent POST 修改默认值；不调用 Session POST，不批量更新 Session。Session 手动切换仍走既有统一 POST 与准入规则 |
 | 入口优先级 | 仅新的交互根 Session 使用 Agent 默认；Subagent 复制调用时父执行模式，Cron 保持原 build 入口规则，不引入无人审核流程；关联 Agent 的 mode 仅是其定义默认值，不覆盖父策略 |
-| 配置生效 | 数据库提交后，既有 refresh/受管发布流程更新完整目录；后续创建使用实际解析到的已发布快照。prepare 复用缓存，不承诺 Agent POST 后各 Runtime 节点立即看到新默认值 |
+| 配置生效 | 数据库提交后，需按[智能体本地目录 UC2](../../01-总体架构/10-CampusClaw智能体本地目录/README.md#apply-change-sequence)删除各节点的 `agent.json`，下一次准备时重建；后续创建使用实际解析到的已发布快照。prepare 复用缓存，不承诺 Agent POST 后各 Runtime 节点立即看到新默认值 |
 | 非职责 | mode 不嵌入基础 systemPrompt，不重装 Tool，不批准方案，也不创建 TODO；plan 阶段继续禁止 TODO |
 
 持久化沿用 `t_agent_definition`：`mode VARCHAR(5) NOT NULL DEFAULT 'build'`，CHECK 限定两个字面量。现有数据库需要单独增量迁移，先补列并将既有记录填为 build，再启用约束和消费者；不执行本专题带 DROP 的初始化脚本做线上迁移。此次补齐兼容默认不改变既有 Agent.version；后续配置写入按 §6.3 递增版本。
@@ -194,7 +194,7 @@ Runtime 的传播链为：Mate Runtime 定义 → `AgentRuntime.mode` → `.camp
 | `model_id` | `VARCHAR(64)` | 模型网关 ID；非空白 |
 | `model_order` | `INTEGER` | 从 0 开始 |
 
-主键为 `(agent_id, model_id)`，并对 `(agent_id, model_order)` 建唯一约束。模型关联是唯一保存输入数组顺序的关联；一个 Agent 至少需要一个模型，由 Service 在同一事务中保证。
+主键为 `(agent_id, model_id)`，并对 `(agent_id, model_order)` 建唯一约束。模型关联是唯一保存输入数组顺序的关联；更新接口仍要求至少提交一个模型。读取时没有模型绑定是合法的“未配置模型”状态：getAgent 与 Runtime Agent 查询返回 200 和空 `bindingModels`，不再抛 `AGENT_MODEL_BINDING_MISSING`（待实现）；由 CampusClaw 向用户提示需要配置模型，见 [Model §2](../../02-服务与接口/03-Model/README.md#model-source)。
 
 模型 ID 必须符合 `^model-[0-9a-fA-F]{32}$` 且不可重复。当前没有模型网关目录查询接口，因此不校验模型是否存在。
 
@@ -437,7 +437,7 @@ List<AgentDefinitionDTO> selectByBindings(
 
 - 请求解析与校验：`AGENT_REQUEST_BODY_INVALID`、`AGENT_REQUEST_VALIDATION_FAILED`、`AGENT_PAGE_INDEX_INVALID`、`AGENT_PAGE_SIZE_INVALID`、`AGENT_NAME_TOO_LONG`、`AGENT_DISPLAY_NAME_TOO_LONG`、`AGENT_VERSION_INVALID`、`AGENT_ID_REQUIRED`、`AGENT_ID_INVALID`、`AGENT_BINDING_MODELS_EMPTY`、`AGENT_MODEL_ID_REQUIRED`、`AGENT_MODEL_ID_INVALID`。
 - 业务规则：`AGENT_ID_MISMATCH`、`AGENT_MODEL_DUPLICATED`、`AGENT_NOT_FOUND`、`AGENT_DISABLED`、`AGENT_BOUND_TOOL_DISABLED`、`AGENT_BOUND_AGENT_DISABLED`。
-- 存储数据完整性：`AGENT_STORED_MODE_INVALID`、`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`、`AGENT_BOUND_TOOL_NOT_FOUND`、`AGENT_BOUND_TOOL_VERSION_MISSING`、`AGENT_BOUND_TOOL_DEFINITION_DUPLICATED`、`AGENT_BOUND_AGENT_NOT_FOUND`、`AGENT_BOUND_AGENT_VERSION_MISSING`、`AGENT_BOUND_AGENT_DEFINITION_DUPLICATED`。
+- 存储数据完整性：`AGENT_STORED_MODE_INVALID`、`AGENT_VERSION_MISSING`、`AGENT_VERSION_UPDATE_FAILED`、`AGENT_MODEL_BINDING_MISSING`（读取接口不再使用，待实现删除）、`AGENT_PERMISSION_INVALID`、`AGENT_STORED_AGENT_ID_INVALID`、`AGENT_STORED_MODEL_ID_INVALID`、`AGENT_STORED_TOOL_ID_INVALID`、`AGENT_STORED_SKILL_ID_INVALID`、`AGENT_STORED_BOUND_AGENT_ID_INVALID`、`AGENT_USE_CASES_NOT_ARRAY`、`AGENT_USE_CASE_INVALID`、`AGENT_USE_CASES_PARSE_FAILED`、`AGENT_BOUND_TOOL_NOT_FOUND`、`AGENT_BOUND_TOOL_VERSION_MISSING`、`AGENT_BOUND_TOOL_DEFINITION_DUPLICATED`、`AGENT_BOUND_AGENT_NOT_FOUND`、`AGENT_BOUND_AGENT_VERSION_MISSING`、`AGENT_BOUND_AGENT_DEFINITION_DUPLICATED`。
 
 Runtime 新增错误码参数固定如下；关联版本为空时，Service 向消息参数传递本地化前的固定字面量 `latest`：
 
@@ -499,6 +499,8 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| `v0.20.1` | 2026-10-22 | mode 生效方式改为链接智能体本地目录 UC2。 |
+| `v0.20.0` | 2026-10-22 | 读取接口对没有模型绑定的 Agent 返回空 `bindingModels`，不再按存储完整性错误返回 500；mode 生效说明去掉已删除的 refresh。 |
 | `v0.19.5` | 2026-10-08 | 元数据说明统一使用 Skill 和 Tool。 |
 | `v0.19.4` | 2026-10-08 | 中文说明统一使用“工具”和“技能”，源码类型及字段标识保持既有命名。 |
 | `v0.19.3` | 2026-10-08 | 元数据资源关系统一称为“关联”，保留字段、表和源码标识。 |

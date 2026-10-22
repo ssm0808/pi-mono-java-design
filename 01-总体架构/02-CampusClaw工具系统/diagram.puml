@@ -300,58 +300,6 @@ note over Loop,Catalog
 end note
 @enduml
 
-@startuml managed_runtime_refresh
-' Source evidence (CampusClaw d649866):
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:
-' prepare, materialize, isRuntimeComplete
-' Observed behavior: current materialization writes the managed tree directly and
-' generates references/tools.json.
-' Design reason: candidate-tree publication prevents partial reads; explicit
-' management refresh changes only future sessions and never tool configuration.
-' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 14
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 180
-skinparam sequenceArrowColor #425B70
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F1F5F9
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #FAFBFC
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-
-title Publish One Validated Agent Directory - Target
-participant "Host / management" as Caller
-participant "Runtime manager" as Manager
-participant Mate
-participant "Candidate directory" as Candidate
-database "Published directory" as Published
-Caller -> Manager : Prepare missing runtime or explicitly refresh
-Manager -> Manager : Acquire Agent lock; recheck cached tree
-Manager -> Mate : Fetch required directory source
-Mate --> Manager : Source data
-Manager -> Candidate : Build and validate complete tree
-alt Candidate valid
-  Manager -> Published : Atomically publish candidate
-  Published --> Manager : Published runtime
-else Build or validation failed
-  Manager -> Candidate : Discard candidate
-end
-Manager -> Manager : Release Agent lock on every path
-Manager --> Caller : Snapshot or error; failure keeps previous tree
-note over Manager,Published
-  Complete prepare-cache hits return without fetching.
-  Explicit refresh forces a new candidate.
-  Active executions retain their snapshots.
-end note
-@enduml
-
 @startuml call_mate_tool_sequence
 ' Source evidence (CampusClaw ae6645caaade3b9520220a34af940210850ef36a, checked 2026-09-22):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java: prepare
@@ -727,56 +675,5 @@ note over Session,Policy
   No safe window: do not start compaction.
   Successful answers are never replayed.
   [P] = Pending implementation increment.
-end note
-@enduml
-
-@startuml refresh_next_execution
-' Source evidence (CampusClaw PR 167 f60cc3e): AgentRuntimeManager refresh and Runtime Session store.
-' Pending implementation Java design: RuntimeSessionModelReconciler runs before accepting user.message.
-' Architecture change: refresh does not mutate an active execution snapshot.
-' Design reason: make directory publication atomic while preserving execution consistency.
-' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
-skinparam backgroundColor white
-skinparam defaultFontName SansSerif
-skinparam defaultFontSize 14
-skinparam shadowing false
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 180
-skinparam sequenceArrowColor #425B70
-skinparam sequenceLifeLineBorderColor #BAC4CC
-skinparam sequenceParticipantBackgroundColor #F1F5F9
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceGroupBackgroundColor #FAFBFC
-skinparam sequenceGroupBorderColor #BAC4CC
-skinparam noteBackgroundColor #FFFBEF
-skinparam noteBorderColor #D2C6A5
-hide footbox
-autonumber
-
-title Prepare the Next Execution After Refresh - Target
-participant Caller
-participant "Execution admission" as Admission
-database "Published Agent directory" as Directory
-participant "Model service" as Models
-database "Session history" as Store
-participant "Execution Host" as Host
-Caller -> Admission : Submit the next message to an idle Session
-Admission -> Directory : Read published bindings and default
-Directory --> Admission : Latest validated runtime metadata
-Admission -> Models : Resolve current model or allowed default
-Models --> Admission : Callable model or unavailable
-break No callable model
-  Admission --> Caller : Reject before accepting user.message
-end
-opt Model reconciliation changes configuration
-  Admission -> Store : Commit model and required thinking changes
-  Store --> Admission : Authoritative configuration events
-  Admission --> Caller : Configuration events before message receipt
-end
-Admission -> Store : Accept user.message and mark running
-Admission -> Host : Start with reconciled immutable snapshot
-note over Admission,Host
-  Pending implementation: next-execution reconciliation.
-  Active executions keep their existing snapshot.
 end note
 @enduml

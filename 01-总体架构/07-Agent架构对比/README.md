@@ -4,16 +4,16 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.110.0 |
+| 文档版本 | 1.112.0 |
 | 更新日期 | 2026-10-22 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
-| 设计依据 | 当前各模块主设计；M02 采用 Model 主设计 2.12.0，具体入口见各条目 |
+| 设计依据 | 当前各模块主设计；M02 采用 Model 主设计 2.14.0，具体入口见各条目 |
 | 模型传输专项基线 | A18：2026-10-16 隔离 fetch pi `main@4dd2b149d155d7369de16ea4dc77c84e9f5ffb24`、Codex `main@4eb4a65407d98cebc4c83bf13be440b9fbc78a7c`、Java `main@1acbbf3f046932872af06868c600bb5d9498d8b6`；路径与符号见[Model 源码证据 §1.4](../../02-服务与接口/03-Model/source-evidence.md#http-transport-evidence)，其他条目的基线不升级 |
 | Schema 校验专项基线 | A20：2026-10-17 隔离 fetch pi `main@8efd314fa3d3232ce197d8d7a6a5660530b9d83e`、Codex `main@3b8f43a06bb3105e81406b35ff69f94977d18ae4`、OpenCode `dev@65932e870ca50d21886f9d0ee89c6603bac34a65`、DSH `master@1517a4dbca0a2789ff1d41ba439600f8547d23fa`、Java `main@1446c58564539eb320fa3c6b495be34e5f985394`；路径与符号见[工具系统源码证据 §15](../02-CampusClaw工具系统/source-evidence.md#tool-schema-validator-evidence)，其他条目的基线不升级 |
 | CampusClaw 局部源码基线 | `pi-mono-java@f61906b9136246ca60f333704b6fc92b5420d0ec`；仅证明证据表所列文件与符号，不代表最新远端或全部模块 |
-| 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论 |
+| 模型来源专项基线 | A06 于 2026-09-17 核验 pi 默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18` 与 Java `main` 的 `21c3f59be033e7bdd5506a2d9d48baa2581bc3c7`；只升级模型配置、Provider 组合和业务 Agent 设置链结论。2026-10-22 模型实时查询专项另行 fetch pi `main@7c22a93d`、Codex `main@86e17e98`、OpenCode `dev@c93aaae3`、Java `main@bc031ed8`，并重读 Claude Managed Agents 文档，完整提交见[专项证据](../../02-服务与接口/03-Model/source-evidence.md#model-live-query-evidence) |
 | 历史计划模式专项基线 | A03/A05 的提示词专项于 2026-09-17 更新至 Codex `b0659c53`、OpenCode `88c6c7ab`、DeepSeek `0d1f5000`、pi `e4c75a73`；业务覆盖再次确认四个上游 HEAD 不变，Java 装配/发布读取本地 `21c3f59b`，完整 SHA、路径及差距见[§11](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖) |
 | 计划参数预览专项基线 | A03/M01/M02：2026-10-09 确认默认分支并隔离 fetch pi main `f1b2e77f5b13b2a199b1052cb79c235451afe7d7`；Java 实现 `a1e6450427abeabaa1af04d5964f371dbbf4cf68`（PR #336）；完整路径、新旧差异和验证见[§16](../06-CampusClaw计划模式/source-evidence.md#plan-generic-json-evidence)。其他基线保留 §15 历史归属 |
 | 前端专项基线 | A07：Java `1d08f98eb04f8ea6e01bcfbfd4008c1b638391c4` 的体验差距见[新核验](../../07-前端设计/source-evidence.md#experience-evidence)，前次验证见[实现证据](../../07-前端设计/source-evidence.md#current-implementation)；Codex 固定 `d58d0e58`，既有官方核对日期为 2026-09-15 |
@@ -76,6 +76,7 @@ Claw 各模块的数据库结构集中于[全库设计](../../03-数据与存储
 | M10 · 调度与并发 | 定时触发如何受理为独立执行，如何区分调度结果与根执行结果，暂停、失联和重复触发如何处理 | Claude Managed Agents 为调度主基线；其他四基线保留分层历史对照 | [定时任务主设计](../08-CampusClaw定时任务/README.md)仅支持 cron，名称上限 256；接口配置的任务每次运行新建 Session，复用同一 Agent 定义，对话中由 Cron 工具创建的任务在原会话追加一轮；[A14](#a14)维护取舍，Java 已核验范围与待实现增量见[M10 证据](../08-CampusClaw定时任务/source-evidence.md) |
 | M11 · 可观测性与测试 | 日志、审计历史与模型上下文如何分开；如何证明差异可接受 | 按验证对象选基线，不设统一主基线 | 待补证；区分测试存在、测试运行和生产观测 |
 | M12 · 异常与错误码 | 失败类别用异常类型还是错误码区分；原始异常由谁保留；对外文字与日志文字如何分开 | DSH 与 Codex；OpenCode、pi 对照 | [A19](#a19)覆盖单一异常类、集中错误码枚举与构建期拦截；待实现 |
+| M13 · 智能体本地目录 | 智能体配置在 Claw 节点上以什么形式存在、什么时候更新、怎样替换才不让读取方看到一半 | Claude Managed Agents（公开文档）；pi、Codex、OpenCode 对照本地目录与缓存 | [A21](#a21)覆盖本地副本、按完整性重建和原子替换；按版本自动重建待评审 |
 
 M05 的 53eff85c 专项只更新 CampusClaw 实现状态：Builtin、Runtime Skill 执行、严格名称、
 展开文本恢复与前端 Slash 已存在；统一 Skill 扩展结构、完整版本快照和统计仍待实现；Mate 对外的命令接口不在本设计范围。
@@ -193,9 +194,9 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | CampusClaw 目标 | Agent 默认 mode 只初始化新 Session，Session 独立维护当前模式；模式更新复用统一 Session POST。完整方案一次写入 ExitPlanMode({plan})，后端从可信调用的参数生成计划预览；完整校验后以事件身份审核，沿用原执行与数据库确认交接，批准后以 build 指令续跑；Tool/Skill 定义跨模式稳定。精确规则归计划与元数据主设计。 |
 | 差异分类 | 产品约束：Agent 默认 mode 与 Session 当前模式分离、Tool/Skill 元数据稳定、当前模式由 Session 更新、只允许 idle 主动切换、Subagent 调用时继承模式；架构变更：在既有配置服务增加 Session 更新，并将进程内审核接入 HTTP 和已有数据库执行控制；安全加固：精确目标、单次消费、停止竞争和两跳身份校验。 |
 | 提示词依据 | DeepSeek standard preset 明确禁止规划期 todo_write；CampusClaw 同样仅在 build 记录实施进度。模式资源仅 PLAN.md / BUILD.md；Main Agent/Subagent 用一行角色区分 PLAN 内规则的适用范围，批准后重组为短 BUILD。通用执行、验证和交付归基础 SYSTEM，进度细则归工具描述；不能以其他 Agent 的模式文件短推断其总规则少。精确正文、BASE 发布前提和矩阵见[提示词设计](../06-CampusClaw计划模式/plan-policy.md)，最新源码及代价见[专项证据 §10](../06-CampusClaw计划模式/source-evidence.md#10-两份模式提示词的最新上游核验)。 |
-| 业务模式覆盖 | pi 有 SYSTEM 文件优先级，DeepSeek 有部署提供的 plan:policy，Codex 有模式目录/调用文本覆盖；OpenCode agent.prompt 覆盖基础模板但模式提醒仍独立。CampusClaw 按业务 `.campusclaw/PLAN.md`、`BUILD.md` 分别完整替换，缺失回退预制；执行固定快照、Subagent 读自身目录、refresh 保留可选文件。属于架构扩展；代价是目录发布一致性和自定义正文评估，详见[覆盖证据](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖)。 |
+| 业务模式覆盖 | pi 有 SYSTEM 文件优先级，DeepSeek 有部署提供的 plan:policy，Codex 有模式目录/调用文本覆盖；OpenCode agent.prompt 覆盖基础模板但模式提醒仍独立。CampusClaw 按业务 `.campusclaw/PLAN.md`、`BUILD.md` 分别完整替换，缺失回退预制；执行固定快照、Subagent 读自身目录、目录重建保留可选文件。属于架构扩展；代价是目录发布一致性和自定义正文评估，详见[覆盖证据](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖)。 |
 | 具体理由 | 模式已有明确的 Session 资源归属，更新操作复用其身份、版本与事务，统一四类属性入口，并明确组合原子性。混合查询与变更工具不能依靠新增一个静态只读字段准确表达每次调用用途；稳定字段与工具定义让规划规则独立演进。公共审核需要可对账的事件身份，原有工具权限不能表示对整份方案的批准。展示恢复与锁内接受分离，沿用既有工具确认方式，避免 Session 响应随具体交互增加指针。 |
-| 默认值证据与代价 | Mate 956b547f 的 Agent DTO/VO/DefinitionColumns 无 mode；Runtime 09b32d8e 的 prepare 复用目录、refresh 强制发布、create 从解析快照初始化，均无 mode。目标增加字段传播与创建复制，修改 Agent 后须先完成目录发布，不能宣称新 Session 即时读取远端最新值；既有 Session 不被重置。这是产品配置扩展，不是 DeepSeek/Claude 同名字段。完整路径及符号见[专项证据](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。 |
+| 默认值证据与代价 | Mate 956b547f 的 Agent DTO/VO/DefinitionColumns 无 mode；Runtime 09b32d8e 的 prepare 复用目录、refresh 强制发布（refresh 无生产调用方，已删除）、create 从解析快照初始化，均无 mode。目标增加字段传播与创建复制，修改 Agent 后须先完成目录发布，不能宣称新 Session 即时读取远端最新值；既有 Session 不被重置。这是产品配置扩展，不是 DeepSeek/Claude 同名字段。完整路径及符号见[专项证据](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。 |
 | 收益与代价 | 不扩充工具元数据、不增加第二套 Loop 或 Session 待审字段；需要新增模式和审核事件、确认记录及客户端卡片。刷新必须补齐相关事件，缺页或状态矛盾时禁用审核；跨请求读取仍可能过期，确认始终在服务端重新校验。提示词约束不提供服务端强制只读保证；进程失联自动接管不在该功能承诺中。 |
 | 备选与重新评估条件 | 本期不采用副作用白名单、独立 Plan CRUD、Cordis 插件容器或 token 全量日志。若产品要求规划期绝不产生副作用，应单独设计可执行的权限边界，不能将 Prompt 遵循率当作保证。 |
 | 设计 / 实现状态 | 参数流式及通用解析在 PR #336 已实现、未合入 main；确定性回归见 §16。两文件覆盖等其他能力仍保留各自历史证据；BASE 业务发布、企业桥接与真实模型验收不因本次测试而完成 |
@@ -283,15 +284,16 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | 维度 | 结论 |
 |---|---|
 | 模块与主设计 | M02，关联 M08/M11；[Model 主设计 §3、§5](../../02-服务与接口/03-Model/README.md#provider)维护命名、削减及依赖边界；复用其[唯一全局目标类图](../../02-服务与接口/03-Model/model-classes.svg)。 |
-| 架构问题 | 企业产品只通过 CampusMate 调用模型时，如何保证每个业务 Agent 的默认模型和允许列表只有一个权威来源，同时避免进程级配置跨 Agent 注入模型？ |
+| 架构问题 | 企业产品只通过 CampusMate 调用模型时，如何保证每个业务 Agent 的默认模型和允许列表只以 Mate 为准、修改后及时生效，同时避免进程级配置跨 Agent 注入模型？ |
 | pi 模型来源历史观察 | 2026-09-17 核验默认分支 `main` 的 `16235fd93521f9f96164f5891beea62e6bea5b18`：`packages/coding-agent/src/core/model-runtime.ts` 的 `ModelRuntime.create/rebuildProviders` 默认读取 Agent Dir `models.json` 并组合内置、JSON 与扩展 Provider；`core/model-config.ts#ModelConfig.load` 校验 JSON；`core/agent-session-services.ts#createAgentSessionServices` 将模型目录和 `SettingsManager` 的默认选择分开。`packages/ai/src/models.ts#ModelsImpl/createProvider` 让 Provider 同时发布模型并流式调用。 |
 | pi 能力最新观察 | 2026-09-19 确认并 fetch main `36b60d2e8985899743c4cf5bd5f8929832a3f05d`；`packages/coding-agent/src/core/provider-composer.ts#modelFromJson` 对自定义模型缺省填 128000/16384；`packages/ai/src/types.ts#Model` 具有逐模型 contextWindow/maxTokens；`packages/ai/src/api/simple-options.ts#buildBaseOptions/clampMaxTokensToContext` 合成请求额度；`packages/coding-agent/src/core/compaction/compaction.ts#createSummarizationOptions` 仍设置摘要额度。再次 fetch SHA 未变，新增核验摘要路径。只更新这组字段与消费路径，不把前次目录结论改挂新 SHA；默认分支快照不是稳定发布验收。 |
-| CampusClaw 目标 | 唯一内置实现为 CampusMateProvider；Agent settings 只维护绑定/默认选择，每个新执行锁外查询当前模型的 contextWindow，锁内复核后固定执行快照；工具循环和原根续跑复用。Mate 自主控制普通调用及摘要输出，Claw 不消费或转发输出上限。移除统一 128000/8192；删除 ModelRegistry、外部 JSON 和第二目录，Provider SPI 只适配调用。 |
+| 模型来源最新观察（2026-10-22） | Claude Managed Agents 用 Agent ID 创建会话时由服务端取最新版本；Codex 远端模型目录缓存 5 分钟、拉取失败保留上次快照；OpenCode 目录缓存 5 分钟并有内置快照；pi 默认模型来自本地 settings，恢复会话时模型不可用则回退默认并提示。路径与符号见[专项证据](../../02-服务与接口/03-Model/source-evidence.md#model-live-query-evidence)。 |
+| CampusClaw 目标 | 唯一内置实现为 CampusMateProvider；本地 Agent 目录不保存模型，绑定与默认模型每个请求实时调用 Mate getAgent 读取，不缓存、不回退旧值，空绑定报需要配置模型、Mate 故障报稍后重试；每个新执行锁外查询当前模型的 contextWindow，锁内复核后固定执行快照；工具循环和原根续跑复用。Mate 自主控制普通调用及摘要输出，Claw 不消费或转发输出上限。移除统一 128000/8192；删除 ModelRegistry、外部 JSON 和第二目录，Provider SPI 只适配调用。 |
 | CampusClaw 已观察实现 | Java `21c3f59b` 的 `AgentRuntimeManager#loadSnapshot/validSettings`、`AgentDirectorySnapshots#from` 和 `MateRuntimeModelManager#resolveModel/listAvailableModels` 已形成业务 Agent 设置主链；但 `ModelRegistry#init` 仍自动探测两处 JSON，`ModelCatalogService/CatalogRuntimeModelManager` 仍保留另一套目录解析，`CampusClawAiService` 仍注入注册表。Mate 本地 `4b957a3a` runtime 只返回模型 ID，路由配置未含两个能力数值；Java 仍使用全局默认值。完整路径见主设计源码证据 J-AI-N01～J-AI-N05 与[能力专项](../../02-服务与接口/03-Model/source-evidence.md#model-capability-evidence)。 |
 | 差异分类 | 产品约束：CampusMate 唯一出口与输出权威，Agent 绑定唯一授权；架构变更：信息按新执行读取而非发布到目录、锁外查询及锁内复核、前置上下文检查；安全加固：禁止进程级外部模型来源。 |
-| 理由与代价 | 窗口随新执行刷新，避免路由能力长期陈旧；执行内固定，避免工具循环期间预算漂移。代价是每根一次网络往返、元数据故障阻止新执行；查询后仍可能发生上游变化。Claw 放弃独立摘要额度和基于输出上限的 LENGTH 判断，保留显式 overflow 的有界恢复。 |
+| 理由与代价 | 绑定每个请求实时读取，Mate 修改立即生效、实例间一致，代价是每次新建会话、选择或切换模型、发送消息多一次 getAgent 请求，Mate 故障时这些入口失败（不像 Codex 那样用旧快照继续）。窗口随新执行刷新，避免路由能力长期陈旧；执行内固定，避免工具循环期间预算漂移。代价是每根一次网络往返、元数据故障阻止新执行；查询后仍可能发生上游变化。Claw 放弃独立摘要额度和基于输出上限的 LENGTH 判断，保留显式 overflow 的有界恢复。 |
 | 备选与重新评估条件 | 不保留旧 JSON 加载作为隐藏开关，也不以空目录日志冒充兼容。只有产品明确重新引入非 CampusMate 模型时，才重新设计模型身份、凭据、租户隔离、发布和回滚，不能直接恢复全局文件扫描。 |
-| 设计状态 / 实现状态 | 已确认目标；业务绑定、执行准入和压缩骨架已存在。每执行信息查询、准入拆分、输出策略移交、前置预算和旧目录删除待实现；未修改产品代码或运行回归测试。 |
+| 设计状态 / 实现状态 | getAgent 实时读取模型待评审、待实现；业务绑定、执行准入和压缩骨架已存在。每执行信息查询、准入拆分、输出策略移交、前置预算和旧目录删除待实现；未修改产品代码或运行回归测试。 |
 | 验收与证据 | 主设计 S0～S4、模型信息 C1～C4：每根一次查询、原根续跑复用、模型/版本竞争、查询失败无接受记录、普通与摘要请求无额度、窗口缩小及摘要无收益有界失败；modules/公司镜像一致。 |
 
 **讲解要点。** pi 在 Harness 内维护模型能力及调用/摘要额度；CampusClaw 将输出控制集中到 Mate，自己按新执行读取窗口并管理上下文。绑定快照决定能用什么模型，执行快照决定本次按什么窗口压缩。收益是权威清晰且更新及时，代价是读取延迟、故障依赖及较少的本地输出控制；上述增量待实现。
@@ -747,6 +749,28 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 
 **讲解要点。** 四个基线里只有 DeepSeek Harness 自写了严格子集，CampusClaw 借了它的关键字范围，再按框架工具用量扩展。表外关键字分两种处理：框架工具按 DSH 的严格做法，由测试拦住；Mate 工具借 Codex 的静默丢弃，不因 Claw 不认识某个关键字就阻塞调用，表内关键字照常在本地校验。这样能去掉 json-schema-validator 和它的两个传递依赖，同时用原库在测试里证明结果一致或只放宽。
 
+<a id="a21"></a>
+
+## 6.18 A21 · 智能体本地目录：本地副本、按完整性重建、原子替换
+
+| 维度 | 结论 |
+|---|---|
+| 模块与主设计 | M13；[智能体本地目录](../10-CampusClaw智能体本地目录/README.md)唯一维护目录结构、准备与重建、失败处理 |
+| 架构问题 | 智能体配置以 Mate 为准，但技能正文和资源要被本地文件工具读取。Claw 节点上保存什么、什么时候更新、怎样替换才不让读取方看到一半？ |
+| Claude Managed Agents | 智能体是服务端带版本的配置；用 ID 创建会话时使用最新版本，可固定版本；会话响应给出已解析快照。公开文档没有本地副本的概念 |
+| pi | 配置就是本机 `~/.pi/agent/` 下的 `SYSTEM.md`、`settings.json` 和技能目录，由用户维护，`/reload` 时重新读取 |
+| Codex | 内置技能写入 `CODEX_HOME/skills/.system`，内容指纹不同就先删后写，不是原子替换 |
+| OpenCode | 远端技能按 URL 拉到全局缓存；每次加载查询索引，版本不同时写临时目录、旧目录改名备份、再改名替换，失败改回 |
+| CampusClaw 已观察 | Java main `3ade086f`：完整就用、缺失或不完整才从 Mate 重建；同级候选目录校验后原子移动替换，失败回滚；进程内按智能体加锁；`refresh` 无调用方（#381 删除）；`settings.json` 当前仍保存模型 |
+| CampusClaw 目标 | 保留本地副本和原子替换；不比较版本、无定时刷新、无强制入口，运维删除 `agent.json` 让修改生效；模型移出目录，实时读取（待实现） |
+| 差异分类 | 产品约束：技能资源必须能被本地工具读取，所以需要本地副本；架构变更：删除没有调用方的强制刷新，模型移出目录；安全加固：真实路径精确匹配、拒绝符号链接 |
+| 理由与代价 | 替换方式与 OpenCode 相同，比 Codex 的先删后写多一步备份，换来读取方不会看到半个目录。更新时机比 Codex、OpenCode 都保守：它们按版本或指纹自动更新，CampusClaw 目前没有 Mate 提供的版本比较，只能按完整性判断。代价是 Mate 上的修改要人工在每个节点触发 |
+| 备选与重新评估条件 | Mate 能返回智能体及技能的版本或内容指纹时，按 OpenCode 的方式在准备时比较并自动重建（设计 T1） |
+| 设计状态 / 实现状态 | 本地副本与原子替换已实现；删除 refresh 待合并（#381）；模型移出目录待实现 |
+| 验收与证据 | 主设计 §6.3；[源码与基线证据](../10-CampusClaw智能体本地目录/source-evidence.md) |
+
+**讲解要点。** 托管产品没有本地副本，CampusClaw 需要它，是因为技能资源要被本地文件工具读。替换做法借 OpenCode：写临时目录、旧目录备份、原子改名。更新时机目前最保守，只看目录是否完整，代价是 Mate 的修改要人工触发；有了版本号就能像 OpenCode 一样自动更新。
+
 ## 7. 源码证据与更新边界
 
 P01/P02 使用 pi 固定 commit `5cd93f688aaab89dbb6dfa4aca535f21796ae185`；
@@ -801,6 +825,8 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.112.0 | 2026-10-22 | 新增 M13 与 A21：智能体本地目录的本地副本、更新时机与原子替换，对比 Claude Managed Agents、pi、Codex、OpenCode。 |
+| 1.111.0 | 2026-10-22 | A06 改为每个请求实时读取 Mate getAgent 的模型绑定，对比 Claude Managed Agents、Codex、OpenCode 与 pi 的模型来源做法；受管目录 refresh 已删除。 |
 | 1.110.0 | 2026-10-22 | M03/M06 企业凭据专项补充：工具执行快照扩展为携带入站全部请求头（不做业务过滤），随 Mate tool execute 透传。 |
 | 1.109.0 | 2026-10-21 | M05 补充 Mate 不可达返回 503 与模型显示名由 Mate 替换 `model:` 链接。 |
 | 1.108.0 | 2026-10-20 | M05 记录 2026-10-20 命令接口对齐：新对话清单范围、按 Agent 的可选值、rename 与 argumentRequired、Builtin 文本结果，删除 Mate 命令选项分层。 |

@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.0 |
+| 文档版本 | 3.5.2 |
 | 状态 | 目标设计；Skill、CallTool、Agent 代理、确认前可信准备与模型参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余状态见源码证据 |
-| 更新日期 | 2026-10-14 |
+| 更新日期 | 2026-10-22 |
 | CampusClaw Read 专项核验基线 | `553dcd5e2ff682f9684810a043b442b37a02e54a`（本地固定提交，仅核验文本读取边界） |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
@@ -260,7 +260,7 @@ Note: file list is sampled.
 </skill_content>
 ```
 
-资源清单只列 Skill 目录内的普通资源文件绝对路径，排除 `SKILL.md`，最多 10 条并明确提示 sampled；不生成用途简介。扫描沿用工作区边界且不跟随符号链接。清单不完整时模型可以使用 `Ls`、`Find`、`Grep` 定位其余普通资源，再用 `Read` 读取。受管目录不生成工具定义 JSON；工具发现统一由 `SearchTools` 承担。
+资源清单只列 Skill 目录内的普通资源文件绝对路径，排除 `SKILL.md`，最多 10 条并明确提示 sampled；不生成用途简介。扫描沿用工作区边界且不跟随符号链接。清单不完整时模型可以使用 `Ls`、`Find`、`Grep` 定位其余普通资源，再用 `Read` 读取。智能体本地目录不生成工具定义 JSON；工具发现统一由 `SearchTools` 承担。
 
 `Skill`、`Read` 都不建立“已激活”状态，也不修改模型 `tools`。Skill 正文在对应业务步骤中引用唯一工具名，例如“使用 `query-device-alarm` 查询设备告警”；不需要写入参数 Schema、内部 ID 或 SearchTools/CallTool 的平台协议。模型识别正文中的名称，宿主提示指导模型在需要完整参数定义时调用 `SearchTools`；宿主不新增从正文猜测名称的解析器。
 
@@ -405,7 +405,7 @@ description 与 Schema 中的 subagent 措辞待实现，当前实现仍写作 c
 
 执行前依次校验精确直接绑定、自绑定、enabled、固定版本、最大深度、祖先路径循环、
 目标运行目录完整性和模型可用性。首版最大深度为 1，`subagent` profile 因而不暴露
-`Agent`。版本不匹配直接失败，不触发隐式目录 refresh。
+`Agent`。版本不匹配直接失败，不触发隐式目录重建。
 
 Subagent 有可用 default model 时优先使用；否则继承父 Execution 的 model 和 thinking，且
 仍须通过 Subagent `bindingModels` 与当前凭据可用性校验。父侧只接收目标、工具开始/结束和
@@ -451,6 +451,8 @@ Subagent 有可用 default model 时优先使用；否则继承父 Execution 的
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.5.2 | 2026-10-22 | 受管目录改称智能体本地目录。 |
+| 3.5.1 | 2026-10-22 | 受管目录 refresh 已删除，版本不匹配改述为不触发隐式目录重建。 |
 | 3.5.0 | 2026-10-14 | `Agent` 工具描述、Schema 文案与 profile 键改用 subagent（待实现），命名规则见主设计 §4.2。 |
 | 3.4.1 | 2026-10-08 | Read 契约明确仅支持 UTF-8 文本，移除图片读取和缩放描述并补充源码证据。 |
 | 3.4.0 | 2026-09-22 | SearchTools 仅接收 tool 并返回单个完整定义，移除模糊搜索与全量快照前提。 |

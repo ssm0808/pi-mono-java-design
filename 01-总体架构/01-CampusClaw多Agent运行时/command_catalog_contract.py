@@ -147,7 +147,8 @@ AGENT_VALUE_IDS = ("200-model-agent", "200-thinking-agent", "200-mode-agent")
 VALUE_EXAMPLE_IDS = SESSION_VALUE_IDS + AGENT_VALUE_IDS
 VALUE_ERROR_CODES = {("400", "INVALID_AGENT_ID"), ("400", "INVALID_SESSION_ID"), ("404", "SESSION_NOT_FOUND"),
                      ("404", "AGENT_NOT_FOUND"), ("404", "COMMAND_VALUES_NOT_FOUND"),
-                     ("422", "AGENT_NOT_AVAILABLE"), ("503", "AGENT_SERVICE_UNAVAILABLE"),
+                     ("422", "AGENT_NOT_AVAILABLE"), ("422", "AGENT_MODEL_NOT_CONFIGURED"),
+                     ("503", "AGENT_SERVICE_UNAVAILABLE"),
                      ("503", "MANAGER_UNAVAILABLE")}
 
 

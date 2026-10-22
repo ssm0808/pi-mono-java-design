@@ -1,6 +1,6 @@
 # Mate 模型信息与执行快照
 
-版本：1.1.0 · 2026-09-19 · 状态：已确认目标，待实现。
+版本：1.1.1 · 2026-10-22 · 状态：已确认目标，待实现。
 
 [返回 Model 主设计](README.md) · [全局目标类图](model-classes.svg) · [源码证据](source-evidence.md#model-capability-evidence)
 
@@ -8,7 +8,7 @@
 
 Mate 维护逐模型信息、路由和输出额度策略。CampusClaw 每个新执行开始前查询一次当前选中模型的信息，使用 `contextWindow` 管理上下文与压缩；普通对话、工具循环、Subagent/Cron 和压缩摘要均不设置、裁剪或转发输出 token 上限。Mate 根据模型、当前输入和上游协议自行确定输出额度；需要显式输出参数的上游由 Mate 补齐并适配。
 
-Agent 已发布设置中的 `bindingModels/defaultModel` 继续决定允许使用和默认选择的模型。模型信息查询不能增加可选模型；信息也不写入 Agent 目录，不通过 refresh 才生效。`contextWindow` 是 Mate 当前路由实际可用的总上下文窗口，单位 token，不是请求输出预算。Mate 必须返回真实有效窗口；同一 modelId 对应多个候选路由时，返回所有可能被选择路由均支持的保守窗口，或在 Mate 内保证查询与调用使用一致的能力约束。
+Mate getAgent 实时返回的 `bindingModels` 决定允许使用的模型，第一个为默认模型（待实现，见[主设计 §2](README.md#model-source)）。模型信息查询不能增加可选模型；信息也不写入 Agent 目录，不通过 refresh 才生效。`contextWindow` 是 Mate 当前路由实际可用的总上下文窗口，单位 token，不是请求输出预算。Mate 必须返回真实有效窗口；同一 modelId 对应多个候选路由时，返回所有可能被选择路由均支持的保守窗口，或在 Mate 内保证查询与调用使用一致的能力约束。
 
 这是产品约束与架构变更：Mate 统一控制生成参数，Claw 在每次新执行取得较新的窗口并在执行内固定使用。代价是每个新执行多一次短 HTTP 查询，并增加对模型元数据可用性的依赖；Claw 放弃独立摘要输出预算和基于目标输出上限的截断推断。首版只要求 `modelId/contextWindow`，不查询或消费 `maxTokens`；reasoning、模态、计费按既有设计处理，后续增加字段时另行定义语义。
 
@@ -99,5 +99,6 @@ Agent 已发布设置中的 `bindingModels/defaultModel` 继续决定允许使�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.1.1 | 2026-10-22 | 允许使用的模型改由 Mate getAgent 实时提供。 |
 | 1.1.0 | 2026-09-19 | Mate 独立控制输出额度，Claw 每个新执行查询模型窗口并固定执行快照。 |
 | 1.0.0 | 2026-09-19 | 定义独立模型能力查询、快照与字段消费边界。 |

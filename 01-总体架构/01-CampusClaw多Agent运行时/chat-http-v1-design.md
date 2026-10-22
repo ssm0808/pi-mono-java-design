@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.77.0 |
+| 文档版本 | 1.79.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新的 Header 移除核验见 §8.4，历史核验保留在 §8.1～§8.3 |
@@ -32,11 +32,11 @@ Path、Query、JSON 与 SSE data 的字段统一 lowerCamelCase；HTTP Header、
 
 创建、查询和删除的精确契约分别见 [创建](chat-api-review.html#CreateSession)、[查询](chat-api-review.html#GetSession)、[删除](chat-api-review.html#DeleteSession)。HTTP 请求独立定位 Session；恢复连接不需要 connect/resume。
 
-创建不带请求体。Runtime 根据不可变 agentId 解析受控 `.campusclaw` 目录，验证目录包含关系、已发布模型绑定、默认模型与 Agent 默认 mode；再生成不复用的 sessionId，持久化 idle Session。默认 thinking=true，mode 复制同一次读取的 Agent 配置；plan 的能力检查和旧元数据缺省规则由 [Agent.mode](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode) 维护。
+创建不带请求体。Runtime 根据不可变 agentId 解析受控 `.campusclaw` 目录，验证目录包含关系与 Agent 默认 mode，再调用 Mate getAgent 实时读取模型绑定并取第一个为默认模型（待实现，规则见 [Model §2](../../02-服务与接口/03-Model/README.md#model-source)）；再生成不复用的 sessionId，持久化 idle Session。默认 thinking=true，mode 复制同一次读取的 Agent 配置；plan 的能力检查和旧元数据缺省规则由 [Agent.mode](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode) 维护。
 
 创建不加载执行对象、不调用模型，也不创建 MessageEntry。`AgentSession + Agent`、SYSTEM.md、Skills 与有效 Runtime 工具 profile 在首次执行时装配；工具集合由 [工具系统](../02-CampusClaw工具系统/README.md) 维护。配置校验在记录提交前完成，失败不暴露 sessionId。此时序与本次读取的 Java f61906b9 创建入口一致，核验范围见 [源码证据 §4](source-evidence.md#4-session-创建与-http-入口核对)。
 
-HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI 异名文件当作别名；发布方须保证完整快照。Model Manager 对有效模型绑定与调用具有最终权威，目录快照不替代实际执行时的可用性检查。
+HTTP 目录文件为 `settings.json`、`SYSTEM.md` 和 `skills/`，不把 CLI 异名文件当作别名；发布方须保证完整快照。目录不保存模型，模型绑定以每次请求时 Mate getAgent 的返回为准（待实现）；目录快照不替代实际执行时的可用性检查。
 
 本实例没有该 Agent 的完整缓存时，创建在 Agent 锁内从 Mate 准备一次。Mate 超时、连接失败或返回 5xx 时返回可重试的 503 AGENT_SERVICE_UNAVAILABLE（带 Retry-After）；Agent 停用、Mate 返回 4xx、配置非法或目录发布失败仍为 422 AGENT_NOT_AVAILABLE。命令清单与可选值冷缓存时共用同一规则（2026-10-21 确认，待实现；实现基线都折叠为 422）。
 
@@ -104,7 +104,7 @@ Session scope 的可选模型由 §2.4.5 的命令可选值接口提供。统一
 
 #### 2.4.1 Session 可选模型
 
-独立的 `GET /sessions/{sessionId}/models` 已删除（2026-10-18）。可选模型改由 [§2.4.5](#245-get-session-command-values) 的 `GET /agents/{agentId}/commands/model/values?sessionId=` 返回：带 sessionId 时 currentValue 为会话当前模型，不带时为 Agent 默认模型（待实现）。`/model` 不再有无参查询。取值规则不变：实时读取 Model Manager，返回 Agent enabledModels 与当前可用模型的交集，保持 Agent 配置顺序、不分页；可以为空；已保存的当前模型可能因后续停用而不在候选中。清单不是执行预约，更新仍需重新验证。模型展示名与供应商能力仍由 Mate/Model Manager 目录负责；不公开 baseUrl、凭据、价格、请求 Headers 或供应商参数。Manager 不可用返回 MANAGER_UNAVAILABLE。
+独立的 `GET /sessions/{sessionId}/models` 已删除（2026-10-18）。可选模型改由 [§2.4.5](#245-get-session-command-values) 的 `GET /agents/{agentId}/commands/model/values?sessionId=` 返回：带 sessionId 时 currentValue 为会话当前模型，不带时为 Agent 默认模型（待实现）。`/model` 不再有无参查询。取值规则：每次请求调用 Mate getAgent 读取 Agent 绑定模型（待实现，见 [Model §2.5](../../02-服务与接口/03-Model/README.md#model-source-entries)），绑定为空返回 422 AGENT_MODEL_NOT_CONFIGURED；再与 Model Manager 当前可用模型取交集，保持 Agent 配置顺序、不分页；可以为空；已保存的当前模型可能因后续停用而不在候选中。清单不是执行预约，更新仍需重新验证。模型展示名与供应商能力仍由 Mate/Model Manager 目录负责；不公开 baseUrl、凭据、价格、请求 Headers 或供应商参数。Manager 不可用返回 MANAGER_UNAVAILABLE。
 
 #### 2.4.2 POST Session 统一更新
 
@@ -181,7 +181,7 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 
 统一 POST、严格省略标记、组合事务与 mode 已在 §8.3 所列 Java 基线观察到；移除条件 Header/ETag、按最新行合并及相应前端迁移已在 §8.4 核验为已实现。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
 
-管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。下一次消息接受时如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
+[智能体本地目录](../10-CampusClaw智能体本地目录/README.md)重建只发布新目录，不改 active execution 快照。每次消息接受前调用 Mate getAgent 读取 Agent 当前模型（待实现，见 [Model §2.5](../../02-服务与接口/03-Model/README.md#model-source-entries)），如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
 
 <a id="245-get-session-command-values"></a>
 
@@ -500,6 +500,8 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.79.0 | 2026-10-22 | 受管目录改称智能体本地目录并链接独立设计。 |
+| 1.78.0 | 2026-10-22 | 创建会话、可选模型与消息校准改为实时调用 Mate getAgent 读取模型，绑定为空返回 422 AGENT_MODEL_NOT_CONFIGURED（待实现）；删除管理面 refresh 描述。 |
 | 1.77.0 | 2026-10-22 | 工具执行凭据快照扩展为携带入站全部请求头（如 `x-plane-type`），不做业务过滤，随 Mate tool execute 原值合并发送；仅 JDK HttpClient 硬拒绝的受限传输头由传输层剔除，凭据同名吸收、大小写变体与 Accept-Encoding 风险的确认接受见 §7.1。 |
 | 1.76.0 | 2026-10-21 | 创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（待实现）。 |
 | 1.75.0 | 2026-10-20 | 可选值接口改为 ListAgentCommandValues（`GET /agents/{agentId}/commands/{commandName}/values?sessionId=`），清单新增 argumentRequired、`name` 改为 `rename`、不带 sessionId 时含 rename/model/thinking/mode，Builtin 成功只返回文本，技能命令受理错误码与普通消息一致。 |
