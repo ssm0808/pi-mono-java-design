@@ -2,11 +2,11 @@
 
 [服务与接口导航](../README.md) · [Claw 定时任务主设计](../../01-总体架构/08-CampusClaw定时任务/README.md) · [Claw 接口协议](../../01-总体架构/08-CampusClaw定时任务/README.md#interface) · [页面设计 M07 场景09](../../07-前端设计/场景/09-配置与管理定时任务/README.md) · [CampusMate 与 CampusMCP 客户端](../02-CampusMate与CampusMCP客户端/README.md) · [架构对比 A14](../../01-总体架构/07-Agent架构对比/README.md#a14) · [管理接口 HTML](schedule-api-review.html) · [PlantUML 源码](diagram.puml)
 
-本文是 Mate 侧定时任务唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织，集中维护 Mate 在定时任务中的全部职责：对浏览器提供的管理接口、调用 Claw 前后的处理、为 Claw 提供的两个接口以及定时会话登记的对账。Claw 侧的调度、受理、表结构和 HTTP 契约只在 [Claw 主设计](../../01-总体架构/08-CampusClaw定时任务/README.md)维护，本文引用不复制。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
+本文是 Mate 侧定时任务唯一的设计文档，按“评审记录 / 概述 / 整体方案 / 详细设计 / 接口协议 / 架构指标 / 质量保证 / 基建规范 / 其他补充”组织，集中维护 Mate 在定时任务中的全部职责：对浏览器提供的管理接口、调用 Claw 前后的处理、为 Claw 提供的两个接口。Claw 侧的调度、受理、表结构和 HTTP 契约只在 [Claw 主设计](../../01-总体架构/08-CampusClaw定时任务/README.md)维护，本文引用不复制。标注 **【缺口】** 的位置表示现有材料不足，需要补充。
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.1.0 |
+| 文档版本 | 2.2.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理（Mate 侧） |
 | 设计状态 | 目标设计，Mate 侧全部待实现；Claw 调用 access-token 的一方已实现，Session 归属登记的 Claw 端口已接入受理流程，HTTP 适配待实现 |
@@ -33,7 +33,7 @@
 | <a id="m4"></a>M4 | Mate 写归属失败时留下的无主任务如何处理 | 已关闭（2026-10-21）：Mate 不再保存任务归属，归属只在 Claw 的 user_id，不会出现无主任务 | [§2.3](#key-decisions) D3、D5 | Mate |
 | <a id="m5"></a>M5 | Claw 与 Mate 互相调用的服务认证 | 已定（2026-10-20）：两个方向都由证书校验保证调用方，应用层不另做服务认证 | [§4.3](#mate-to-claw)、[§4.4](#mate-for-claw) 全部接口 | Mate 与 Claw |
 | <a id="m6"></a>M6 | 定时运行产生的对话如何进入 Mate 自己的历史库 | 待后续对齐，本文暂不设计 | 平时 Mate 在转发 events 时写历史，定时运行不经过转发，Mate 历史库没有这些对话 | Mate |
-| <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 用户 ID 已确认与 Mate 既有表一致为 VARCHAR(512)；实现前按 mate-service 源码核对 Chat 映射表能否按 sessionId 查到 chatId 与所属用户；`t_schedule_session` 不存这两项，依赖这一点；所属用户由登记请求的 userId 写入 Chat 映射 | [§3.2](#data-model) 的字段类型与登记、核对接口 | Mate |
+| <a id="m7"></a>M7 | Mate 既有 Chat 映射表的真实结构 | 用户 ID 已确认与 Mate 既有表一致为 VARCHAR(512)；实现前按 mate-service 源码核对 Chat 映射表能否按 sessionId 查到所属用户：登记的幂等判断与只读核对都只依赖这一点，Mate 不另存登记表；所属用户由登记请求的 userId 写入 Chat 映射 | [§3.2](#data-model) 的字段类型与登记、核对接口 | Mate |
 
 ### 需求信息
 
@@ -49,7 +49,7 @@
 | 对话中创建的任务 | 用户在对话中由 Cron 工具创建的任务（Claw `create_source = chat`），关联当前会话，不经 Mate 创建 |
 | 管理接口 | Mate 对浏览器提供的 10 个定时任务接口，与 Claw 的 10 个接口一一对应 |
 | 任务归属 | 任务的创建者，保存在 Claw 任务的 user_id 上，创建后不可修改；Mate 不保存副本 |
-| 定时会话登记 | Mate 保存的“某次运行新建的 Session 属于哪个用户”记录，同时建立 Chat 映射 |
+| 定时会话登记 | Claw 每次为接口配置的任务新建 Session 前请求 Mate，Mate 为任务的创建者写一行 Chat 映射，记下这个 Session 属于谁；Mate 不另存登记表 |
 | 资源投影 | Mate 把 Claw 返回的 sessionId 字段改名为 chatId 后再返回浏览器，值不变、不查表；其余字段原样返回 |
 | 可见范围 | 当前用户能看到和管理的任务集合，规则见 [M1](#m1) |
 | 统一账号 | Mate 配置的一个业务账号，所有定时运行都用它的 access-token 调用业务工具（Claw [D10](../../01-总体架构/08-CampusClaw定时任务/README.md#key-decisions)） |
@@ -89,7 +89,6 @@
 | BU3 | 园区运营人员 | 从一次运行记录打开对应会话，查看结果并继续追问 | 通过 chatId 进入该会话，与普通对话的入口相同 |
 | BU4 | 园区运营人员 | 立即试跑一次任务 | 得到本次运行记录和会话入口 |
 | BU5 | 部署管理员 | 限制每个用户可创建的任务数 | 超过上限时创建被拒绝，提示原因 |
-| BU6 | 运维人员 | 不因网络故障留下归属不明的定时会话 | 未确认的定时会话登记被定期核对和清理 |
 
 ### 2.2 整体时序
 
@@ -99,7 +98,7 @@
 |---|---|---|
 | 运营人员 | 园区运营人员 | 通过浏览器管理页操作 |
 | Mate | 管理入口、Claw 的调用方与被调用方 | mate-service，内部组件见 [§3.2](#data-model) |
-| Mate 存储 | 定时会话登记与 Chat 映射 | Mate 自己的数据库，物理表未定 |
+| Mate 存储 | Chat 映射 | Mate 既有表，定时任务不新增表 |
 | Claw | 定时任务的保存、调度、受理与运行 | coding-agent 服务，见 Claw 主设计 |
 
 ![Mate 管理定时任务：业务总览](mate_schedule_overview.svg)
@@ -109,7 +108,7 @@
 | 阶段 | 详细时序 |
 |---|---|
 | 步骤 1～5：创建定时任务 | [§3.3 创建定时任务的详细时序](#create-sequence) |
-| 步骤 6～14：自动运行 | 登记见 [§3.6 登记定时会话归属的详细时序](#registration-sequence)；access-token 见 [§3.8](#scheduled-token-sequence)；受理与运行见 Claw 主设计 §3.5、§3.6 |
+| 步骤 6～14：自动运行 | 登记见 [§3.6 登记定时会话归属的详细时序](#registration-sequence)；access-token 见 [§3.7](#scheduled-token-sequence)；受理与运行见 Claw 主设计 §3.5、§3.6 |
 | 步骤 15～18：查看运行结果 | [§3.4.2 读取 Run 列表](#run-list-sequence)、[§3.5.7 读取 Run 详情](#run-get-sequence)；打开会话沿用 [通用对话 API](../07-mate-service通用对话API/README.md) |
 
 <a id="key-decisions"></a>
@@ -126,6 +125,7 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 | D4 | 浏览器看到的会话标识用什么？ | Claude 直接返回 session_id | Mate 对外只用 Chat/chatId 这个名字（[通用对话 API §1](../07-mate-service通用对话API/README.md#1-接口与权威来源)）；基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId | Schedule 与 Run 中的 sessionId 字段改名为 chatId，值不变，Mate 不查表（2026-10-21 确定）；接口配置的任务在登记时建立 Chat 映射 | 字段名与对话接口一致；读取不依赖 Mate 本地查询，也不会出现 chatId 暂时查不到的情况 |
 | D5 | 登记定时会话时 Mate 怎样知道会话属于谁？ | 无可对照实现 | Mate 不再保存任务归属 | Claw 在登记请求中带上任务的 userId，Mate 按它建立 Chat 映射；调用方由证书校验保证（[M5](#m5)） | Mate 信任 Claw 传来的 userId |
 | D6 | 任务对谁可见？ | Claude 按 workspace 范围列出 | 首版没有共享和管理员视图的需求 | 只有创建者可见、可管理（[M1](#m1)），两种任务都看 Claw 任务的 user_id | 不能团队共享；创建者离职后任务仍以统一账号运行，首版没有管理员入口处理，见 [§5.2.4](#emergency-plan) |
+| D7 | 定时会话的归属登记要不要单独一张表？ | 无可对照实现 | 登记发生在 Claw 建会话之前，两边没有事务；任务、Run 和会话是否建成都能从 Claw 读到 | 不建表（2026-10-22 确定，替代原 `t_schedule_session` 与对账）：登记只写 Chat 映射，同一 sessionId 已映射给同一用户时直接返回，映射给其他用户时拒绝；只读核对只看 Chat 映射；会话来自哪个任务、哪次 Run 需要时调 Claw 接口查 | Claw 登记成功后受理失败，会留下一条打不开的 Chat 映射，打开时 Claw 返回 404，不自动清理；不再比较 scheduleId 与 runId |
 
 ## 3. 详细设计
 
@@ -138,75 +138,47 @@ Claude Managed Agents 是 Claw 定时任务的主基线；它的 Deployment 属�
 | UC3 | BU1 | 运营人员 | 任务可见 | 修改、暂停、恢复或删除生效 | 删除任务与 Run，已生成会话保留 |
 | UC4 | BU4 | 运营人员 | 任务可见 | 返回本次 Run 及会话入口 | Mate 不得持有会阻塞登记的锁 |
 | UC5 | BU2、BU3 | 运营人员 | 已登录 | 返回可见任务的 Run，会话标识为 chatId | 响应不含 sessionId |
-| UC6 | BU3 | Claw | 接口配置的任务到点或立即运行 | 定时会话登记与 Chat 映射已建立 | 同一 sessionId 幂等；所属用户取请求中的 userId |
+| UC6 | BU3 | Claw | 接口配置的任务到点或立即运行 | 该 userId 的 Chat 映射已建立 | 同一 sessionId 幂等；所属用户取请求中的 userId |
 | UC7 | — | Claw | 定时运行中有需要凭据的工具调用 | 返回统一账号 access-token | Token 不落库、不进日志 |
-| UC8 | BU6 | Mate 定时任务 | 无 | 未提交的定时会话登记被清理 | 只读 Claw 公开接口；结果未知不删 |
 
 <a id="data-model"></a>
 
 ### 3.2 数据模型
 
-目标新增一张表 `t_schedule_session`，放在 Mate 自己的数据库，Claw 不读取。任务归属只在 Claw 的 `t_schedule.user_id`，Mate 不保存（2026-10-21 确定，见 [D2](#key-decisions)）。命名、类型与约束写法沿用 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md)的通用约定；引用 Claw 资源的列与 Claw `t_schedule`、`t_schedule_run` 的同名列类型一致；用户 ID 与 Mate 既有表一致，为 VARCHAR(512)（2026-10-20 评审确认）；Chat 映射表结构仍待按 mate-service 源码核对（[M7](#m7)）。
+Mate 不新增表（2026-10-22 确定，见 [D7](#key-decisions)）。任务配置、创建者、计划时间和 Run 只在 Claw 保存，任务归属只在 Claw 的 `t_schedule.user_id`（[D2](#key-decisions)）；定时会话只写 Mate 既有的 Chat 映射。用户 ID 与 Mate 既有表一致，为 VARCHAR(512)（2026-10-20 评审确认）；Chat 映射表结构仍待按 mate-service 源码核对（[M7](#m7)）。
 
 <a id="mate-tables"></a>
 
-#### 3.2.1 表职责与关联
+#### 3.2.1 用到的表
 
 | 表 | 权威职责 | 关联及生命周期 |
 |---|---|---|
-| `t_schedule_session` | 每次运行新建的 Session 来自哪个任务、哪次 Run，以及 Claw 是否已提交该 Session；所属用户与 chatId 不重复保存，以 Chat 映射为准 | `session_id` 逻辑引用 Claw 的 `t_sessions.id`；删除任务不删除；Session 删除时与 Chat 映射一起删除 |
-| Mate 既有 Chat 映射表 | Chat → Session 映射与所属用户 | 结构不变，未核验；登记时按请求中的 userId 在同一事务内写入一行（[§3.2.3](#mate-transactions)） |
+| Mate 既有 Chat 映射表 | Chat → Session 映射与所属用户；chatId 即 sessionId（[D4](#key-decisions)） | 结构不变，未核验；登记时按请求中的 userId 写入一行；删除任务不删除，随 Mate 删除 Chat 的流程删除 |
 
-不新增任务归属、任务配置副本、Run 副本、配额计数或请求去重表。任务配置、创建者、计划时间和 Run 只在 Claw 保存，Mate 每次读取 Claw。
-
-<a id="t_schedule_session"></a>
-
-#### 3.2.2 t_schedule_session：定时会话登记
-
-| 字段 | SQL 类型 | 可空 | 数据库默认值 | 含义 |
-|---|---|---|---|---|
-| session_id | VARCHAR(40) | 否 | — | Claw 为本次运行固定的 Session ID |
-| schedule_id | VARCHAR(41) | 否 | — | 所属任务，取自登记请求；之后任务删除不影响本行 |
-| run_id | VARCHAR(36) | 否 | — | 本次 Run；重复登记时与 schedule_id 一起做幂等比较 |
-| status | VARCHAR(16) | 否 | — | `registered` 已登记、Claw 是否提交未知；`confirmed` 已确认 Claw 中存在该 Session |
-| created_at | TIMESTAMPTZ(0) | 否 | — | 登记时刻 |
-
-主键：`session_id`。
-
-| 索引 | 规则 | 支持的访问 |
-|---|---|---|
-| uk_schedule_session_run | 唯一 `(run_id)` | 一次 Run 只登记一个 Session |
-| idx_schedule_session_unconfirmed | `(created_at) WHERE status = 'registered'` | 对账查找超过准备期限仍未确认的登记 |
-
-数据库约束：status 只能是 `registered` / `confirmed`。
-
-不保存的信息：所属用户与 chatId 在 Mate 既有 Chat 映射中，按 session_id 查询（[M7](#m7)）；agentId 在 Claw 的 Run 中，登记接口只原样回显。
-
-流转：登记时插入 `registered`；对账读到 Claw 中该 Session 存在时改为 `confirmed`；对账读到 Claw 明确不存在时与 Chat 映射一起删除。`confirmed` 之后只随 Session 删除。
+不新增定时会话登记、任务归属、任务配置副本、Run 副本、配额计数或请求去重表。会话来自哪个任务、哪次 Run，以及 Claw 是否建成该会话，需要时调 Claw 接口查询。
 
 <a id="mate-transactions"></a>
 
-#### 3.2.3 事务、删除与保留
+#### 3.2.2 事务、删除与保留
 
-| 操作 | 同一事务内维持的不变量 |
+| 操作 | 处理 |
 |---|---|
-| 创建、删除任务 | Mate 不写本地表；删除任务不动定时会话登记与 Chat 映射 |
-| 登记 | 按 session_id 查已有登记，schedule_id 与 run_id 相同则返回原记录，不同则拒绝；否则插入 `registered` 登记，并为请求中的 userId 建立 Chat 映射。任务是否存在、是否已删除由 Claw 在受理事务内复核，Mate 不检查 |
-| 确认登记 | 对账读到 Session 存在时，把 `registered` 改为 `confirmed` |
-| 删除未提交登记 | 对账确认 Claw 中不存在该 Session 后，删除登记与 Chat 映射 |
-| 删除 Session | 沿用 Mate 删除 Chat 的流程；同事务删除定时会话登记 |
+| 创建、删除任务 | Mate 不写本地表；删除任务不动 Chat 映射 |
+| 登记 | 按 sessionId 查 Chat 映射：没有则为请求中的 userId 写入一行；已映射给同一 userId 则直接返回；已映射给其他用户则拒绝。任务是否存在、是否已删除由 Claw 在受理事务内复核，Mate 不检查 |
+| 只读核对 | 按 sessionId 查 Chat 映射，不写入 |
+| 删除 Session | 沿用 Mate 删除 Chat 的流程 |
 
-保留：定时会话登记随 Session；本设计不新增保留期清理。所有调用 Claw 的步骤都在数据库事务外，事务内不等待远端。
+保留：Chat 映射随 Session；本设计不新增清理任务。Claw 登记成功后受理失败留下的 Chat 映射不自动清理（[D7](#key-decisions)）。所有调用 Claw 的步骤都在数据库事务外，事务内不等待远端。
 
 <a id="target-class-diagram"></a>
 
-#### 3.2.4 全局目标类图
+#### 3.2.3 全局目标类图
 
 ![Mate 定时任务：全局目标类图](mate_schedule_architecture.svg)
 
 [原尺寸 SVG](mate_schedule_architecture.svg) · [PlantUML 源码](diagram.puml#L112)
 
-分层理由：浏览器入口和 Claw 入口分成两个 Controller，因为它们的认证方式不同（浏览器走用户认证，Claw 由证书校验保证，[§5.1](#security)），不能共用一个过滤链。可见范围与配额都在 Claw，管理服务只负责转发 access-token 并调用投影规则，10 个操作共用同一个投影，不在 Mate 各写一份“这个任务是不是你的”。Chat 映射和统一账号认证是 Mate 既有能力，图中只画成接口；用户权限由 Mate 框架按 access-token 检查，不在图中，接入方式待实现时按 mate-service 源码核对。实现时先落 `t_schedule_session` 与管理接口，然后是登记接口，最后是对账。
+分层理由：浏览器入口和 Claw 入口分成两个 Controller，因为它们的认证方式不同（浏览器走用户认证，Claw 由证书校验保证，[§5.1](#security)），不能共用一个过滤链。可见范围与配额都在 Claw，管理服务只负责转发 access-token 并调用投影规则，10 个操作共用同一个投影，不在 Mate 各写一份“这个任务是不是你的”。Chat 映射和统一账号认证是 Mate 既有能力，图中只画成接口；用户权限由 Mate 框架按 access-token 检查，不在图中，接入方式待实现时按 mate-service 源码核对。实现时先落管理接口，然后是登记接口。
 
 <a id="create-sequence"></a>
 
@@ -240,7 +212,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![读取任务列表](mate_schedule_list.svg)
 
-[原尺寸 SVG](mate_schedule_list.svg) · [PlantUML 源码](diagram.puml#L195)
+[原尺寸 SVG](mate_schedule_list.svg) · [PlantUML 源码](diagram.puml#L176)
 
 | 步骤 | 规则 |
 |---|---|
@@ -255,7 +227,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![读取 Run 列表](mate_schedule_run_list.svg)
 
-[原尺寸 SVG](mate_schedule_run_list.svg) · [PlantUML 源码](diagram.puml#L227)
+[原尺寸 SVG](mate_schedule_run_list.svg) · [PlantUML 源码](diagram.puml#L208)
 
 | 步骤 | 规则 |
 |---|---|
@@ -280,7 +252,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![读取任务详情](mate_schedule_get.svg)
 
-[原尺寸 SVG](mate_schedule_get.svg) · [PlantUML 源码](diagram.puml#L251)
+[原尺寸 SVG](mate_schedule_get.svg) · [PlantUML 源码](diagram.puml#L232)
 
 | 步骤 | 规则 |
 |---|---|
@@ -293,7 +265,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![部分更新定时任务](mate_schedule_update.svg)
 
-[原尺寸 SVG](mate_schedule_update.svg) · [PlantUML 源码](diagram.puml#L281)
+[原尺寸 SVG](mate_schedule_update.svg) · [PlantUML 源码](diagram.puml#L262)
 
 | 步骤 | 规则 |
 |---|---|
@@ -306,12 +278,12 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![删除定时任务](mate_schedule_delete.svg)
 
-[原尺寸 SVG](mate_schedule_delete.svg) · [PlantUML 源码](diagram.puml#L311)
+[原尺寸 SVG](mate_schedule_delete.svg) · [PlantUML 源码](diagram.puml#L292)
 
 | 步骤 | 规则 |
 |---|---|
 | 3 | Claw 在同一事务内检查归属，删除任务及其 Run；Mate 没有本地记录要删 |
-| 5～7 | 返回删除回执；重复删除返回 404。已生成的 Session、定时会话登记与 Chat 映射保留；接口定义见 [§4.2.10](#delete-schedule-api) |
+| 5～7 | 返回删除回执；重复删除返回 404。已生成的 Session 与 Chat 映射保留；接口定义见 [§4.2.10](#delete-schedule-api) |
 
 <a id="run-sequence"></a>
 
@@ -319,7 +291,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![立即运行定时任务](mate_schedule_run.svg)
 
-[原尺寸 SVG](mate_schedule_run.svg) · [PlantUML 源码](diagram.puml#L401)
+[原尺寸 SVG](mate_schedule_run.svg) · [PlantUML 源码](diagram.puml#L382)
 
 | 步骤 | 规则 |
 |---|---|
@@ -334,7 +306,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![暂停定时任务](mate_schedule_pause.svg)
 
-[原尺寸 SVG](mate_schedule_pause.svg) · [PlantUML 源码](diagram.puml#L341)
+[原尺寸 SVG](mate_schedule_pause.svg) · [PlantUML 源码](diagram.puml#L322)
 
 | 步骤 | 规则 |
 |---|---|
@@ -346,7 +318,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![取消暂停定时任务](mate_schedule_unpause.svg)
 
-[原尺寸 SVG](mate_schedule_unpause.svg) · [PlantUML 源码](diagram.puml#L371)
+[原尺寸 SVG](mate_schedule_unpause.svg) · [PlantUML 源码](diagram.puml#L352)
 
 | 步骤 | 规则 |
 |---|---|
@@ -358,7 +330,7 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 
 ![读取 Run 详情](mate_schedule_run_get.svg)
 
-[原尺寸 SVG](mate_schedule_run_get.svg) · [PlantUML 源码](diagram.puml#L433)
+[原尺寸 SVG](mate_schedule_run_get.svg) · [PlantUML 源码](diagram.puml#L414)
 
 | 步骤 | 规则 |
 |---|---|
@@ -379,32 +351,20 @@ Claw 的任务上保存创建者 user_id（Claw [D9](../../01-总体架构/08-Ca
 |---|---|
 | 2 | Claw 为同一次 Run 先固定 sessionId，之后准备和受理都复用这个 ID |
 | 3 | 在 Claw 数据库事务外请求登记，请求带任务的 userId |
-| 4～5 | 按 sessionId 查已有登记；Mate 不再检查任务归属，任务是否仍存在由 Claw 在受理事务内复核 |
-| 6～8 | sessionId 已登记：scheduleId 与 runId 都相同则直接返回原登记（幂等），任一不同则拒绝；agentId 与 userId 不存入登记表，只原样回显。未登记时在同一事务中写 `registered` 登记、为请求中的 userId 建立 Chat 映射（[§3.2.3](#mate-transactions)） |
+| 4～5 | 按 sessionId 查 Chat 映射；Mate 不检查任务归属，任务是否仍存在由 Claw 在受理事务内复核 |
+| 6～8 | 没有映射时为请求中的 userId 写入 Chat 映射；已映射给同一 userId 时直接返回（幂等）；已映射给其他用户时拒绝。scheduleId、runId、agentId 不保存，只原样回显（[§3.2.2](#mate-transactions)） |
 | 9～10 | 登记成功后，Claw 在同库事务中创建 Session、首消息、根执行和 Run 关联；Mate 记录不加入这个事务 |
 | 11～13 | Mate 明确拒绝时 Claw 本次不受理，Run 记为 `session_creation_rejected_error` |
 
 登记结果未知（超时、500、503）时，Claw 只调用只读核对接口，不重发登记，也不换新 ID；准备期限内仍未知则本次不受理，Run 记为 `unknown_error`（Claw [§4.8.2](../../01-总体架构/08-CampusClaw定时任务/README.md#mate-calls)）。删除 Schedule/Run 不删除已建立的 Session 归属；Session 删除后由 Mate 关闭对应访问映射。
 
-<a id="reconciliation"></a>
-
-### 3.7 对账与清理（UC8）
-
-Mate 定期（建议每 10 分钟）运行一次对账，只处理 Mate 自己的定时会话登记。任务归属只在 Claw，没有无主任务需要清理：
-
-| 对象 | 判断 | 处理 |
-|---|---|---|
-| 未确认的定时会话登记 | `registered` 且超过准备期限，读取 Claw 该 Session | 存在则改为 `confirmed`；明确不存在则删除登记与 Chat 映射；读取结果未知时保留，下轮再查 |
-
-对账只读取 Claw 公开接口，不直接访问 Claw 数据库。
-
 <a id="scheduled-token-sequence"></a>
 
-### 3.8 获取统一账号 access-token 的详细时序（UC7）
+### 3.7 获取统一账号 access-token 的详细时序（UC7）
 
 ![获取统一账号 access-token](mate_scheduled_access_token.svg)
 
-[原尺寸 SVG](mate_scheduled_access_token.svg) · [PlantUML 源码](diagram.puml#L463)
+[原尺寸 SVG](mate_scheduled_access_token.svg) · [PlantUML 源码](diagram.puml#L444)
 
 | 步骤 | 规则 |
 |---|---|
@@ -651,7 +611,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 | 对象 | 处理 |
 |---|---|
 | Claw 任务与它的全部 Run | 删除，之后列表与详情都不再返回 |
-| 已生成的会话、定时会话登记与 Chat 映射 | 保留，用户仍可从对话历史打开 |
+| 已生成的会话与 Chat 映射 | 保留，用户仍可从对话历史打开 |
 | 已受理、仍在运行的会话 | 不取消，按会话自己的规则结束 |
 
 **重复删除与结果未知**：重复删除不会再次删除，返回 404，页面按已删除处理。超时或断连时返回 503，Mate 不自动重试；与部分更新不同，删除可以直接重发同一请求，再次得到 404 即表示已删除（Claw [§4.4.6](../../01-总体架构/08-CampusClaw定时任务/README.md#delete-schedule-review)）。
@@ -686,7 +646,7 @@ access-token 校验失败由 Mate 框架在进入管理接口前返回，不在�
 
 #### 4.4.1 获取统一账号 access-token
 
-普通对话中，用户请求带着 `access-token` Header，Claw 调用 Mate 业务工具时原样透传（[M06 §7.1](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)）。定时任务到点运行时没有用户请求，也就没有用户的 access-token。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，Claw 运行时向 Mate 取这个账号的 access-token。调用时序见 [§3.8](#scheduled-token-sequence)。
+普通对话中，用户请求带着 `access-token` Header，Claw 调用 Mate 业务工具时原样透传（[M06 §7.1](../../01-总体架构/01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)）。定时任务到点运行时没有用户请求，也就没有用户的 access-token。2026-10-13 评审确定：所有定时任务统一使用 Mate 配置的同一个账号，Claw 运行时向 Mate 取这个账号的 access-token。调用时序见 [§3.7](#scheduled-token-sequence)。
 
 **请求**
 
@@ -755,7 +715,7 @@ Content-Type: application/json
 | userId | 必填，任务的创建者，取自 Claw 任务的 user_id；Mate 按它建立 Chat 映射，不再查任务归属（[D5](#key-decisions)） |
 | 不传内容 | 消息正文、凭据 |
 
-成功 HTTP 200，result 返回与请求相同的五个字段，另附 chatId；Claw 只比较五个字段，忽略 chatId。Mate 登记表只保存并校验 sessionId、scheduleId、runId，userId 写入 Chat 映射，agentId 原样回显：
+成功 HTTP 200，result 返回与请求相同的五个字段，另附 chatId；Claw 只比较五个字段，忽略 chatId。Mate 不另存登记表：userId 写入 Chat 映射，sessionId 是映射的键，scheduleId、runId、agentId 原样回显：
 
 ```json
 {
@@ -778,7 +738,7 @@ Content-Type: application/json
 GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 ```
 
-已登记时 HTTP 200，result 含 sessionId、scheduleId、runId 与 chatId，不含 agentId 与 userId（登记表不保存）。Claw 的 HTTP 适配比较这三个 ID，相同即视为核对到原登记，agentId 与 userId 取自本次请求；未登记返回 404 `SCHEDULED_SESSION_NOT_FOUND`，Claw 视为空。只读，不创建记录。
+已有 Chat 映射时 HTTP 200，result 含 sessionId、userId 与 chatId；scheduleId、runId、agentId 不保存，不返回。Claw 的 HTTP 适配比较 sessionId 与 userId，相同即视为核对到原登记，其余字段取自本次请求；没有映射返回 404 `SCHEDULED_SESSION_NOT_FOUND`，Claw 视为空。只读，不创建记录。
 
 **错误**
 
@@ -786,7 +746,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 |---|---|---|
 | 400 / SCHEDULED_SESSION_REQUEST_INVALID | 字段缺失或格式非法 | 明确拒绝，本次不受理 |
 | 404 / SCHEDULED_SESSION_NOT_FOUND | 仅核对：未登记 | 继续核对直到准备期限 |
-| 409 / SCHEDULED_SESSION_REJECTED | sessionId 已用不同的 scheduleId 或 runId 登记 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
+| 409 / SCHEDULED_SESSION_REJECTED | sessionId 已映射给其他用户 | 明确拒绝，Run 记为 `session_creation_rejected_error` |
 | 500 / SCHEDULED_SESSION_FAILED | 内部处理失败 | 结果未知，转只读核对 |
 | 503 / SCHEDULED_SESSION_UNAVAILABLE | 存储等依赖不可用 | 结果未知，转只读核对 |
 
@@ -818,7 +778,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | F3 | Claw 查询用户失败或不可用 | Claw 返回 503，Mate 原样返回 | 不写入、不返回空列表，用户稍后重试 |
 | F4 | 写操作结果未知 | 返回 503，不重试 | 页面读取详情核对 |
 | F5 | 登记时 Mate 存储不可用 | 返回 503 | Claw 转只读核对，期限内仍未知则本次 Run 记为 `unknown_error`，不运行 |
-| F6 | Mate 已登记、Claw 受理回滚 | 对账确认 Session 不存在后删除登记 | Claw 读取结果未知时保留，不凭超时删除 |
+| F6 | Mate 已登记、Claw 受理回滚 | 不清理（[D7](#key-decisions)） | 留下一条打不开的 Chat 映射，打开时 Claw 返回 404 |
 | F7 | 统一账号或认证中心不可用 | access-token 接口返回 403 或 503 | Claw 本批需要凭据的工具不执行，模型可在下一批重试 |
 | F8 | 证书校验失败 | 同 Claw 不可达，返回 503 并告警 | 属部署问题 |
 
@@ -850,7 +810,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 ### 6.2 回滚能力
 
-回滚 Mate 后，Claw 调用登记接口失败，接口配置的任务不会运行，也不会以错误归属运行；已保存的登记记录不受回滚影响，重新发布后继续使用。**【缺口】** 存储结构变更的回滚脚本。
+回滚 Mate 后，Claw 调用登记接口失败，接口配置的任务不会运行，也不会以错误归属运行；已建立的 Chat 映射不受回滚影响。本设计不新增表，回滚不涉及存储结构。
 
 ### 6.3 自动化测试
 
@@ -862,9 +822,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 | 删除 | 删除后已生成会话仍可从 Chat 打开 |
 | 对话中创建的任务 | 创建者可见、可管理，不能改 agentId |
 | access-token | 证书校验通过可取到 Token；统一账号停用返回 403；Token 不进日志 |
-| 登记 | 同一 sessionId 以相同 scheduleId、runId 重复登记返回同一 chatId，不新建 Chat；Chat 映射属于请求中的 userId；登记后只有该用户能从 Chat 打开该会话；核对接口不创建记录 |
-| 对账 | 未确认的登记按 Claw 中 Session 是否存在确认或删除；读取结果未知时不删除登记 |
-| 表约束 | `t_schedule_session` 的 CHECK 与唯一索引拒绝不一致数据 |
+| 登记 | 同一 sessionId 为同一 userId 重复登记返回同一 chatId，不新建 Chat；映射给其他用户时返回 409；Chat 映射属于请求中的 userId；登记后只有该用户能从 Chat 打开该会话；核对接口不创建记录 |
 
 ### 6.4 QA 流程
 
@@ -875,8 +833,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 - mate-service 源码未核验：物理表、模块位置、Chat 映射组件的真实接口在实现时核对，再更新 [§3.2](#data-model) 的类图映射。
 - Claw 侧 access-token 路径用 `campusmate.endpoints.scheduled-access-token-path`（环境变量 `CAMPUSMATE_SCHEDULED_ACCESS_TOKEN_PATH`）配置，与其他调用 Mate 的路径放在一起，服务地址沿用 `campusmate.base-url`。
 - Claw 侧登记的 HTTP 适配在 M3 确认后实现，替换默认的 `MateScheduleSessionRegistry`。
-- 对账周期作为 Mate 部署配置，默认 10 分钟；每用户配额是 Claw 的部署配置，默认 20。
-- `t_schedule_session` 的 DDL 随 mate-service 的数据库变更流程发布；物理表名前缀按 Mate 既有约定调整时，同步更新 [§3.2](#data-model)。
+- 每用户配额是 Claw 的部署配置，默认 20。
 
 ## 8. 其他补充
 
@@ -895,6 +852,7 @@ GET /mate-service/v1/runtime/scheduled-sessions/{sessionId}
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.2.0 | 2026-10-22 | 删除 `t_schedule_session` 与对账任务（D7，原 UC8、BU6、§3.7）：定时会话登记只写 Chat 映射，同一 sessionId 已映射给同一用户时直接返回、映射给其他用户时返回 409；只读核对返回 sessionId、userId 与 chatId，Claw 比较 sessionId 与 userId；Claw 受理失败留下的 Chat 映射不自动清理（F6）；§3.2 只剩用到的既有表，原 §3.8 改为 §3.7；类图与登记时序图同步。 |
 | 2.1.0 | 2026-10-21 | 基于 Claw 的 Agent 与 Copilot 直接以 sessionId 作为 chatId（D4）：资源投影只把 sessionId 字段改名为 chatId，值不变，Mate 读取任务与 Run 时不再按 sessionId 查 chatId；删除各接口“读取 Chat 映射失败”的 500 和 chatId 暂时查不到的情况；相关时序图去掉查 chatId 的步骤。登记与 Chat 映射不变。Claw 不再返回 userId，资源投影去掉“Schedule.userId 不返回”一行，时序图去掉“去掉 userId”。 |
 | 2.0.1 | 2026-10-21 | §4.8.1 的 Claw 侧 access-token 路径改指代码中的接口目录，上游客户端专题改名为“CampusMate 与 CampusMCP 客户端”。 |
 | 2.0.0 | 2026-10-21 | Mate 不再保存任务归属表 `t_schedule`（D2）：归属只在 Claw 任务的 user_id；10 个管理接口都转发用户的 access-token，可见性由 Claw 判断，不属于当前用户按不存在返回 404，两种任务都能查看和管理；配额移到 Claw 创建时统计（D3、M2）；登记请求增加 userId，Mate 按它建立 Chat 映射，不再因任务不在 Mate 而拒绝（D5、§4.4.2）；删除无主任务及其对账（M4 关闭、§3.7）；§3.2 只保留 `t_schedule_session`；相关时序图与接口示例同步。 |

@@ -6,7 +6,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 0.72.0 |
+| 文档版本 | 0.73.0 |
 | 更新日期 | 2026-10-21 |
 | 模块 | M10 · 调度与并发治理 |
 | 产品范围 | 接口配置的任务每次自动或手动触发均创建新的独立 Session，复用配置关联的 Agent 定义；对话中由 Cron 工具创建的任务关联当前会话，每次运行在该会话追加一轮 |
@@ -1856,10 +1856,10 @@ Claw 侧接口为 `ScheduleSessionRegistry`。登记传 `sessionId`、`scheduleI
 
 | 操作 | 何时调用 | 结果处理 |
 |---|---|---|
-| 登记 `registerSession` | 接口配置的任务每次运行：Claw 固定新 Session 的 ID 后、数据库事务外、准备 Runtime 之前 | Mate 返回的五个字段（sessionId、scheduleId、runId、agentId、userId）与请求相同即成功，继续受理，chatId 忽略；Mate 明确拒绝（该 sessionId 已用不同的 scheduleId 或 runId 登记）或返回不同登记时，本次不受理，Run 记为 `session_creation_rejected_error`；结果未知时转只读核对，不重发登记 |
-| 只读核对 `findSessionRegistration` | 登记结果未知时，在准备期限内反复核对 | 核对到 sessionId、scheduleId、runId 相同的登记即继续受理（agentId、userId 取自本次请求）；期限内仍未知则本次不受理，Run 记为 `unknown_error`，不换新的 Session ID 重试 |
+| 登记 `registerSession` | 接口配置的任务每次运行：Claw 固定新 Session 的 ID 后、数据库事务外、准备 Runtime 之前 | Mate 返回的五个字段（sessionId、scheduleId、runId、agentId、userId）与请求相同即成功，继续受理，chatId 忽略；Mate 明确拒绝（该 sessionId 已映射给其他用户）或返回不同登记时，本次不受理，Run 记为 `session_creation_rejected_error`；结果未知时转只读核对，不重发登记 |
+| 只读核对 `findSessionRegistration` | 登记结果未知时，在准备期限内反复核对 | 核对到 sessionId 与 userId 相同的登记即继续受理（Mate 不保存 scheduleId、runId、agentId，取自本次请求）；期限内仍未知则本次不受理，Run 记为 `unknown_error`，不换新的 Session ID 重试 |
 
-Mate 按请求中的 userId 保存这条归属并建立 Chat 映射，之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，回滚、对账与清理规则见 [Mate 侧设计 §3.6、§3.7](../../02-服务与接口/08-CampusMate定时任务/README.md#registration-sequence) 和 [§5.2.1](#failure-recovery) 的 F14。
+Mate 按请求中的 userId 建立 Chat 映射，不另存登记表；之后用户读取、继续、停止或删除这个 Session 时，由 Mate 据此授权再调用 Claw。Mate 登记与 Claw 受理之间没有跨库事务，Claw 受理失败时 Mate 留下的 Chat 映射不自动清理，规则见 [Mate 侧设计 §3.6](../../02-服务与接口/08-CampusMate定时任务/README.md#registration-sequence)、[D7](../../02-服务与接口/08-CampusMate定时任务/README.md#key-decisions) 和 [§5.2.1](#failure-recovery) 的 F14。
 
 **当前限制。** Mate 尚未提供登记接口，Claw 的默认实现一律返回服务不可用。因此在 Mate 接口上线或部署方替换实现之前，接口配置的任务到点后会在准备期限内核对失败，Run 记为 `unknown_error`，不会运行；对话中创建的任务不受影响。
 
@@ -1931,7 +1931,7 @@ Claw 需要知道“当前是哪个用户”的地方，统一用该用户的 ac
 | F11 | 删除与最终受理竞争 | 受理 | 删除先提交：未发生；受理先提交：Session 已创建 | 数据库行锁 | 删除先提交则不受理；受理先提交则保留 Session、删除 Run | Run 与 Schedule 404，从 Session 入口查看或停止 | 删除不取消已受理执行 |
 | F12 | 单次运行超过 30 分钟 | 执行中 | 部分发生 | 调度器 | 向原根执行请求停止 | 停止未确认前显示停止中或未知 | 停止请求不等于已终止 |
 | F13 | 删除后晚到的完成或失败回调 | 收尾 | 已提交（Session 侧） | 调度器 | 条件更新影响 0 行即视为资源已删，只收尾 Session 与根执行 | 无 | — |
-| F14 | Mate 归属登记被拒或结果未知（接口配置的任务） | 受理前 | 被拒：未发生；未知：Mate 侧可能已登记，Claw 未受理 | 调度器 | 停止本次受理；结果未知时在 lease_until 内按固定 Run 与 Session ID 只读核对，仍未知则本次不受理，Run 写 finished_at 与 unknown_error 后释放任务；实例失联时由过期准备清理结束。不新建 Session、不重放 | Run 显示未受理原因 | 过期后该 Session ID 不可能再被受理，Mate 侧登记只是待核对关联，不对外承诺可访问，由 Mate 确认 Claw 中不存在后清理；Run 表不区分准备超时与登记未知 |
+| F14 | Mate 归属登记被拒或结果未知（接口配置的任务） | 受理前 | 被拒：未发生；未知：Mate 侧可能已登记，Claw 未受理 | 调度器 | 停止本次受理；结果未知时在 lease_until 内按固定 Run 与 Session ID 只读核对，仍未知则本次不受理，Run 写 finished_at 与 unknown_error 后释放任务；实例失联时由过期准备清理结束。不新建 Session、不重放 | Run 显示未受理原因 | 过期后该 Session ID 不可能再被受理；Mate 侧可能留下一条打不开的 Chat 映射，打开时返回 404，不自动清理（Mate D7）；Run 表不区分准备超时与登记未知 |
 | F15 | 对话中创建的任务到点时关联会话正忙 | 受理 | 未发生 | 调度器 | 记录已结束的 Run（`session_busy_error`），游标照常推进 | Run 显示“关联的对话正忙，本次已跳过”；下一计划照常 | 不排队，不补跑 |
 | F16 | 用户拒绝 Cron 工具的创建、修改或删除 | 确认 | 未发生 | Host | 不写入，工具结果为已拒绝 | 对话中可见，模型据此回复 | — |
 
@@ -2137,6 +2137,7 @@ public void summarizeAlarms() {
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 0.73.0 | 2026-10-22 | Mate 不再保存定时会话登记表 `t_schedule_session`，登记只写 Chat 映射（Mate D7）：§4.8.2 的拒绝条件改为“该 sessionId 已映射给其他用户”，只读核对改为比较 sessionId 与 userId；F14 不再由 Mate 清理未建成会话的映射。pi-mono-java 中 `confirmRegistration` 按三个 ID 比较的实现需同步。 |
 | 0.72.0 | 2026-10-21 | 任务资源不再返回 userId（§4.3）：创建者只存在 `t_schedule.user_id`，用于 Claw 内部的列表筛选、归属判断与配额，创建、列表、详情、更新与删除回执的示例同步去掉；Mate 侧的 chatId 直接复用 sessionId（Mate D4），§5.1 的 Mate 公共展示边界同步：Mate 只把 sessionId 字段改名为 chatId，不再有“结果入口准备中”。 |
 | 0.71.0 | 2026-10-21 | Mate 不再保存任务归属表 `t_schedule`，任务归属以 Claw `t_schedule.user_id` 为准（D9）：全部 10 个管理接口带 `access-token` 请求头，Claw 查出用户后按 user_id 判断归属，不属于当前用户的任务返回 404、写操作在锁内复查（§4.2 归属判断）；创建配额从 Mate 移到 Claw（§4.4，`campusclaw.schedule.max-api-schedules-per-user` 默认 20，422 `SCHEDULE_QUOTA_EXCEEDED`，对话中创建的任务不计入）；Session 归属登记请求增加 userId（§4.8.2）；删除已不可能出现的 403 功能资格错误。 |
 | 0.70.0 | 2026-10-21 | 列表改为按用户直接查询（D9，关闭 T10）：`t_schedule` 增加不可修改的 `user_id` 与索引 `(user_id, updated_at DESC, id)`；创建、任务列表与 Run 列表增加 `access-token` 请求头，由 Claw 调用户查询接口得到用户 ID（§4.8.3，接口待补充），Mate 不再拉取全部页；Cron 工具创建任务时用本轮 access-token 查询；资源返回只读 userId；缺少或被拒绝的 token 返回 401，查询不可用返回 503。 |
