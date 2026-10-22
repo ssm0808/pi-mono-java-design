@@ -287,7 +287,7 @@ CampusClaw 采用 `Main Agent` / `Subagent` 作为模型可见角色名称，与
 
 | 路径 / 符号 | 已观察行为 | 待实现 调整 |
 |---|---|---|
-| `runtimeapi/agent/RuntimeAgentPromptLoader.java` · load、readOptionalFile、safeRealPath、requireManagedSize | 仅 SYSTEM.md 与 Skill 摘要；受管目录内真实路径、普通文件、无链接与大小检查。 | 复用安全读取；新增两可选模式文件的独立选择、空白/编码错误失败与不可变 AgentPromptSnapshotDTO；默认资源由 Loader 启动时固定。 |
+| `runtimeapi/agent/RuntimeAgentPromptLoader.java` · load、readOptionalFile、safeRealPath、requireManagedSize | 仅 SYSTEM.md 与 Skill 摘要；智能体本地目录内真实路径、普通文件、无链接与大小检查。 | 复用安全读取；新增两可选模式文件的独立选择、空白/编码错误失败与不可变 AgentPromptSnapshotDTO；默认资源由 Loader 启动时固定。 |
 | `session/PlanPolicyPromptComposer.java` · compose、load | 全局六份固定资源，无按 Agent 路径读取。 | 纯 `compose(prompts, mode, entryPoint)`，不持有 Agent 可变状态；业务选择已由 Loader 完成。 |
 | `session/AgentSessionFactory.java` · create、applyPrompt | prepare 返回后另从 `.campusclaw` 读取 BASE；工厂调用 Composer。 | PreparedAgentRuntime 带提示词快照，工厂与执行直接使用，不再通过可变目录路径重读。 |
 | `runtime/PreparedAgentRuntime.java` · record | 仅 agentId、agentRoot、metadata、skills，未携带模式正文。 | 增加不可变 prompts 快照，执行内共享；不暴露到公共 VO。 |

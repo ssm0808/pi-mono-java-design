@@ -125,7 +125,7 @@ Java 路径前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/c
 | `modules/coding-agent-cli/pom.xml` | 旧工具依赖 JDK 和现有 Jackson、SLF4J 等共享组件，无三工具专属直接 Maven 声明 | 不新增依赖；删除前复核其他消费者，本节未声称完整传递依赖图已验证 |
 | pi `packages/coding-agent/src/core/tools/index.ts` · createCodingTools、createReadOnlyTools、createTool、ToolName | coding 组合为 read/bash/edit/write；只读组合为 read/grep/find/ls；bash/edit/write 仍有工厂与类型导出 | CampusClaw 删除为产品约束及安全加固，不是上游已废弃或 pi 无此能力 |
 
-当前目标：按主设计 §12.4 完全删除三项工具及专属代码，保留有效公共消费者、受管目录发布和部署脚本。删除前的主线仍有这些类，因此“已不装配”不等于“源码已删除”；实现状态与分支验证结果单独登记，不把未合入开发分支表述为主线完成。
+当前目标：按主设计 §12.4 完全删除三项工具及专属代码，保留有效公共消费者、智能体本地目录发布和部署脚本。删除前的主线仍有这些类，因此“已不装配”不等于“源码已删除”；实现状态与分支验证结果单独登记，不把未合入开发分支表述为主线完成。
 
 实现状态：开发分支 `codex/remove-retired-write-tools` 的 `1b35422c61d471e11b9e1c126b57a82ef808ced2` 已实现源码删除，[Draft PR #315](https://github.com/superheromeZzh/pi-mono-java/pull/315) 待合入 main；活动 profile 排除三项工具原本已实现。该分支删除 21 个主源码类和 13 个专属测试，并同步公司镜像，不改变 11 项活动工具及三入口缺省集合。
 
@@ -206,7 +206,7 @@ Java 前缀 R 为 `modules/coding-agent-cli/src/main/java/com/campusclaw/codinga
 
 | 基线 / 源码路径与符号 | 已观察行为 | CampusClaw 采用边界 |
 |---|---|---|
-| OpenCode `packages/opencode/src/tool/skill.ts` · SkillTool；`tool/read.ts` | skill 只有 name 参数；返回正文、基础目录、最多 10 个抽样文件绝对路径，排除 SKILL.md 并提示抽样，不展开文件内容或提供资源简介；后续资源由普通 read 读取 | Skill 工具的直接行为基线；宿主受管目录与可信绑定限制仍属 CampusClaw 产品约束 |
+| OpenCode `packages/opencode/src/tool/skill.ts` · SkillTool；`tool/read.ts` | skill 只有 name 参数；返回正文、基础目录、最多 10 个抽样文件绝对路径，排除 SKILL.md 并提示抽样，不展开文件内容或提供资源简介；后续资源由普通 read 读取 | Skill 工具的直接行为基线；智能体本地目录与可信绑定限制仍属 CampusClaw 产品约束 |
 | OpenCode `packages/opencode/src/mcp/catalog.ts` · convertTool；`session/tools.ts` · MCP 工具装配；`session/llm.ts` · streamText | 普通模式从远端定义创建通用动态工具，execute 调用 client.callTool，并将工具集合交给模型；实验性 Code Mode 是独立分支 | Agent 直接工具元数据代理的结构参考；不要求 Mate 改用 MCP，也不照搬全量暴露 Skill 工具 |
 | DSH `packages/skill/tool-skill/src/index.ts` · apply；`packages/skill/skill/src/index.ts` · renderSkillContent/renderResourceHint | skill(name) 加载正文和资源基础位置，不列目录；资源按需读取，资源位置可为 directory/url/opaque | 支持加载指令与读取资源分工；未采用其多提供方资源协议，不能描述为 DSH 同样返回 10 个文件 |
 | DSH `packages/mcp/mcp-client/src/tools.ts` · syncTools/createMcpToolDefinition | 从 MCP 工具定义构造通用代理并注册到 ToolRuntime，执行转发远端；与 skill 加载独立 | 证明通用代理无需每业务工具单独实现；不照搬其工具同步与替换生命周期 |

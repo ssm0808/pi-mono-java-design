@@ -4,9 +4,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.7.1 |
+| 设计版本 | 1.7.2 |
 | 日期 | 2026-10-22 |
-| 状态 | Help 无参查询、缓存往返、Agent 级锁与统一 Command POST 已实现；元数据更新通过显式刷新完成。成功结果由三个业务字段改为 Markdown 文本（2026-10-20 已确认，待实现） |
+| 状态 | Help 无参查询、缓存往返、Agent 级锁与统一 Command POST 已实现；元数据更新按[智能体本地目录](../../../10-CampusClaw智能体本地目录/README.md#apply-change-sequence)重建完成。成功结果由三个业务字段改为 Markdown 文本（2026-10-20 已确认，待实现） |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
 | 当前实现基线 | pi-mono-java `53eff85c7f41de23eb434e027782f5085a8b8e45`；2026-10-20 在 `628dca25` 复核结果结构 |
 | 更名前历史证据 | pi-mono-java `d1cdb708e3e124cae009b10b985f5832b6dbde01`；同一链路已实现，场景字段当时误名为 `userCases` |
@@ -115,7 +115,7 @@ idle/running 都允许查询；结果描述最近一次成功发布到本地的�
 | PreparedAgentRuntime.metadata | 完整快照持有恢复后的 AgentRuntime | 查询 Service 仅复制三个公开介绍字段，不返回完整 metadata |
 
 当前实现保留现有 schemaVersion，当 `agent.json` 缺少当前 `useCases` 字段时读为 []，不把“缺场景说明”解释成运行时损坏。
-场景字段缺失时，Help 返回空数组；需要从远端补齐或更新元数据时，通过现有显式刷新流程重建完整缓存。
+场景字段缺失时，Help 返回空数组；需要从远端补齐或更新元数据时，按[智能体本地目录 UC2](../../../10-CampusClaw智能体本地目录/README.md#apply-change-sequence)重建本地目录。
 刷新失败时原子发布流程保留上一份完整目录；`/help` 不会自动联网或触发刷新。
 
 这里的“不使用 systemPrompt”指不拿它生成介绍、不返回它。现有 `prepareCached` 内部的完整快照加载器会读取 system.md；
@@ -191,6 +191,7 @@ Mate 对外的聊天命令接口不在本设计范围内，由 Mate 负责人另
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.2 | 2026-10-22 | 元数据更新方式改为链接智能体本地目录。 |
 | 1.7.1 | 2026-10-22 | 受管目录 refresh 已删除，缓存与锁说明改为 prepareCached/prepare 与目录重建。 |
 | 1.7.0 | 2026-10-20 | Help 成功结果改为由显示名、介绍与使用场景生成的 Markdown 文本（待实现），删除 Mate 投影说明。 |
 | 1.6.0 | 2026-10-16 | Help 描述符不返回 argumentType，表示不带参数；原 hints 已移除。 |

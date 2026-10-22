@@ -1,6 +1,6 @@
 # CampusClaw 模式提示词组织
 
-版本：2.7.1；日期：2026-10-22。状态：批准引导与 BUILD.md 的“多步实施先建清单”提示待实现；两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
+版本：2.7.2；日期：2026-10-22。状态：批准引导与 BUILD.md 的“多步实施先建清单”提示待实现；两文件迁移、业务覆盖、执行快照和正文标记方案已实现；恢复完整 plan 参数及其流式预览待实现，业务 SYSTEM 发布及模型行为未核验。本次范围见[证据 §15](source-evidence.md#plan-argument-streaming-evidence)，其他范围保留[§12](source-evidence.md#12-主线实现状态核验2026-09-18)及[§10](source-evidence.md#10-两份模式提示词的最新上游核验)归属。
 
 ## 1. 职责与装配
 
@@ -31,6 +31,8 @@ RuntimeAgentPromptLoader 先解析业务文件或预制文件，形成不可变 
 
 批准后原执行在 ExitPlanMode 返回前，用 BASE + Main Agent 角色 + BUILD.md 替换规划组合；修订继续使用 PLAN.md。Subagent 在调用时复制父模式，并从被调用业务 Agent 的目录获取自己的 BASE 和模式文件，已创建 Subagent 不被异步改写；压缩不重复追加模式文本，也不从摘要推断批准。工具名称、描述、Schema 和顺序跨模式保持一致，Plan 不提供强制无副作用保证。
 
+<a id="business-mode-files"></a>
+
 ### 1.1 业务文件优先与独立回退
 
 只查找已解析业务 Agent 目录下的两个精确文件名，不搜索工作目录、上级目录、用户 home 或父 Agent 目录：
@@ -44,13 +46,13 @@ RuntimeAgentPromptLoader 先解析业务文件或预制文件，形成不可变 
 
 只有确认文件不存在才回退。存在但为空白、不是普通文件、是符号链接、超出受管真实目录、不是有效 UTF-8、超过既有受管文本上限 1 MiB 或读取失败，均使本次 Agent 准备失败；不能用“空文件”表示关闭模式指令，也不能把错误悄悄改为预制内容。复用 RuntimeAgentPromptLoader 的目录真实性、大小和失败映射，新增文件使用严格 UTF-8 解码；权限/IO 错误不得通过 `Files.exists=false` 冒充不存在。内置资源错误使服务启动失败，业务文件错误沿用 Agent 不可用路径，不新增公共错误码。
 
-文件内容由可信业务部署方维护，Agent 工具继续只读受管目录。替换范围是提示词正文，不是权限、正式批准或 Tool/Skill 定义；不改变服务端准入和事务。业务方负责保留适合自身场景的规划/审核及 Subagent 行为，使用自定义正文须重新做模型场景评估；完整替换后不能宣称预制文案仍被强制注入。
+文件内容由可信业务部署方维护，Agent 工具继续只读[智能体本地目录](../10-CampusClaw智能体本地目录/README.md)。替换范围是提示词正文，不是权限、正式批准或 Tool/Skill 定义；不改变服务端准入和事务。业务方负责保留适合自身场景的规划/审核及 Subagent 行为，使用自定义正文须重新做模型场景评估；完整替换后不能宣称预制文案仍被强制注入。
 
 ### 1.2 快照、刷新与生效时机
 
 `RuntimeAgentPromptLoader.loadSnapshot(directory)` 返回 `AgentPromptSnapshotDTO(basePrompt, planPrompt, buildPrompt, planSource, buildSource)`；其中来源字段只标识 `AGENT_FILE` / `BUILTIN`，用于内部诊断；日志不记录完整正文，也不增加公共 Session 字段。`PreparedAgentRuntime` 携带此不可变快照，工厂与 SessionPlanContext 共享它。Loader 持有启动时校验的两份预制文本；Composer 不读文件、不按 Agent 缓存可变文本，也不依赖 Loader。
 
-AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建、提示词读取和 PreparedAgentRuntime 返回；缓存命中的 prepare 也经过此边界。刷新发布与快照读取不能交错，避免 SYSTEM 来自旧目录而 BUILD 来自新目录。该锁是实例内边界；部署不得让多个进程并发修改同一受管目录，跨实例文件一致性由业务发布保证，不把本地锁表述为分布式锁。
+AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建、提示词读取和 PreparedAgentRuntime 返回；缓存命中的 prepare 也经过此边界。刷新发布与快照读取不能交错，避免 SYSTEM 来自旧目录而 BUILD 来自新目录。该锁是实例内边界；部署不得让多个进程并发修改同一智能体本地目录，跨实例文件一致性由业务发布保证，不把本地锁表述为分布式锁。
 
 每次新执行准备时读取当时文件；后续模型轮次、压缩、问题回答、审核修订与批准续跑都复用本执行快照。批准后使用预先选定的 buildPrompt，不重新读盘；活动执行不因修改、删除或刷新文件改变规则。新 Subagent 以自己的准备时点获取快照，只有模式从父执行复制。这里不增加跨进程接管承诺。
 
@@ -58,7 +60,7 @@ AgentRuntimeManager 在同一个 Agent 的目录锁内完成缓存读取/重建�
 
 缓存不完整触发的 rebuild 重建并替换整个 `.campusclaw`；主线已在同 Agent 锁内读取并校验旧目录的两个可选模式文件，将存在者复制到 staging，再与新 SYSTEM/配置一起校验和发布。该保留规则覆盖所有 rebuild，包括首次只预置了模式文件的目录。原 `AgentRuntimeManager.refresh` 没有生产调用方，已删除；需要拉取 Mate 变更时删除 `agent.json` 使缓存不完整，不要删除整个 `.campusclaw`。只保留这两个明确文件，不任意复制整个旧目录。没有旧文件就保持缺失，删除后不会从备份恢复；读取或发布失败保留旧目录并报错。业务需要更新覆盖时以其新发布文件为准，普通目录重建保留当前覆盖，不能意外擦除业务配置。
 
-这属于架构扩展：沿用受管目录和现有发布锁，新增执行级文本快照与明确的可选文件保留规则；不引入模板引擎、监听器、Prompt Registry 或新依赖。代价是每次准备读取两份小文本，快照保留到执行结束；细粒度热更新和远端提示词管理不在本次范围。
+这属于架构扩展：沿用智能体本地目录和现有发布锁，新增执行级文本快照与明确的可选文件保留规则；不引入模板引擎、监听器、Prompt Registry 或新依赖。代价是每次准备读取两份小文本，快照保留到执行结束；细粒度热更新和远端提示词管理不在本次范围。
 
 ## 2. 基础 SYSTEM 的通用行为
 
@@ -151,6 +153,7 @@ Submit a complete Markdown plan for review while the Main Agent is in plan mode.
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.7.2 | 2026-10-22 | 受管目录改称智能体本地目录并链接独立设计。 |
 | 2.7.1 | 2026-10-22 | 受管目录 refresh 已删除，可选文件保留规则与 P20/P21 改按缓存不完整触发的重建描述。 |
 | 2.7.0 | 2026-10-14 | Subagent 入口枚举与 profile 键改用 subagent 命名，不再保留 Child 名称。 |
 | 2.6.0 | 2026-10-13 | 批准引导与 BUILD.md 增加“多步实施先建清单”入口提示，修正首次 TodoUpdate 偏晚。 |
