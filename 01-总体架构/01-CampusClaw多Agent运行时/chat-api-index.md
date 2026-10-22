@@ -128,7 +128,7 @@ Help 专项页由独立渲染入口从同一份 Runtime Command 源派生，统�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.29.0 | 2026-10-22 | 同步 HTTP 1.77.0：可选值新增 422 AGENT_MODEL_NOT_CONFIGURED，模型改为实时读取 Mate getAgent。 |
+| 1.29.0 | 2026-10-22 | 同步 HTTP 1.78.0：可选值新增 422 AGENT_MODEL_NOT_CONFIGURED，模型改为实时读取 Mate getAgent。 |
 | 1.28.0 | 2026-10-21 | 同步 HTTP 1.76.0：新增 503 AGENT_SERVICE_UNAVAILABLE，Builtin 文本中的模型改为 `model:` 链接。 |
 | 1.27.0 | 2026-10-20 | 同步 HTTP 1.75.0：ListSessionCommandValues 改为 ListAgentCommandValues，Builtin 成功只返回文本，删除 Mate 公共命令引用。 |
 | 1.26.0 | 2026-10-18 | 同步 HTTP 1.74.0：ListSessionModels、ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues，当前接口为十二项。 |
