@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 设计版本 | 1.7.0 |
-| 日期 | 2026-10-20 |
+| 设计版本 | 1.7.1 |
+| 日期 | 2026-10-22 |
 | 状态 | Help 无参查询、缓存往返、Agent 级锁与统一 Command POST 已实现；元数据更新通过显式刷新完成。成功结果由三个业务字段改为 Markdown 文本（2026-10-20 已确认，待实现） |
 | 设计仓核验基线 | `2c0b0693e57d7949c9b37757b9256f87617b00bf` |
 | 当前实现基线 | pi-mono-java `53eff85c7f41de23eb434e027782f5085a8b8e45`；2026-10-20 在 `628dca25` 复核结果结构 |
@@ -99,11 +99,11 @@ Help 无参由命令契约定义，清单中不带 argumentType 即表示无参�
 
 ## 4. 缓存与缺失行为
 
-已实现复用 `prepareCached(session.agentId)`：只取已发布、通过既有完整性校验的缓存，不访问远端、不 refresh、不调用 prepare。
+已实现复用 `prepareCached(session.agentId)`：只取已发布、通过既有完整性校验的缓存，不访问远端、不调用 prepare。
 idle/running 都允许查询；结果描述最近一次成功发布到本地的元数据，不承诺与远端实时同步，也不承诺等于正在执行的 Holder 已固定的旧版本。
-一次查询只使用一个 PreparedAgentRuntime，刷新期间不会混读两版字段。
-`prepareCached`、`prepare` 和 `refresh` 均通过 `withAgentLock(agentId, ...)` 复用同一 Agent 级锁；该锁覆盖完整快照读取或重建发布，不覆盖页面展示，也不是 Session 执行锁。
-因此 running 仍可查询，遇到 Agent 刷新时只需等待这次发布/读取互斥，不占模型容量。
+一次查询只使用一个 PreparedAgentRuntime，目录重建期间不会混读两版字段。
+`prepareCached` 和 `prepare` 均通过 `withAgentLock(agentId, ...)` 复用同一 Agent 级锁；该锁覆盖完整快照读取或重建发布，不覆盖页面展示，也不是 Session 执行锁。
+因此 running 仍可查询，遇到 Agent 目录重建时只需等待这次发布/读取互斥，不占模型容量。
 
 当前已实现链路如下：
 
@@ -143,7 +143,7 @@ Help 使用 Runtime Command 的 Builtin 请求头示例：JSON Content-Type 必�
 | 路径与符号 | 源码观察 | 对本设计的影响 |
 |---|---|---|
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java` · AgentRuntime | 已接收 displayName/name、description、useCases；也含 systemPrompt 和绑定信息 | 只选公开介绍白名单，不直接序列化 AgentRuntime |
-| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java` · prepareCached / loadSnapshot / withAgentLock | `prepareCached`、`prepare`、`refresh` 已共用 Agent 级锁；缓存读取不访问 Mate；完整加载包含 system.md 和 Skill 校验 | 已具备读取/发布互斥，不作“完全不读 prompt 文件”的虚假保证 |
+| `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java` · prepareCached / loadSnapshot / withAgentLock | `prepareCached`、`prepare` 已共用 Agent 级锁（`refresh` 已删除）；缓存读取不访问 Mate；完整加载包含 system.md 和 Skill 校验 | 已具备读取/发布互斥，不作“完全不读 prompt 文件”的虚假保证 |
 | 同上 · toIdentity / toRuntime / AgentIdentity | `useCases` 已写入 `agent.json` 并在进程重启后恢复；当前字段缺失时为 [] | 缓存往返已实现；字段缺失保持空数组语义 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/PreparedAgentRuntime.java`，metadata | 既有不可变快照持有 AgentRuntime | 单次读取后复制白名单字段，避免请求内重复取数 |
 | `modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/contributor/HelpCommandContributor.java` · definition | 已装配无参元数据、准入与 Handler lambda，委派 AgentHelpQueryService | Help 不依赖命令清单，不需要独立 HelpCommandHandler 类 |
@@ -191,6 +191,7 @@ Mate 对外的聊天命令接口不在本设计范围内，由 Mate 负责人另
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.7.1 | 2026-10-22 | 受管目录 refresh 已删除，缓存与锁说明改为 prepareCached/prepare 与目录重建。 |
 | 1.7.0 | 2026-10-20 | Help 成功结果改为由显示名、介绍与使用场景生成的 Markdown 文本（待实现），删除 Mate 投影说明。 |
 | 1.6.0 | 2026-10-16 | Help 描述符不返回 argumentType，表示不带参数；原 hints 已移除。 |
 | 1.5.0 | 2026-10-16 | Help 描述符文案改为“介绍当前智能体的用途和使用场景”。 |

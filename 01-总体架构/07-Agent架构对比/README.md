@@ -193,9 +193,9 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 | CampusClaw 目标 | Agent 默认 mode 只初始化新 Session，Session 独立维护当前模式；模式更新复用统一 Session POST。完整方案一次写入 ExitPlanMode({plan})，后端从可信调用的参数生成计划预览；完整校验后以事件身份审核，沿用原执行与数据库确认交接，批准后以 build 指令续跑；Tool/Skill 定义跨模式稳定。精确规则归计划与元数据主设计。 |
 | 差异分类 | 产品约束：Agent 默认 mode 与 Session 当前模式分离、Tool/Skill 元数据稳定、当前模式由 Session 更新、只允许 idle 主动切换、Subagent 调用时继承模式；架构变更：在既有配置服务增加 Session 更新，并将进程内审核接入 HTTP 和已有数据库执行控制；安全加固：精确目标、单次消费、停止竞争和两跳身份校验。 |
 | 提示词依据 | DeepSeek standard preset 明确禁止规划期 todo_write；CampusClaw 同样仅在 build 记录实施进度。模式资源仅 PLAN.md / BUILD.md；Main Agent/Subagent 用一行角色区分 PLAN 内规则的适用范围，批准后重组为短 BUILD。通用执行、验证和交付归基础 SYSTEM，进度细则归工具描述；不能以其他 Agent 的模式文件短推断其总规则少。精确正文、BASE 发布前提和矩阵见[提示词设计](../06-CampusClaw计划模式/plan-policy.md)，最新源码及代价见[专项证据 §10](../06-CampusClaw计划模式/source-evidence.md#10-两份模式提示词的最新上游核验)。 |
-| 业务模式覆盖 | pi 有 SYSTEM 文件优先级，DeepSeek 有部署提供的 plan:policy，Codex 有模式目录/调用文本覆盖；OpenCode agent.prompt 覆盖基础模板但模式提醒仍独立。CampusClaw 按业务 `.campusclaw/PLAN.md`、`BUILD.md` 分别完整替换，缺失回退预制；执行固定快照、Subagent 读自身目录、refresh 保留可选文件。属于架构扩展；代价是目录发布一致性和自定义正文评估，详见[覆盖证据](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖)。 |
+| 业务模式覆盖 | pi 有 SYSTEM 文件优先级，DeepSeek 有部署提供的 plan:policy，Codex 有模式目录/调用文本覆盖；OpenCode agent.prompt 覆盖基础模板但模式提醒仍独立。CampusClaw 按业务 `.campusclaw/PLAN.md`、`BUILD.md` 分别完整替换，缺失回退预制；执行固定快照、Subagent 读自身目录、目录重建保留可选文件。属于架构扩展；代价是目录发布一致性和自定义正文评估，详见[覆盖证据](../06-CampusClaw计划模式/source-evidence.md#11-业务-agent-模式提示词覆盖)。 |
 | 具体理由 | 模式已有明确的 Session 资源归属，更新操作复用其身份、版本与事务，统一四类属性入口，并明确组合原子性。混合查询与变更工具不能依靠新增一个静态只读字段准确表达每次调用用途；稳定字段与工具定义让规划规则独立演进。公共审核需要可对账的事件身份，原有工具权限不能表示对整份方案的批准。展示恢复与锁内接受分离，沿用既有工具确认方式，避免 Session 响应随具体交互增加指针。 |
-| 默认值证据与代价 | Mate 956b547f 的 Agent DTO/VO/DefinitionColumns 无 mode；Runtime 09b32d8e 的 prepare 复用目录、refresh 强制发布、create 从解析快照初始化，均无 mode。目标增加字段传播与创建复制，修改 Agent 后须先完成目录发布，不能宣称新 Session 即时读取远端最新值；既有 Session 不被重置。这是产品配置扩展，不是 DeepSeek/Claude 同名字段。完整路径及符号见[专项证据](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。 |
+| 默认值证据与代价 | Mate 956b547f 的 Agent DTO/VO/DefinitionColumns 无 mode；Runtime 09b32d8e 的 prepare 复用目录、refresh 强制发布（refresh 无生产调用方，已删除）、create 从解析快照初始化，均无 mode。目标增加字段传播与创建复制，修改 Agent 后须先完成目录发布，不能宣称新 Session 即时读取远端最新值；既有 Session 不被重置。这是产品配置扩展，不是 DeepSeek/Claude 同名字段。完整路径及符号见[专项证据](../../03-数据与存储/02-Agent元数据GaussDB/README.md#23-mode-专项源码核对)。 |
 | 收益与代价 | 不扩充工具元数据、不增加第二套 Loop 或 Session 待审字段；需要新增模式和审核事件、确认记录及客户端卡片。刷新必须补齐相关事件，缺页或状态矛盾时禁用审核；跨请求读取仍可能过期，确认始终在服务端重新校验。提示词约束不提供服务端强制只读保证；进程失联自动接管不在该功能承诺中。 |
 | 备选与重新评估条件 | 本期不采用副作用白名单、独立 Plan CRUD、Cordis 插件容器或 token 全量日志。若产品要求规划期绝不产生副作用，应单独设计可执行的权限边界，不能将 Prompt 遵循率当作保证。 |
 | 设计 / 实现状态 | 参数流式及通用解析在 PR #336 已实现、未合入 main；确定性回归见 §16。两文件覆盖等其他能力仍保留各自历史证据；BASE 业务发布、企业桥接与真实模型验收不因本次测试而完成 |
@@ -802,7 +802,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.111.0 | 2026-10-22 | A06 改为每个请求实时读取 Mate getAgent 的模型绑定，对比 Claude Managed Agents、Codex、OpenCode 与 pi 的模型来源做法。 |
+| 1.111.0 | 2026-10-22 | A06 改为每个请求实时读取 Mate getAgent 的模型绑定，对比 Claude Managed Agents、Codex、OpenCode 与 pi 的模型来源做法；受管目录 refresh 已删除。 |
 | 1.110.0 | 2026-10-22 | M03/M06 企业凭据专项补充：工具执行快照扩展为携带入站全部请求头（不做业务过滤），随 Mate tool execute 透传。 |
 | 1.109.0 | 2026-10-21 | M05 补充 Mate 不可达返回 503 与模型显示名由 Mate 替换 `model:` 链接。 |
 | 1.108.0 | 2026-10-20 | M05 记录 2026-10-20 命令接口对齐：新对话清单范围、按 Agent 的可选值、rename 与 argumentRequired、Builtin 文本结果，删除 Mate 命令选项分层。 |

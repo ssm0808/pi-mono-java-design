@@ -164,7 +164,7 @@ GaussDB JSON/JSONB 类型参考：[Huawei Cloud GaussDB JSON/JSONB Types](https:
 | 已有 Session | 创建时复制默认值并持久化；以后只使用 Session.mode。Agent 更新、目录刷新、消息重试、模型调整或压缩均不得覆盖已有 Session |
 | 更新 | 管理面通过既有 Agent POST 修改默认值；不调用 Session POST，不批量更新 Session。Session 手动切换仍走既有统一 POST 与准入规则 |
 | 入口优先级 | 仅新的交互根 Session 使用 Agent 默认；Subagent 复制调用时父执行模式，Cron 保持原 build 入口规则，不引入无人审核流程；关联 Agent 的 mode 仅是其定义默认值，不覆盖父策略 |
-| 配置生效 | 数据库提交后，既有 refresh/受管发布流程更新完整目录；后续创建使用实际解析到的已发布快照。prepare 复用缓存，不承诺 Agent POST 后各 Runtime 节点立即看到新默认值 |
+| 配置生效 | 数据库提交后，需删除 Runtime 受管目录的 `agent.json` 使缓存不完整，下一次 prepare 重建完整目录（运行时无强制刷新入口）；后续创建使用实际解析到的已发布快照。prepare 复用缓存，不承诺 Agent POST 后各 Runtime 节点立即看到新默认值 |
 | 非职责 | mode 不嵌入基础 systemPrompt，不重装 Tool，不批准方案，也不创建 TODO；plan 阶段继续禁止 TODO |
 
 持久化沿用 `t_agent_definition`：`mode VARCHAR(5) NOT NULL DEFAULT 'build'`，CHECK 限定两个字面量。现有数据库需要单独增量迁移，先补列并将既有记录填为 build，再启用约束和消费者；不执行本专题带 DROP 的初始化脚本做线上迁移。此次补齐兼容默认不改变既有 Agent.version；后续配置写入按 §6.3 递增版本。
@@ -499,7 +499,7 @@ SVG 是生成物，不手工修改。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| `v0.20.0` | 2026-10-22 | 读取接口对没有模型绑定的 Agent 返回空 `bindingModels`，不再按存储完整性错误返回 500。 |
+| `v0.20.0` | 2026-10-22 | 读取接口对没有模型绑定的 Agent 返回空 `bindingModels`，不再按存储完整性错误返回 500；mode 生效说明去掉已删除的 refresh。 |
 | `v0.19.5` | 2026-10-08 | 元数据说明统一使用 Skill 和 Tool。 |
 | `v0.19.4` | 2026-10-08 | 中文说明统一使用“工具”和“技能”，源码类型及字段标识保持既有命名。 |
 | `v0.19.3` | 2026-10-08 | 元数据资源关系统一称为“关联”，保留字段、表和源码标识。 |

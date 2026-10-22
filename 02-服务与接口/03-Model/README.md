@@ -26,7 +26,7 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 
 ## 2. 模型来源
 
-运营人员在 Mate 上给“设备告警处置”这类业务 Agent 换了模型，或者把某个模型从 Agent 上解绑，用户下次新建会话、打开模型选择或继续对话时，应该马上按新配置走。目前做不到：Claw 第一次准备 Agent 时把模型绑定写进本地 `.campusclaw/settings.json`，之后一直读这份缓存；强制刷新的 `AgentRuntimeManager.refresh` 在主线代码里没有调用方，Mate 上的修改要等本地目录被删掉才会生效。本节让模型绑定只以 Mate 为准：Claw 不再在本地目录保存模型，每次需要时调用 Mate 的 getAgent 实时读取。
+运营人员在 Mate 上给“设备告警处置”这类业务 Agent 换了模型，或者把某个模型从 Agent 上解绑，用户下次新建会话、打开模型选择或继续对话时，应该马上按新配置走。目前做不到：Claw 第一次准备 Agent 时把模型绑定写进本地 `.campusclaw/settings.json`，之后一直读这份缓存；强制刷新的 `AgentRuntimeManager.refresh` 在主线代码里没有调用方（已在 [pi-mono-java#381](https://github.com/superheromeZzh/pi-mono-java/pull/381) 删除），Mate 上的修改要等本地目录失效重建才会生效。本节让模型绑定只以 Mate 为准：Claw 不再在本地目录保存模型，每次需要时调用 Mate 的 getAgent 实时读取。
 
 本节内容全部待实现。Agent 身份、SYSTEM、Skill、工具绑定和 Subagent 清单仍按原方式缓存在受管目录，它们的陈旧问题不在本节范围（见 [§2.9](#model-source-todo) T4）。
 
@@ -87,7 +87,7 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 
 | # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
 |---|---|---|---|---|---|
-| D1 | Agent 的模型配置在 Mate 修改后，Claw 怎样尽快生效 | Claude Managed Agents：用 Agent ID 创建会话时由服务端取 Agent 最新版本（公开文档）。Codex：远端模型目录在本地缓存 5 分钟，带 ETag 刷新。OpenCode：models.dev 目录缓存 5 分钟，另带内置快照兜底。pi：默认模型来自本地 `settings.json`，可用模型由进程内模型运行时实时计算，不涉及远端 | 模型绑定由 Mate 管理，Claw 不是最终决定方；需求要求实时；Claw 是多实例部署，本地缓存在实例之间不一致；受管目录的强制刷新没有触发方 | 本地目录不再保存模型。每个需要模型的请求调用一次 getAgent，不做缓存；同一请求内查到的结果传给后续步骤复用，不重复查询 | 新建会话、打开模型选择、切换模型、每条用户消息、每次 Subagent 和定时执行都多一次 Mate 请求；Mate 不可用时这些入口失败。后者影响有限：模型调用本身就经过 Mate，Mate 不可用时对话原本也无法进行。不选“保留本地文件，补一个刷新触发”：需要 Mate 主动通知或定时轮询，生效时间仍不确定。不选 Codex/OpenCode 式 5 分钟缓存：修改最多延迟 5 分钟才生效，且各实例不一致；压测发现 getAgent 压力过大时再考虑（T2） |
+| D1 | Agent 的模型配置在 Mate 修改后，Claw 怎样尽快生效 | Claude Managed Agents：用 Agent ID 创建会话时由服务端取 Agent 最新版本（公开文档）。Codex：远端模型目录在本地缓存 5 分钟，带 ETag 刷新。OpenCode：models.dev 目录缓存 5 分钟，另带内置快照兜底。pi：默认模型来自本地 `settings.json`，可用模型由进程内模型运行时实时计算，不涉及远端 | 模型绑定由 Mate 管理，Claw 不是最终决定方；需求要求实时；Claw 是多实例部署，本地缓存在实例之间不一致；受管目录的强制刷新没有触发方，已删除 | 本地目录不再保存模型。每个需要模型的请求调用一次 getAgent，不做缓存；同一请求内查到的结果传给后续步骤复用，不重复查询 | 新建会话、打开模型选择、切换模型、每条用户消息、每次 Subagent 和定时执行都多一次 Mate 请求；Mate 不可用时这些入口失败。后者影响有限：模型调用本身就经过 Mate，Mate 不可用时对话原本也无法进行。不选“保留本地文件，补一个刷新触发”：需要 Mate 主动通知或定时轮询，生效时间仍不确定。不选 Codex/OpenCode 式 5 分钟缓存：修改最多延迟 5 分钟才生效，且各实例不一致；压测发现 getAgent 压力过大时再考虑（T2） |
 | D2 | 调用 Mate 的哪个接口读取模型 | 无可对照实现 | 需求指定 getAgent；Claw 已经在不带用户凭据的情况下调用 getAgent 读取工具绑定（`HttpMateToolClient#queryToolIdsByAgentId`）；runtime 接口还要批量解析工具与 Subagent 依赖，比 getAgent 重 | 使用 getAgent `GET /mate-service/v1/agents/{agentId}`，只读取 `bindingModels` | getAgent 返回完整 Agent 聚合，只用其中一个字段；Mate 读取五张表。若压测显示负担过重，再请 Mate 提供只返回模型的轻量接口 |
 | D3 | 查询失败或 Agent 没有模型时怎么办 | Codex：拉取失败时保留上一次成功的目录，不把失败当成空目录。pi：没有可用模型时提示用户配置（`formatNoModelsAvailableMessage`） | 本地不再有可以回退的模型记录；运营人员需要区分“没配置模型”和“Mate 故障”才能处理 | 列表为空报 `AGENT_MODEL_NOT_CONFIGURED`；Mate 故障报 `AGENT_SERVICE_UNAVAILABLE`；都不回退到旧值或其他模型 | Mate 短暂故障期间无法新建会话、无法发送消息，不像 Codex 那样用旧数据继续。Mate 读取接口对“Agent 没有模型”目前返回 HTTP 500，需按 [元数据设计 §5.1](../../03-数据与存储/02-Agent元数据GaussDB/README.md) 改为返回 200 和空列表（待实现）；改之前 Claw 会误判为 Mate 故障 |
 | D4 | 已有会话保存的模型被解绑后怎么办 | pi：恢复会话时先用会话记录的模型，不可用时改用默认模型并提示（`sdk.ts` 恢复逻辑）。Claude Managed Agents：会话是否随 Agent 新版本变化，公开文档未说明 | 会话当前模型是会话自己的状态，保存在 Claw 数据库，不属于本地目录；同一会话的模型变化要能在历史中看到 | 会话继续保存当前模型。每条消息接受前按 getAgent 的结果校验：仍可用就保留，已解绑就换成当前默认模型，沿用现有的模型变更事件（原因值保持 `agentRefresh`） | 解绑后用户的下一条消息会使用另一个模型，用户只能从模型变更事件得知；没有默认模型时消息被拒绝 |
@@ -166,13 +166,13 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 | T1 | 已定（2026-10-22）：Mate getAgent 与 runtime 接口对没有绑定模型的 Agent 返回 200 和空 `bindingModels`，不再返回 500 `AGENT_MODEL_BINDING_MISSING`（现状源码见[证据 §1.5.1](source-evidence.md#model-live-query-evidence)）；规则见[元数据设计 §5.1](../../03-数据与存储/02-Agent元数据GaussDB/README.md)，Mate 待实现 | Mate | D3、F1 |
 | T2 | 每条消息查询一次 getAgent 是否可接受；上线前压测，必要时改为短时缓存或轻量接口 | Claw | D1、D2 |
 | T3 | R5、R6 由需求推导，需用户确认切换模型、发消息、Subagent、定时执行都按实时结果校验 | 用户 | §2.1 |
-| T4 | 受管目录的 `refresh` 在主线没有调用方，Agent 的 SYSTEM、Skill、工具绑定在 Mate 修改后同样不会生效；是否另立主题处理 | 用户 | §2 开头 |
+| T4 | `refresh` 已删除（[pi-mono-java#381](https://github.com/superheromeZzh/pi-mono-java/pull/381)）。Agent 的 SYSTEM、Skill、工具绑定在 Mate 修改后仍要删除受管目录的 `agent.json` 才会生效；是否另立主题处理 | 用户 | §2 开头 |
 
 <a id="model-capability-boundary"></a>
 
 ### 2.10 与模型信息查询的关系
 
-每个新执行在锁外单独查询 Mate 当前选中模型的 `contextWindow`，应用服务在锁内复核 Session 版本、模型与绑定后，固定该执行的不可变模型信息。自动压缩、Tool Loop 和原根确认续跑共用结果；下一次新执行再次查询。独立手工压缩和 Subagent/Cron 各自查询。能力不写入 Agent 目录，不由 refresh 控制更新；查询失败不回退旧窗口。精确字段、入口、锁边界及压缩规则由[模型信息专题](model-capabilities.md)统一维护。
+每个新执行在锁外单独查询 Mate 当前选中模型的 `contextWindow`，应用服务在锁内复核 Session 版本、模型与绑定后，固定该执行的不可变模型信息。自动压缩、Tool Loop 和原根确认续跑共用结果；下一次新执行再次查询。独立手工压缩和 Subagent/Cron 各自查询。能力不写入 Agent 目录，不随目录重建更新；查询失败不回退旧窗口。精确字段、入口、锁边界及压缩规则由[模型信息专题](model-capabilities.md)统一维护。
 
 Claw 不查询或消费 maxTokens，不为普通 Chat 或摘要指定输出额度；Mate 自行管理输出参数及上游差异。删除 `campusmate.model.context-window/max-output-tokens` 与 Java 默认值。getAgent 返回的绑定仍是模型使用范围的唯一依据，模型信息查询不能扩大可选范围。
 
@@ -523,7 +523,7 @@ CampusMate 请求与流处理使用现有 Jackson、Spring WebFlux 的 `WebClien
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 2.13.0 | 2026-10-22 | 本地 Agent 目录不再保存模型，创建会话、可选模型、切换模型和消息校准都实时调用 Mate getAgent；没有模型时报需要配置模型。 |
+| 2.13.0 | 2026-10-22 | 本地 Agent 目录不再保存模型，创建会话、可选模型、切换模型和消息校准都实时调用 Mate getAgent；没有模型时报需要配置模型；受管目录 refresh 已删除，T4 改为其他元数据的生效方式。 |
 | 2.12.1 | 2026-10-17 | AI 模块未使用的 json-schema-validator 声明改由工具系统 §9.7 删除。 |
 | 2.12.0 | 2026-10-16 | 模型调用改用 JDK HttpClient 并删除 Reactor Netty，用 Redis 全局许可（Redisson 客户端）把所有实例合计的模型调用限制在 100 个，Redis 故障时降级为每实例 50 个，复用连接且不预热。 |
 | 2.11.0 | 2026-10-09 | AI 提供通用只读参数预览与内部原始 JSON 诊断，保持完整解析和执行边界。 |

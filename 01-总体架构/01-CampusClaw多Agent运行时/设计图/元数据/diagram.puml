@@ -11,7 +11,8 @@ skinparam ranksep 30
 ' Architecture change: one managed tree serves Runtime, Cron, and Subagent entry points.
 ' Security hardening: a complete sibling tree is validated before publication.
 ' Design reason: sessions consume immutable identity indexes and never persist remote tool lists.
-' Architecture change: refresh publishes metadata only; the next idle execution reconciles its model.
+' Architecture change: models are not stored in the tree; the next idle execution reconciles against Mate getAgent.
+' refresh was removed (no production caller); deleting agent.json makes the cache incomplete for the next prepare.
 
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
@@ -41,7 +42,7 @@ rectangle "Mate runtime snapshot" as Input {
 }
 
 rectangle "AgentRuntimeManager" as Manager {
-  rectangle "prepare cache-first\nrefresh explicitly" as Resolve
+  rectangle "prepare cache-first\nrebuild when incomplete" as Resolve
   rectangle "Build sibling tree" as Build
   rectangle "Validate names, IDs,\nversions, files, and boundaries" as Validate
   rectangle "Publish complete tree" as Publish
@@ -49,7 +50,7 @@ rectangle "AgentRuntimeManager" as Manager {
 
 rectangle "Managed Agent directory\nagent/{agentId}/.campusclaw/" as AgentDirectory {
   file "agent.json\ncurrent identity only" as AgentFile
-  file "settings.json\ndefaultModel, bindingModels" as SettingsFile
+  file "settings.json\nmode, bindingTools (no models)" as SettingsFile
   file "SYSTEM.md\nAgent instructions" as SystemFile
   file "agents/{agentName}.json\ndirect Subagent identity and version" as SubagentFile
   file "skills/{skillName}/skill.json\nSkill identity and version" as SkillIdentityFile
@@ -57,7 +58,7 @@ rectangle "Managed Agent directory\nagent/{agentId}/.campusclaw/" as AgentDirect
 }
 
 database "Mate metadata authority\nAgent, Skill, Subagent bindings" as MateAuthority
-database "Model Manager authority\nmodel availability and credentials" as ModelManager
+database "Mate getAgent\ncurrent default and bindingModels" as ModelManager
 rectangle "Execution preparation" as Execution {
   rectangle "Immutable name indexes" as Indexes
   rectangle "AgentSessionFactory" as SessionFactory
@@ -74,12 +75,11 @@ Build --> Validate
 Validate --> Publish
 Publish --> AgentDirectory
 
-Resolve .right.> MateAuthority : cold prepare / refresh
-SettingsFile .right.> ModelManager : bound models
+Resolve .right.> MateAuthority : cold or incomplete prepare
 AgentDirectory -down-> Indexes : scan exact names
 Indexes --> SessionFactory : Skill and direct Subagent resolution
-AgentDirectory -down-> SessionFactory : prompt, workspace,\nmodel settings
-AgentDirectory -down-> Reconciler : next idle execution
+AgentDirectory -down-> SessionFactory : prompt, workspace,\ntool bindings
+ModelManager -down-> Reconciler : live bindings per request
 SessionStore --> Reconciler : current model and thinking
 Reconciler --> SessionStore : optional atomic model/thinking\nchange entries before User Entry
 AgentDirectory .down.> ActiveSnapshot : freeze for execution
@@ -89,13 +89,13 @@ note right of AgentDirectory
 No remote tool list is written to disk.
 The tree is read-only between publications.
 Name and path must match byte-for-byte.
-Refresh does not mutate active snapshots.
+Rebuilds do not mutate active snapshots.
 end note
 
 note left of Manager
 Complete cache hits do not call Mate.
-Refresh failure keeps the old directory.
-No TTL or version-driven auto refresh.
+Rebuild failure keeps the old directory.
+No forced rebuild entry, TTL or auto refresh.
 end note
 
 note bottom of Reconciler

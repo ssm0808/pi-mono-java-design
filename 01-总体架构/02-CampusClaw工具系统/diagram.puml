@@ -300,14 +300,14 @@ note over Loop,Catalog
 end note
 @enduml
 
-@startuml managed_runtime_refresh
+@startuml managed_runtime_publish
 ' Source evidence (CampusClaw d649866):
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java:
 ' prepare, materialize, isRuntimeComplete
 ' Observed behavior: current materialization writes the managed tree directly and
 ' generates references/tools.json.
-' Design reason: candidate-tree publication prevents partial reads; explicit
-' management refresh changes only future sessions and never tool configuration.
+' Design reason: candidate-tree publication prevents partial reads; a rebuild
+' changes only future sessions and never tool configuration. refresh was removed (no production caller).
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
@@ -332,7 +332,7 @@ participant "Runtime manager" as Manager
 participant Mate
 participant "Candidate directory" as Candidate
 database "Published directory" as Published
-Caller -> Manager : Prepare missing runtime or explicitly refresh
+Caller -> Manager : Prepare missing or incomplete runtime
 Manager -> Manager : Acquire Agent lock; recheck cached tree
 Manager -> Mate : Fetch required directory source
 Mate --> Manager : Source data
@@ -347,7 +347,7 @@ Manager -> Manager : Release Agent lock on every path
 Manager --> Caller : Snapshot or error; failure keeps previous tree
 note over Manager,Published
   Complete prepare-cache hits return without fetching.
-  Explicit refresh forces a new candidate.
+  No forced rebuild entry; deleting agent.json makes the cache incomplete.
   Active executions retain their snapshots.
 end note
 @enduml
@@ -730,10 +730,10 @@ note over Session,Policy
 end note
 @enduml
 
-@startuml refresh_next_execution
-' Source evidence (CampusClaw PR 167 f60cc3e): AgentRuntimeManager refresh and Runtime Session store.
+@startuml model_reconcile_next_execution
+' Source evidence (CampusClaw PR 167 f60cc3e): RuntimeSessionModelReconciler and Runtime Session store.
 ' Pending implementation Java design: RuntimeSessionModelReconciler runs before accepting user.message.
-' Architecture change: refresh does not mutate an active execution snapshot.
+' Architecture change: bindings come from Mate getAgent per request; active snapshots are not mutated.
 ' Design reason: make directory publication atomic while preserving execution consistency.
 ' Presentation: one responsibility-level scenario; implementation details remain in the linked document.
 skinparam backgroundColor white
@@ -753,16 +753,16 @@ skinparam noteBorderColor #D2C6A5
 hide footbox
 autonumber
 
-title Prepare the Next Execution After Refresh - Target
+title Reconcile the Model for the Next Execution - Target
 participant Caller
 participant "Execution admission" as Admission
-database "Published Agent directory" as Directory
+participant "Mate getAgent" as Directory
 participant "Model service" as Models
 database "Session history" as Store
 participant "Execution Host" as Host
 Caller -> Admission : Submit the next message to an idle Session
-Admission -> Directory : Read published bindings and default
-Directory --> Admission : Latest validated runtime metadata
+Admission -> Directory : Read current bindingModels and default
+Directory --> Admission : Live model bindings
 Admission -> Models : Resolve current model or allowed default
 Models --> Admission : Callable model or unavailable
 break No callable model

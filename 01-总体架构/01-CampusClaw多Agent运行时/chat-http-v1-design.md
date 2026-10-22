@@ -181,7 +181,7 @@ Repository 的 `updateSession(sessionId, specificationDTO)` 在事务内锁定�
 
 统一 POST、严格省略标记、组合事务与 mode 已在 §8.3 所列 Java 基线观察到；移除条件 Header/ETag、按最新行合并及相应前端迁移已在 §8.4 核验为已实现。沿用 Spring/Jackson/MyBatis 现有依赖，无新增 Maven 依赖。mode 的数据库列与迁移归[计划模式](../06-CampusClaw计划模式/README.md#6-持久化与恢复)；本接口不新增通用 metadata 字段或独立配置表。
 
-管理面 refresh(agentId) 仍只发布新目录，不改 active execution 快照。每次消息接受前调用 Mate getAgent 读取 Agent 当前模型（待实现，见 [Model §2.5](../../02-服务与接口/03-Model/README.md#model-source-entries)），如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
+受管目录重建只发布新目录，不改 active execution 快照；运行时不提供强制重建入口。每次消息接受前调用 Mate getAgent 读取 Agent 当前模型（待实现，见 [Model §2.5](../../02-服务与接口/03-Model/README.md#model-source-entries)），如需模型校准，按既有 model_changed、可选 thinking_changed、user.message 顺序提交；本次 SSE 首帧仍为 user.message。没有有效默认模型时，在 SSE 建立前拒绝且不接受消息。
 
 <a id="245-get-session-command-values"></a>
 
@@ -500,7 +500,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.78.0 | 2026-10-22 | 创建会话、可选模型与消息校准改为实时调用 Mate getAgent 读取模型，绑定为空返回 422 AGENT_MODEL_NOT_CONFIGURED（待实现）。 |
+| 1.78.0 | 2026-10-22 | 创建会话、可选模型与消息校准改为实时调用 Mate getAgent 读取模型，绑定为空返回 422 AGENT_MODEL_NOT_CONFIGURED（待实现）；删除管理面 refresh 描述。 |
 | 1.77.0 | 2026-10-22 | 工具执行凭据快照扩展为携带入站全部请求头（如 `x-plane-type`），不做业务过滤，随 Mate tool execute 原值合并发送；仅 JDK HttpClient 硬拒绝的受限传输头由传输层剔除，凭据同名吸收、大小写变体与 Accept-Encoding 风险的确认接受见 §7.1。 |
 | 1.76.0 | 2026-10-21 | 创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（待实现）。 |
 | 1.75.0 | 2026-10-20 | 可选值接口改为 ListAgentCommandValues（`GET /agents/{agentId}/commands/{commandName}/values?sessionId=`），清单新增 argumentRequired、`name` 改为 `rename`、不带 sessionId 时含 rename/model/thinking/mode，Builtin 成功只返回文本，技能命令受理错误码与普通消息一致。 |

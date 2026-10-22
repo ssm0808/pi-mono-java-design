@@ -375,7 +375,7 @@ deactivate Loop
 ' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java：resolve、prepare
 ' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java：prepare、toSettings、validSettings
 ' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/common/client/HttpMateToolClient.java：queryToolIdsByAgentId（已调用 getAgent）
-' 已观察行为：默认模型与绑定模型写入 .campusclaw/settings.json，缓存命中后不再访问 Mate；refresh 在主线没有调用方。
+' 已观察行为：默认模型与绑定模型写入 .campusclaw/settings.json，缓存命中后不再访问 Mate；refresh 没有调用方，已删除。
 ' 设计原因：模型绑定只以 Mate 为准，每次创建会话实时读取，避免本地缓存陈旧及多实例不一致。
 ' 架构变更：本地目录不再保存模型，getAgent 查询待实现；失败分类见 Model §2.7，不在本图。
 skinparam backgroundColor white

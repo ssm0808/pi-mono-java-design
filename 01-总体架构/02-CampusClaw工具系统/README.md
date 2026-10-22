@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.29.0 |
+| 文档版本 | 2.30.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；[§9.7](#tool-schema-subset) 自写 Schema 子集校验器已在 pi-mono-java#371（`main@2b9a6ad`）实现，§9.7.6 T2 现网定义普查未完成；SearchTools、发现与校验的一致性接线、前端可恢复展示待实现，其余能力按源码证据分项判断 |
 | 更新日期 | 2026-10-22 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
@@ -85,7 +85,7 @@ Cron Job 生命周期、Subagent 进度桥和 Host 关闭策略不进入公共 S
 
 - 12 个框架工具的名称、装配、可用条件与并发模式，以及 Agent 业务代理的注册边界；
 - Runtime、Cron、Subagent 三入口的配置与 Session 装配；
-- 受管 Agent 工作区边界、目录 prepare/refresh 和 Skill/Subagent 名称索引；
+- 受管 Agent 工作区边界、目录 prepare 与重建和 Skill/Subagent 名称索引；
 - Skill 逐工具发现、`CallTool` 名称解析、共用远端执行和共享 CampusMate origin 边界；
 - Subagent Execution、Cron 工具边界与实现迁移。
 - TUI/CLI 删除边界和公共 Session 压缩；Slash 只保留与模型工具的隔离边界。
@@ -140,7 +140,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 安全加固 | 注册 Schema 与动态业务参数均在交互确认前校验；框架外层拒绝未知字段，业务参数遵守业务 Schema | 明显无效的调用不打扰用户，确认通过后执行同一份已校验快照 |
 | 安全加固 | 每个 Session 固化 Agent 工作区边界 | 阻止本地工具读取兄弟 Agent 或外部路径 |
 | 安全加固 | Find/Grep 不在调用期下载二进制且不回退到 shell | TOB Runtime 的可执行依赖必须在部署和启动期受控 |
-| 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，refresh 失败保留旧树 |
+| 安全加固 | 受管树在同级临时目录完整校验后发布 | Session 不读取半成品，重建失败保留旧树 |
 | 安全加固 | Mate Agent/Skill/metadata 发现请求不携带执行凭据 | 凭据只向真正执行并产生副作用的端点暴露 |
 | 安全加固 | 普通交互保留请求凭据，定时执行每批工具调用前向 Mate 取统一账号 access-token，业务凭据仅用于实际 execute | 限定凭据来源、寿命与可见面，防止进入模型、日志、事件或持久化 |
 | 安全加固 | 拒绝空摘要、摘要 ToolCall、失败或取消摘要 | 不允许无效摘要覆盖可恢复的旧上下文 |
@@ -224,7 +224,7 @@ campusclaw:
 2. 显式 `[]` 表示该入口完全不向模型提供工具，模型请求的 `tools=[]`，框架工具和 Agent 直接关联的业务工具均不提供；
 3. 非空数组完全替换框架缺省值，不做 merge；宿主另追加当前 Agent 直接业务工具代理；
 4. 未知、重复、旧名或大小写错误阻止应用启动；
-5. 配置只在启动期绑定和验证，目录 `refresh` 不重新读取配置；
+5. 配置只在启动期绑定和验证，目录重建不重新读取配置；
 6. 业务绑定不能修改框架 profile；Cron payload、Subagent 文件和模型输入不能增加任意工具；
 7. 非空配置下，业务代理受 Mate 工具装配开关、当前 Agent 绑定与权限约束。
 
@@ -393,28 +393,31 @@ agent/{agentId}/.campusclaw/
 
 `references/` 只保存 Skill 作者提供的普通参考资料，不生成业务工具定义文件。模型通过固定 `SearchTools` 按名称获取完整定义；正文只需在业务步骤中引用唯一工具名，不包含内部 ID、参数 Schema 或平台调用协议。工具定义的加载、缓存、刷新、跨节点同步和版本切换由后续数据同步设计确定，本版不指定全量加载或按需加载。本次不移动 `skill.json`，下述目录刷新流程也不代表已经解决工具定义的数据一致性。
 
-本图聚焦一次需要构建候选目录的发布过程；prepare 的完整缓存命中直接返回，锁内重查发现已发布也直接返回，refresh 则强制构建。锁作为 Runtime manager 的动作，候选目录与已发布目录分列以保留原子切换边界；所有成功或失败路径均释放锁。工具定义的数据同步仍另行设计，不属于本图已解决范围。
+本图聚焦一次需要构建候选目录的发布过程；prepare 的完整缓存命中直接返回，锁内重查发现已发布也直接返回。锁作为 Runtime manager 的动作，候选目录与已发布目录分列以保留原子切换边界；所有成功或失败路径均释放锁。工具定义的数据同步仍另行设计，不属于本图已解决范围。
 
-![受管目录准备与管理面刷新](managed_runtime_refresh.svg)
+![受管目录准备与发布](managed_runtime_publish.svg)
 
-[PlantUML 源码：`managed_runtime_refresh`](diagram.puml#L303)
+[PlantUML 源码：`managed_runtime_publish`](diagram.puml#L303)
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
 最后原子发布。失败删除候选树并保留旧目录。目录构建不再校验模型，没有绑定模型的 Agent 也能准备目录，由模型查询报出需要配置模型。
 
-`refresh(agentId)` 只由受管管理流程显式调用，强制拉取并构建候选树；成功后原子替换，
-失败保留旧树。活动 execution 继续使用自身不可变 runtime 快照。空闲数据库 Session 在
-下一次接受用户 Entry 前实时读取 getAgent 的 `bindingModels`（模型不随 refresh 更新，待实现）：当前模型仍在其中且具备凭据时
+运行时不提供强制重建入口：原 `refresh(agentId)` 在生产代码中没有调用方，已删除。需要让 Mate
+侧的 SYSTEM、Skill、Child 或工具绑定变更进入目录时，删除该 Agent 的 `.campusclaw/agent.json`
+使缓存不完整，下一次 prepare 重建并保留已有 `PLAN.md`、`BUILD.md`；删除整个 `.campusclaw/`
+会丢失这两份业务覆盖。重建失败保留旧树。活动 execution 继续使用自身不可变 runtime 快照。
+模型不进入目录，空闲数据库 Session 在
+下一次接受用户 Entry 前实时读取 getAgent 的 `bindingModels`（待实现）：当前模型仍在其中且具备凭据时
 保留；失效时切换到具备凭据的新 default，并原子持久化模型及必要的 thinking 变更事件，
 事件先于 `user.message` 投影。没有可用 default 时拒绝本次执行且不接受用户 Entry。
-工具配置不参与 refresh。首版不提供 TTL、后台刷新、版本比较或 Subagent 版本不匹配时的隐式自愈。
+工具配置不参与目录重建。首版不提供 TTL、后台刷新、版本比较或 Subagent 版本不匹配时的隐式自愈。
 
-本图从管理面已完成目录发布开始，只展示下一次空闲执行的模型校准。当前模型仍可调用时保留；失效才尝试新默认模型；无可用模型则不接纳 user.message。模型及必要 thinking 变更原子持久化后先投影，再接纳消息；刷新发布过程由前一张图说明。
+本图只展示下一次空闲执行的模型校准，模型绑定由 getAgent 实时读取。当前模型仍可调用时保留；失效才尝试新默认模型；无可用模型则不接纳 user.message。模型及必要 thinking 变更原子持久化后先投影，再接纳消息；目录发布过程由前一张图说明。
 
-![refresh 后下一次执行懒解析](refresh_next_execution.svg)
+![下一次执行的模型校准](model_reconcile_next_execution.svg)
 
-[PlantUML 源码：`refresh_next_execution`](diagram.puml#L733)
+[PlantUML 源码：`model_reconcile_next_execution`](diagram.puml#L733)
 
 ## 9. 工具注册与发现
 
@@ -750,7 +753,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 `agentName` 只能来自当前父 Agent 的 `agents/{agentName}.json`。执行前按顺序校验精确
 直接绑定、自绑定、enabled、固定版本、最大深度、ancestry 循环、Subagent 目录完整性和
-模型可用性。版本不匹配是明确错误，不触发隐式 refresh。
+模型可用性。版本不匹配是明确错误，不触发隐式目录重建。
 
 | 组件 | 职责 |
 |---|---|
@@ -905,15 +908,15 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 主源码及公司镜像不存在三项工具类、专属 operations/executor 和无消费者的写入队列；干净构建产物不得残留旧 class；
 - 三入口拒绝 `Bash/Edit/Write` 及对应小写旧名；目标框架清单及 Runtime/Cron/Subagent 缺省集合符合 §4；
 - 移除旧功能专属测试，补充退役类/包不存在与配置拒绝回归，不能用减少测试数量代替能力删除证明；
-- Read/Find/Grep/Ls、共享截断、目录 prepare/refresh、压缩及 Agent 子代理的相关回归通过；
+- Read/Find/Grep/Ls、共享截断、目录 prepare 与重建、压缩及 Agent 子代理的相关回归通过；
 - 当前产品文档不再允许保留源码或指导调用；历史源码证据、拒绝配置负例与历史事件中的名称允许保留；
 - 生成镜像与主源码一致；格式、Checkstyle、相关测试及构建分别记录，公司父 POM 不可用时明确公司编译未验证。
 
 ### 13.2 目录与本地工具
 
 - 完整缓存命中不访问 Mate，冷目录通过同级候选树原子发布；
-- refresh 失败保留旧树，活动 Session 继续使用自身 runtime 快照；
-- refresh 后空闲 Session 下一次执行懒校准模型；无可用 default 时不接受用户 Entry；
+- 重建失败保留旧树，删除 `agent.json` 后重建保留 `PLAN.md`、`BUILD.md`，活动 Session 继续使用自身 runtime 快照；
+- 空闲 Session 下一次执行按 getAgent 实时绑定懒校准模型；无可用 default 时不接受用户 Entry；
 - 名称/路径不一致、Skill/Subagent 重名、固定版本缺失和符号链接使目录无效；
 - Skill 资源路径不越界；普通参考资料继续可读，受管目录不生成工具定义文件；
 - Read、Find、Grep、Ls 只能访问本 Agent 根，Subagent 只能访问 Subagent 根；
@@ -974,7 +977,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 3. 完成逐工具 batch planner、严格 Schema 和 hook 顺序；
 4. 实现工厂、不可变上下文和公共 Session；
 5. 迁移 Runtime Host 并删除 CLI 产品入口；
-6. 统一目录 prepare/refresh、Skill/Subagent 索引和模型解析；
+6. 统一目录 prepare、Skill/Subagent 索引和模型解析；
 7. 复用 MateToolResolver 实现 SearchTools 的精确名称披露，并保持代理、发现与 CallTool 的定义一致性及权限边界；数据加载、缓存与同步由后续专题设计后接入；
 8. 迁移 Subagent Execution 与 Cron 工具；
 9. 删除 Bash/Edit/Write 及专属死代码、任意动态注册、Extension、Loop、旧 delegation 和退役模型入口；
@@ -988,6 +991,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.30.0 | 2026-10-22 | 删除没有生产调用方的受管目录 refresh；目录重建改为删除 `agent.json` 后由 prepare 完成并保留模式覆盖，两张图改名。 |
 | 2.29.0 | 2026-10-22 | 受管目录不再保存模型，默认模型和 bindingModels 每次请求实时读取 Mate getAgent。 |
 | 2.28.3 | 2026-10-20 | 差分对照改为不依赖外部实现的性质测试：丢弃不收紧、无害丢弃不变、关键字顺序无关；§9.7 校验器已实现，T2 普查未完成。 |
 | 2.28.2 | 2026-10-20 | 测试也不再依赖 json-schema-validator，删除与 networknt 的差分对照（待实现）。 |

@@ -104,7 +104,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 
 ### 7.1 Agent 发布目录
 
-`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；显式 refresh 通过临时目录校验后原子替换，失败保留旧目录。Runtime、Cron 与 Subagent 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
+`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；目录不完整（如删除 `agent.json`）时同样经临时目录校验后原子替换，失败保留旧目录；运行时不提供强制重建入口。Runtime、Cron 与 Subagent 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
 
 ![元数据发布与执行快照](设计图/元数据/metadata_runtime_directory_mapping.svg)
 
@@ -145,7 +145,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 3.40.0 | 2026-10-22 | 同步 HTTP 1.78.0 与 Model 2.13.0：模型绑定改为每次请求实时读取 Mate getAgent。 |
+| 3.40.0 | 2026-10-22 | 同步 HTTP 1.78.0 与 Model 2.13.0：模型绑定改为每次请求实时读取 Mate getAgent；删除管理面 refresh，元数据图去掉目录中的模型。 |
 | 3.39.0 | 2026-10-21 | 同步 HTTP 1.76.0：创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE。 |
 | 3.38.0 | 2026-10-20 | 命令可选值接口改为按 Agent 查询（sessionId 可选），删除 Mate 聊天命令接口引用，同步 HTTP 1.75.0。 |
 | 3.37.0 | 2026-10-18 | 查询可用模型、查询深度思考可选值与查询工作模式可选值合并为一个查询选项型命令可选值的接口，model、thinking、mode 共用，同步 HTTP 1.74.0。 |
