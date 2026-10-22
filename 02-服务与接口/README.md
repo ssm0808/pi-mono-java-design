@@ -12,6 +12,7 @@
 | Claw 定时任务配置 API | 配置、生命周期与Run读取；目标契约待实现；Mate 侧见下一行 | [HTML 展示](../01-总体架构/08-CampusClaw定时任务/schedule-api-review.html) · [Claw 接口协议](../01-总体架构/08-CampusClaw定时任务/README.md#interface) |
 | CampusMate 定时任务 | Mate 管理入口的定时任务接口、调用 Claw 前后的权限与配额处理、为 Claw 提供的 access-token 与 Session 归属登记 | [设计](./08-CampusMate定时任务/README.md) |
 | mate-service 通用对话 Events API | 公共 Chat 提交、live SSE、历史对账及未整合分页要求 | [三接口设计、HTML 与 OpenAPI](./07-mate-service通用对话API/README.md) |
+| 意图识别与任务接续 | 第一阶段统一 MainAgent，第二阶段增加快速直达；保留原任务归属与旧能力接续 | [主设计](./08-意图识别/意图识别重构设计.md) · [第一阶段](./08-意图识别/意图识别重构设计.md#phase-one) · [第二阶段](./08-意图识别/意图识别重构设计.md#phase-two) · [19个场景](./08-意图识别/意图识别场景汇总.md) · [方案及能耗案例](./08-意图识别/意图识别三种方案对比.md) · [全局图](./08-意图识别/intent_phase_architecture.svg) |
 
 精确 Runtime HTTP 契约位于
 [`01-总体架构/01-CampusClaw多Agent运行时/接口契约/`](../01-总体架构/01-CampusClaw多Agent运行时/接口契约/)。

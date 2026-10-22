@@ -1,0 +1,1314 @@
+@startuml intent_service_sequence
+' 源码依据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/web/RuntimeEventController.java#submit
+' 已观察行为：CampusClaw 接收 Session Events；中心任务归属及六标签快路由待实现。
+' 设计原因：总览只保留服务边界，采用无需二次确认的只读告警查询。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam responseMessageBelowArrow true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 36
+hide footbox
+title 查询今日设备告警
+autonumber
+actor "运维人员" as U
+participant "CampusMateService" as M #E5F1EC
+participant "CampusClaw" as C #E8EEF8
+participant "工具服务" as T #FFF1DA
+U -> M ++ : 查询今日设备告警
+activate U
+M -> M ++ : 校验身份并准备任务上下文（待实现）
+return 合法输入及必要上下文
+M -> M ++ : 统一判断接续或新路由（待实现）
+return 指定告警查询 Agent
+M -> C ++ : 执行告警查询
+C -> C ++ : 解析可信工具并校验查询参数
+return 准备后的查询请求
+C -> M ++ : 校验业务权限（该查询无需确认）
+return 允许本次查询
+C -> T ++ : 查询今日设备告警
+return 告警记录
+return 告警查询结果
+M -> M ++ : 登记任务结果并生成展示事件（待实现）
+return 该任务的展示结果
+return 返回今日设备告警
+deactivate U
+@enduml
+
+@startuml intent_global_classes
+' 源码依据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/BoundAgentTool.java#execute
+' 源码依据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#runChild
+' 已观察行为：直接绑定的 Child Session 按调用创建并关闭，Agent 工具串行执行。
+' 设计原因：职责类不等于新增 Java 类；业务状态持久保存，执行资源按轮次释放。
+!pragma layout smetana
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 45
+hide empty members
+top to bottom direction
+title 意图路由与任务接续的职责关系
+package "CampusMateService · 上游" #E5F1EC {
+  package "Agent 网关" {
+    class "交互入口与安全护栏" as Gateway {
+      鉴权、校验输入与会话访问
+    }
+    class "上下文准备与关联校验\n待实现" as Attribution {
+      读取必要问答、任务及等待状态
+      校验显式关联与候选可见范围
+    }
+    class "快速意图识别\n待实现" as Fast {
+      统一判断新任务、接续、MainAgent 或 UNK
+      输出标签或明确 agentId
+      不输出处理方候选
+    }
+    class "中心消息路由" as Route {
+      校验可信配置并确定执行位置
+    }
+    class "会话与任务关联\n待实现" as Links {
+      聊天、任务、等待项、展示投影
+      持久化接收与待投递记录
+    }
+    Gateway --> Attribution : 提交消息
+    Attribution --> Fast : 输入、必要历史及任务状态
+    Attribution --> Route : 可直接校验的显式接续
+    Fast --> Route : 新任务、接续、MainAgent 或 UNK
+    Attribution ..> Links : 校验关联
+    Route ..> Links : 保存路由与结果
+  }
+  class "中心业务入口" as Local {
+    既有状态机、知识问答、通用 Agent
+    外部 Agent 协议适配
+  }
+  Route --> Local : 中心处理方
+}
+package "CampusClaw · 下游" #E8EEF8 {
+  class "边侧路由与 Session 入口" as Edge {
+    定位业务 Agent 及父 Session
+  }
+  class "主执行角色\nMainAgent 或指定业务 Agent" as Main {
+    理解目标、调用工具、汇总结果
+    MainAgent 可委派直接绑定的 Child
+  }
+  class "子调用协调" as Delegate {
+    校验直接绑定、深度与状态
+    结构化缺信息结果：待实现
+  }
+  class "临时 Child Session" as Child {
+    每次调用新建，完成后关闭
+    不递归委派
+  }
+  class "Runtime 状态与任务记录" as State {
+    消息历史与执行记录
+    子任务事实及等待状态：待实现
+  }
+  class "受控工具入口" as Pipeline {
+    解析绑定、校验参数、确认权限
+    协调业务执行与安全结果投影
+  }
+  Edge --> Main : 发起一轮执行
+  Edge ..> State : 读取上下文
+  Main --> Delegate : 委派子任务
+  Delegate "1" *--> "0..*" Child : 创建并关闭
+  Main ..> State : 保存任务事实
+  Main --> Pipeline : 工具调用
+  Child --> Pipeline : 子任务工具调用
+}
+class "工具服务" as Tools #FFF1DA {
+  执行业务操作并返回实际结果
+}
+Route -down-> Edge : 业务 agentId 或 MainAgent
+Local -[hidden]down-> Edge
+Pipeline --> Tools : 授权后的业务请求
+legend bottom
+实线：调用或生命周期关系；虚线：状态依赖。
+结果沿调用边返回；中心保留投影，执行状态以实际处理方为准。
+未标状态的中心模块来自用户描述，源码未核验；并非已实现类清单。
+endlegend
+@enduml
+
+@startuml intent_attribution_sequence
+' 证据：意图识别重构设计.md 的 R2/R4 与用户确认的旧状态机行为；中心源码未核验。
+' 设计原因：展开中心服务的身份及归属阶段，不跨用服务与组件层级。
+' 目标行为：本图选择无待处理关联、语义明确的新查询；归属能力待实现。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam maxMessageSize 34
+hide footbox
+title 校验身份和消息归属
+autonumber
+participant "交互入口" as G #E5F1EC
+participant "安全护栏" as S #FFF1DA
+participant "上下文准备与关联校验\n待实现" as A #E8EEF8
+participant "会话与任务记录\n待实现" as R #F1EDF7
+G -> S ++ : 校验身份、聊天访问和输入风险
+activate G
+return 已验证的身份与输入
+G -> A ++ : 准备该消息的任务上下文
+A -> R ++ : 读取该聊天的有效任务上下文
+return 可见任务及待回答问题
+A -> A ++ : 保留原话及必要问答
+return 有界的判断上下文
+return 返回输入及任务上下文
+deactivate G
+@enduml
+
+@startuml intent_attribution_flow
+' 设计原因：关联失效不能降级成无关联；选择对象不等于授权执行。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam wrapWidth 220
+title 消息归属判断
+start
+:完成鉴权与输入检查;
+if (有明确的回复关联吗？) then (有)
+  :校验所属人、状态、版本和时效;
+  if (关联有效吗？) then (有效)
+    :保留经校验的原任务关联;
+  else (无效或重复)
+    :按失败处理表返回失效、拒绝
+或已有接收结果，不猜其他对象;
+    stop
+  endif
+else (没有)
+  :读取有界的任务上下文
+和有效待回答问题;
+endif
+:统一快速判断新任务或原任务接续
+复杂、混合及归属不明独立路由 MainAgent;
+:代码复核任务关联或路由目标
+仅将确定无法承接的请求判为 UNK;
+:输出本次判断，后续分流复用结果
+不再增加一次归属模型调用;
+stop
+@enduml
+
+@startuml intent_fast_flow
+' 设计原因：Jev 仅为待评测候选；模型分数不替代权限和可信目标校验。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam wrapWidth 240
+title 匹配授权能力并选择处理方
+start
+ :在统一快速判断中使用当前输入
+必要任务上下文及授权能力;
+if (是否确认系统无法承接？) then (是)
+  :输出 UNK，返回无法处理;
+  stop
+else (否)
+endif
+if (需要结构判断、混合处理
+或无法确定归属与分类吗？) then (是)
+  :输出独立 MainAgent 路由
+保留完整问题和原任务关联;
+else (否)
+  :输出新任务＋场景标签或明确 agentId
+不输出处理方候选;
+endif
+:代码按配置解析目标并复核权限与状态;
+if (复核通过吗？) then (是)
+  :路由到中心处理方
+或 CampusClaw 指定 Agent;
+else (否)
+  :返回权限或目标状态结果
+不得通过换路由绕过;
+endif
+stop
+@enduml
+
+@startuml intent_tool_sequence
+' 源码依据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#projectProgress
+' 设计原因：工具校验顺序是 CampusClaw 产品约束，不宣称所有 Agent 基线顺序一致。
+' 目标行为：可信定义与参数校验先于确认；本次只读查询由 Host 判断无需交互确认。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam maxMessageSize 34
+hide footbox
+title 执行告警查询
+autonumber
+participant "AgentLoop" as A #E8EEF8
+participant "工具调用协调" as P #E5F1EC
+participant "Host" as H #FFF1DA
+participant "工具执行端口" as T #F1EDF7
+A -> P ++ : 提交告警查询调用
+activate A
+P -> P ++ : 解析可信目标并校验参数
+return 同次准备快照
+P -> H ++ : 判断该调用的权限和确认要求
+return 允许该查询（无需交互确认）
+P -> T ++ : 按该准备快照执行查询
+return 实际告警记录
+return 返回查询结果与执行状态
+deactivate A
+@enduml
+
+@startuml intent_result_sequence
+' 证据：意图识别重构设计.md 的 R5 与 contracts.md 的展示草案；关联投影待实现。
+' 设计原因：展示由可信关联与版本驱动，不解析自由文本标题判断归属。
+' 目标行为：任务投影与版本化展示事件待实现。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam maxMessageSize 32
+hide footbox
+title 登记任务结果并生成展示事件
+autonumber
+participant "中心消息路由" as R #E5F1EC
+participant "任务结果投影\n待实现" as P #E8EEF8
+participant "会话与任务记录\n待实现" as S #F1EDF7
+R -> P ++ : 提交原处理方的查询结果
+activate R
+P -> P ++ : 校验结果来源与任务关联
+return 已验证的任务结果
+P -> S ++ : 保存该项结果、版本和事件标识
+return 已提交的展示状态
+return 返回可公开的任务展示事件
+deactivate R
+@enduml
+
+@startuml intent_partial_wait
+' 源码依据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/BoundAgentTool.java#executionMode
+' 已观察行为：Agent 工具声明 SEQUENTIAL；图中的分支只表达业务独立性。
+' 设计原因：缺信息结束一次子调用，独立子任务仍可推进；业务等待能力待实现。
+!theme plain
+skinparam backgroundColor #FFFFFF
+!pragma layout smetana
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam nodesep 30
+skinparam ranksep 35
+title 多意图的独立结果与局部等待
+rectangle "查今日设备告警、报修漏水设施、查昨日能耗" as Q #E5F1EC
+rectangle "MainAgent 建立三个业务子任务\n待实现" as M #E8EEF8
+rectangle "设备告警查询" as A
+rectangle "设施漏水报修" as B
+rectangle "昨日能耗查询" as C
+rectangle "完成\n告警列表" as AR #E5F1EC
+rectangle "等待补充\n缺少具体位置" as BW #FFF1DA
+rectangle "完成\n能耗数据" as CR #E5F1EC
+rectangle "补充位置后由父 MainAgent\n发起该子任务的新调用" as B2 #E8EEF8
+rectangle "完成\n报修工单结果" as BR #E5F1EC
+Q -down-> M
+M -down-> A
+M -down-> B
+M -down-> C
+A -down-> AR
+B -down-> BW
+C -down-> CR
+BW -down-> B2
+B2 -down-> BR
+legend bottom
+不表示当前已实现并行。已完成项不因补充报修位置而重跑。
+依赖报修结果的其他子任务仍需等待。
+endlegend
+@enduml
+
+@startuml intent_continuation_sequence
+' 源码依据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#runChild、#extractFinalAnswer
+' 已观察行为：新建并关闭 Child Session，当前仅返回最终文本。
+' 设计原因：新增业务待补充状态；不将 RuntimePendingInteraction 的原调用等待冒充新调用接续。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam maxMessageSize 34
+hide footbox
+title 补充设施报修位置
+autonumber
+actor "运维人员" as U
+participant "CampusMateService" as M #E5F1EC
+participant "CampusClaw" as C #E8EEF8
+M -> C ++ : 提交设施报修任务
+activate M
+C -> C ++ : 执行子任务并保存缺少的位置要求（待实现）
+return 业务待补充状态
+return 该报修项的补充问题
+M -> M ++ : 登记问题与原任务的回复关联（待实现）
+return 待回答问题
+M ->> U : 展示设施报修位置问题
+deactivate M
+== 用户补充信息后 ==
+U -> M ++ : 补充该报修项的位置
+activate U
+M -> M ++ : 校验关联并原子保存答案及待投递记录（待实现）
+return 已接收的答案
+M -> C ++ : 接续原报修任务（待实现）
+C -> C ++ : 发起新调用并记录补充结果（待实现）
+return 已应用答案及业务处理状态
+return 该报修项的处理状态
+return 返回该报修项的最新状态
+deactivate U
+@enduml
+
+@startuml intent_interaction_states
+' 设计原因：答案被接收不等于业务完成；保留提交与投递之间的状态差异。
+!pragma layout smetana
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+title 业务待补充项的生命周期
+state "等待回答\nPENDING" as Pending #FFF1DA
+state "答案已接收\nANSWER_ACCEPTED" as Accepted #E8EEF8
+state "答案已应用\nRESOLVED" as Resolved #E5F1EC
+state "已过期\nEXPIRED" as Expired
+state "已取消\nCANCELLED" as Cancelled
+state "已被新问题替代\nSUPERSEDED" as Superseded
+state "投递无法安全继续\nDELIVERY_FAILED" as Failed #FBE8E8
+[*] --> Pending : 登记问题
+Pending --> Accepted : 校验通过并原子接收
+Pending --> Expired : 到期
+Pending --> Cancelled : 取消任务
+Pending --> Superseded : 变更问题或动作版本
+Accepted --> Resolved : 原处理方确认应用答案
+Accepted --> Failed : 按投递失败规则终止
+Resolved --> [*]
+legend bottom
+RESOLVED 不是任务成功；仍缺信息时登记新的问题。
+终态不得再次接收答案；失败处置见正文失败处理表。
+endlegend
+@enduml
+
+@startuml intent_context_routing_flow
+' 证据：意图识别重构设计.md 的 R1/R3/R4/R8/R10 与 §2.4；按用户需求展开逻辑步骤。
+' 设计原因：归属判断先于分类；完整新问题不拼历史，关联补充不重分类，新动作不继承旧标签。
+' 核验边界：中心源码未核验，新增上下文选择与路由判断待实现；不升级历史源码结论。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam ArrowColor #485B63
+skinparam activityBorderColor #647B80
+skinparam activityBackgroundColor #F5F8F8
+skinparam activityDiamondBackgroundColor #FFFFFF
+skinparam activityDiamondBorderColor #647B80
+skinparam activityFontColor #20363D
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam wrapWidth 250
+title 消息归属、最小上下文与快速路由
+
+start
+partition "CampusMateService · 接入与归属" #E5F1EC {
+  :01 接收消息并校验身份\n聊天访问、输入安全、重复提交;
+  :02 校验回复关联并准备上下文\n读取必要历史、可见任务及授权能力（待实现）;
+  :03 统一快速判断\n区分新任务、接续、MainAgent 或 UNK（待实现）;
+}
+
+partition "CampusMateService · 准备路由" #F1F5FA {
+  switch (04 本次输出是什么？)
+  case (接续原任务)
+    :从可信任务记录读取原处理方\n不要求额外细分追问类型;
+  case (新的常规请求)
+    :按标签或明确 agentId 解析配置\n不输出处理方候选;
+  case (MainAgent)
+    :读取独立 MainAgent 入口\n保留完整问题及相关任务关联;
+  case (UNK)
+    #FFF1DA:系统确认无法承接，返回拒答\n不调用 MainAgent;
+    stop
+  endswitch
+  :05 代码复核目标、权限和状态\n幂等登记任务或接续投递（待实现）;
+}
+
+partition "CampusMateService · 中心消息路由" #E5F1EC {
+  if (06 可信配置中的执行位置？) then (中心侧)
+    :07A 由中心原状态机或 Agent 处理\n理解参数、回复及确认要求;
+  else (CampusClaw)
+    #E8EEF8:07B 投递到 CampusClaw 边侧路由\n由指定业务 Agent 或 MainAgent 处理;
+  endif
+}
+
+partition "CampusMateService · 结果关联与展示" #E5F1EC {
+  :08 接收实际处理方的结果\n更新对应任务、子任务或交互项\n回复从 01 重新进入（待实现）;
+}
+stop
+
+legend bottom
+步骤编号是逻辑职责，不代表模型调用次数。
+安全拒绝、关联失效和投递失败按正文失败处理表结束当前路径，不改投绕过。
+步骤 07 如需调用工具：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+CampusClaw 在下游执行；中心保存结果投影，不替它重新规划任务。
+endlegend
+@enduml
+
+@startuml intent_type_new_task
+' 证据：意图识别场景汇总.md 的场景 1、2、4，以及用户确认的中心与边侧部署分工。
+' 设计原因：快速识别输出标签或明确 agentId，中心根据可信配置选择执行位置。
+' 核验边界：本图为待实现流程，不新增源码实现结论。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 新任务识别
+start
+partition "CampusMateService · 上游接入" #E5F1EC {
+  :接收完整或缺少参数的新请求\n校验身份、输入与提交记录;
+  :准备相关历史、任务状态与授权能力;
+  :一次快速识别（待实现）\n输出新任务＋场景标签或明确 agentId;
+  :代码解析路由配置并复核权限\n登记新任务及处理方关联（待实现）;
+  if (执行位置？) then (中心侧)
+    :创建独立的旧业务状态机实例\n或调用中心 Agent;
+    :由原处理方处理参数、确认与执行\n保存结果或待补充问题并返回用户;
+    stop
+  else (CampusClaw)
+    :提交指定业务 Agent 请求\n保留原文、相关对象及任务关联;
+  endif
+}
+partition "CampusClaw · 下游执行" #E8EEF8 {
+  :边侧路由定位指定业务 Agent;
+  :Agent 理解目标并组织业务处理\n业务操作由受控工具服务执行;
+  :返回实际结果或待补充、待确认问题\n携带可信任务关联（待实现）;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :保存任务结果或交互关联\n向用户展示对应处理项（待实现）;
+}
+stop
+legend bottom
+缺少业务参数由处理方询问；中心不再先拆分、再逐项分类。
+工具执行：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+endlegend
+@enduml
+
+@startuml intent_type_continue
+' 证据：意图识别场景汇总.md 的场景 3、5、6、7，与用户确认的原处理方接续规则。
+' 设计原因：中心只关联原任务，追问、补充、确认与修改由原处理方理解。
+' 核验边界：业务新调用接续待实现，不表示恢复旧工具调用栈。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 原任务接续
+start
+partition "CampusMateService · 上游归属" #E5F1EC {
+  :接收追问、补充、确认或修改消息;
+  :校验显式回复关联\n或结合相关历史和任务状态快速识别;
+  :输出接续原任务＋任务关联（待实现）\n不要求输出追问或补充类型;
+  :代码复核所属人、状态和版本\n定位原处理方及原业务实例;
+  if (原任务由谁处理？) then (中心侧)
+    :向原状态机实例或中心 Agent\n提交用户原话;
+    :原处理方理解回复并校验参数、确认\n继续该任务，返回实际状态;
+    stop
+  else (CampusClaw)
+    :提交到原父 Session 或业务 Agent\n保留原任务与子任务关联（待实现）;
+  endif
+}
+partition "CampusClaw · 下游接续" #E8EEF8 {
+  :原处理方装载任务上下文\n理解用户是在追问、补充、确认还是修改;
+  :校验当前参数及确认要求\n只推进对应子任务（待实现）;
+  :需要业务处理时发起新调用\n已完成项不重跑，返回最新状态;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :更新原处理项的结果或下一条问题\n向用户展示（待实现）;
+}
+stop
+legend bottom
+确认表达不等于获准执行；修改动作参数后重新判断确认要求。
+工具执行：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+endlegend
+@enduml
+
+@startuml intent_type_task_control
+' 证据：意图识别场景汇总.md 的场景 8；用户确认中心定位原任务、原处理方继续处理。
+' 设计原因：取消请求与实际终止分开，不把停止请求重新分类成新业务。
+' 核验边界：控制接入及任务级取消协作待实现，具体协议未冻结。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 任务控制
+start
+partition "CampusMateService · 上游接入" #E5F1EC {
+  :接收取消报修或停止巡检的消息;
+  :结合任务上下文快速识别\n输出接续原任务＋任务关联（待实现）;
+  :校验访问权限与当前任务状态\n向原处理方传递用户原话;
+  if (原任务由谁处理？) then (中心侧)
+    :原状态机判断能否取消\n停止尚未执行的后续步骤;
+    :返回实际取消状态与已发生的业务结果;
+    stop
+  else (CampusClaw)
+    :向原任务处理方发送控制请求（待实现）;
+  endif
+}
+partition "CampusClaw · 下游控制" #E8EEF8 {
+  :原 Agent 理解取消对象\n检查任务及活动调用状态;
+  :停止后续调度并请求终止活动调用\n失效相应等待项（待实现）;
+  :核实已完成、已提交或仍在执行的部分\n返回真实控制状态;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :展示取消中、已取消或无法取消\n保留已完成项及必要说明（待实现）;
+}
+stop
+legend bottom
+收到取消请求不等于已经停止；已提交业务不保证回滚。
+本类输出仍属于原任务接续，中心无需额外识别取消子类型。
+endlegend
+@enduml
+
+@startuml intent_type_attribution
+' 证据：意图识别场景汇总.md 的场景 9，以及用户确认的归属不明交 MainAgent 规则。
+' 设计原因：两项操作等待时不猜测确认对象，由 MainAgent 组织必要澄清。
+' 核验边界：跨服务交互关联及澄清接续待实现。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 归属澄清
+start
+partition "CampusMateService · 上游判断" #E5F1EC {
+  :接收没有明确回复关联的“确认”\n当前存在两项可见的待确认操作;
+  :一次快速识别（待实现）\n输出 MainAgent 路由，附相关任务上下文;
+  :代码复核可见范围及 MainAgent 权限\n不把消息自动绑定到任一待确认操作;
+}
+partition "CampusClaw · 下游澄清" #E8EEF8 {
+  :MainAgent 比较相关任务和问答;
+  :证据不足，询问用户要确认哪一项\n返回问题及可见对象关联（待实现）;
+}
+partition "CampusMateService · 上游交互" #E5F1EC {
+  :登记本次澄清问题及关联\n展示操作摘要供用户选择（待实现）;
+  :接收用户明确选择\n复核关联并返回原 MainAgent;
+}
+partition "CampusClaw · 下游判断" #E8EEF8 {
+  :MainAgent 确定原任务\n形成有明确目标的接续请求（待实现）;
+}
+partition "CampusMateService · 上游路由" #E5F1EC {
+  :代码校验原任务关联和操作版本\n按原任务接续流程交原处理方;
+}
+stop
+legend bottom
+选择回复对象不等于执行授权；原操作仍按原确认规则处理。
+本图止于确定接续对象，业务执行复用原任务接续流程。
+endlegend
+@enduml
+
+@startuml intent_type_task_structure
+' 证据：意图识别场景汇总.md 的场景 10～13，与用户确认的 MainAgent 编排职责。
+' 设计原因：中心只识别需规划，MainAgent 处理批量、多目标、依赖及单个复杂目标。
+' 核验边界：中心旧能力工具桥接及结构化子任务状态待实现，不宣称已实现并行。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 任务结构判断
+start
+partition "CampusMateService · 上游分流" #E5F1EC {
+  :接收批量、多目标或复杂业务请求;
+  :一次快速识别（待实现）\n输出 MainAgent 路由，不输出 UNK;
+  :保留完整问题与必要历史\n复核权限后提交配置中的 MainAgent;
+}
+partition "CampusClaw · 下游规划" #E8EEF8 {
+  :MainAgent 判断批量、目标和依赖\n建立需要追踪的子任务（待实现）;
+}
+if (本项业务能力在哪里？) then (CampusClaw)
+  partition "CampusClaw · 子任务处理" #E8EEF8 {
+    :调用直接绑定的 SubAgent 或受控工具\n按任务依赖推进;
+  }
+else (中心旧能力)
+  :通过受控业务工具请求中心旧能力\n携带可信子任务及业务实例关联（待实现）;
+  partition "CampusMateService · 旧能力执行" #E5F1EC {
+    :校验工具绑定和参数\n判断权限及必要确认;
+    :定位或创建独立状态机实例\n业务执行交工具服务\n返回结果或等待项（待实现）;
+  }
+endif
+partition "CampusClaw · 下游汇总" #E8EEF8 {
+  :MainAgent 汇总子任务状态\n缺信息的项等待，独立项继续\n不重跑已完成项（待实现）;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :按任务和子任务展示结果与等待项\n补充回复关联原父 MainAgent（待实现）;
+}
+stop
+legend bottom
+工具执行：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+MainAgent 不直接 A2A 调用任意 Agent；中心旧能力须有明确受控入口。
+endlegend
+@enduml
+
+@startuml intent_type_mixed_input
+' 证据：意图识别场景汇总.md 的场景 14、15，以及用户确认的混合输入交 MainAgent 规则。
+' 设计原因：保留原任务关联和完整原话，避免补充被丢弃或变参被当成原确认。
+' 核验边界：跨任务协调和旧状态机桥接待实现，中心不自行拆分规划。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 混合输入处理
+start
+partition "CampusMateService · 上游分流" #E5F1EC {
+  :接收“房间是502，另外查今天告警”\n或“确认，但只关闭一层照明”;
+  :一次快速识别（待实现）\n输出 MainAgent 路由及原任务关联;
+  :代码复核关联，保留完整输入\n提交 MainAgent，不提前应用答案或确认;
+}
+partition "CampusClaw · 下游理解" #E8EEF8 {
+  :MainAgent 区分原任务部分与新增部分\n或识别确认中的条件变化;
+  :为原任务形成接续要求\n参数变化时不沿用原操作确认;
+}
+if (原任务由谁处理？) then (CampusClaw)
+  partition "CampusClaw · 原任务接续" #E8EEF8 {
+    :原处理方校验并接续对应子任务;
+  }
+else (中心旧状态机)
+  :通过受控业务工具提交接续要求\n沿用原业务实例（待实现）;
+  partition "CampusMateService · 原任务接续" #E5F1EC {
+    :复核可信绑定、参数及任务状态\n重新判断权限与确认要求;
+    :向原状态机实例提交用户要求\n返回该项真实状态（待实现）;
+  }
+endif
+partition "CampusClaw · 下游协调" #E8EEF8 {
+  :若存在独立新目标，建立新子任务并处理\n若只是条件变化，则仅推进原任务\n保留完成项及原任务关联（待实现）;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :分别更新原任务与新增处理项\n展示结果或新的确认问题（待实现）;
+}
+stop
+legend bottom
+工具执行：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+一次输入只应用一次；中心接收消息时不与 MainAgent 同时推进原状态机。
+endlegend
+@enduml
+
+@startuml intent_type_boundary
+' 证据：意图识别场景汇总.md 的场景 16～18，以及用户确认的 UNK 拒答语义。
+' 设计原因：失效与重复由代码判断；识别拿不准与系统确实无能力分开。
+' 核验边界：以下为待实现的中心入口及能力边界流程。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 状态与能力边界
+start
+partition "CampusMateService · 上游代码校验" #E5F1EC {
+  :接收消息，校验身份及聊天访问;
+  if (相同提交是否已接收？) then (是)
+    :内容一致则返回已有处理状态\n内容冲突则拒绝，不重复执行;
+    stop
+  else (否)
+  endif
+  if (携带的明确关联是否失效？) then (是)
+    :返回关联失效或安全拒绝\n不删除关联后重新猜测任务;
+    stop
+  else (没有或有效)
+  endif
+  :准备授权能力与必要上下文\n进行一次快速识别（待实现）;
+  if (是否确认系统无法承接？) then (是)
+    :输出 UNK，系统返回无法处理\n不调用 MainAgent;
+    stop
+  else (只是识别不确定)
+    :独立路由到 MainAgent\n保留完整输入与能力依据;
+  endif
+}
+partition "CampusClaw · 下游理解" #E8EEF8 {
+  :MainAgent 进一步理解诉求\n有能力则组织处理，无能力则明确返回;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :展示处理结果、必要问题或能力不足说明;
+}
+stop
+legend bottom
+检索未命中不等于确认无能力；权限拒绝不通过 MainAgent 或 UNK 换路由绕过。
+重复与关联校验属于代码处理，不要求模型识别。
+endlegend
+@enduml
+
+@startuml intent_type_general
+' 证据：意图识别场景汇总.md 的场景 19，以及用户确认的新任务输出标签或明确 agentId 规则。
+' 设计原因：普通交谈与能力咨询由配置中的通用 Agent 承接，不因缺少业务标签直接拒答。
+' 核验边界：通用 Agent 的部署和路由配置待实现、待核验。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 250
+skinparam shadowing false
+title 通用交互
+start
+partition "CampusMateService · 上游接入" #E5F1EC {
+  :接收“你好”或“你能处理哪些业务”;
+  :结合必要上下文快速识别（待实现）\n输出新请求＋已配置标签或通用 Agent 的 agentId;
+  :代码解析通用 Agent 配置并校验权限;
+  if (通用 Agent 在哪里？) then (中心侧)
+    :调用中心通用 Agent\n生成普通回复或已授权能力说明;
+    :返回用户，本例不经过 CampusClaw;
+    stop
+  else (CampusClaw)
+    :投递到边侧路由指定的通用 Agent;
+  endif
+}
+partition "CampusClaw · 下游响应" #E8EEF8 {
+  :指定通用 Agent 生成回复\n能力说明以可信配置为依据;
+}
+partition "CampusMateService · 返回展示" #E5F1EC {
+  :接收回复并关联当前聊天\n返回用户;
+}
+stop
+legend bottom
+通用交互使用已配置入口，不新增含义不明的兜底标签。
+配置无权限时返回权限结果，不伪装为系统没有业务能力。
+endlegend
+@enduml
+
+@startuml intent_option_main_owned
+' 证据：意图识别三种方案对比.md 的方案一与用户说明；不使用旧提交推断当前实现。
+' 设计原因：业务语义上下文集中在 CampusClaw；中心旧 Agent 通过受控工具接收完整问题。
+' 核验边界：本图是待实现候选流程，中心鉴权及业务执行状态仍由各自服务负责。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 230
+skinparam shadowing false
+title 方案一：MainAgent 统一理解与调度
+start
+partition "CampusMateService · 上游接入" #E5F1EC {
+  :鉴权、校验关联与去重\n透传用户原话及可信身份;
+}
+partition "CampusClaw · 业务上下文与决策" #E8EEF8 {
+  :读取相关历史、任务和待回答项（待实现）;
+  :MainAgent 判断新任务或接续\n理解单意图、多意图及混合诉求;
+}
+if (本轮需要调用业务能力吗？) then (需要)
+  partition "CampusClaw · 调用准备" #E8EEF8 {
+    :选择授权能力并准备调用输入\n旧 Agent 使用完整问题或原实例接续（待实现）;
+  }
+  if (该项能力在哪里？) then (CampusClaw)
+    partition "CampusClaw · 子任务执行" #E8EEF8 {
+      :调用直接绑定的 SubAgent\n传递明确子任务及必要事实;
+    }
+  else (中心旧 Agent)
+    partition "CampusClaw · 旧能力调用" #E8EEF8 {
+      :通过受控业务工具请求中心旧 Agent（待实现）;
+    }
+    partition "CampusMateService · 受控业务回调" #E5F1EC {
+      :解析可信目标并校验参数\n判断权限及必要确认;
+      :调用旧 Agent\n业务操作交工具服务\n返回实际结果或等待项（待实现）;
+    }
+  endif
+  partition "CampusClaw · 结果与业务上下文" #E8EEF8 {
+    :MainAgent 汇总实际结果\n保存有效条件及子任务等待状态（待实现）;
+  }
+else (直接回复或澄清)
+  partition "CampusClaw · 业务交互" #E8EEF8 {
+    :MainAgent 生成回复或澄清问题\n保存对应任务关联（待实现）;
+  }
+endif
+partition "CampusMateService · 对外交互" #E5F1EC {
+  :展示结果或待回答问题\n下一轮原话仍交 CampusClaw;
+}
+stop
+legend bottom
+业务上下文在 CampusClaw；鉴权、消息关联和展示记录仍在中心。
+工具链路：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+中心回调不再进入意图识别；SubAgent 不递归委派。归属不明先澄清，不猜测执行。
+endlegend
+@enduml
+
+@startuml intent_option_fast_direct
+' 证据：意图识别三种方案对比.md 的方案二与用户确认的旧 Agent 自然语言入口。
+' 设计原因：确定单意图直达；中心必须管理用于判断和补全的相关上下文。
+' 核验边界：快速判断、旧 Agent 补全、上下文同步及受控桥接均为待实现候选能力。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 210
+skinparam shadowing false
+title 方案二：快速决策直达与 MainAgent 深度处理
+start
+partition "CampusMateService · 上游判断" #E5F1EC {
+  :鉴权、校验关联与去重\n读取必要历史、任务及授权能力;
+  :快速决策模型判断（待实现）\n新任务或接续、业务场景、能否安全直达;
+  :代码复核目标、权限和原任务归属\nMainAgent 所属任务仍由原 MainAgent 接续;
+  if (确认系统无能力承接吗？) then (确认)
+    :输出 UNK 并拒答;
+    stop
+  else (否)
+  endif
+}
+if (满足确定单意图的直达条件吗？) then (满足)
+  if (可信配置中的执行位置？) then (中心旧 Agent)
+    partition "CampusMateService · 单意图执行" #E5F1EC {
+      :需要历史则调用补全模型\n生成完整问题（待实现）\n待补参或确认则沿用原实例;
+      :按受控入口校验并调用旧 Agent\n业务操作交工具服务;
+    }
+  else (CampusClaw 业务 Agent)
+    partition "CampusMateService · 中心投递" #E5F1EC {
+      :投递明确 agentId、原话\n必要上下文和可信任务关联（待实现）;
+    }
+    partition "CampusClaw · 指定 Agent 执行" #E8EEF8 {
+      :定位原 Session 或创建新 Session\n指定业务 Agent 理解并执行;
+      :回传实际结果及可公开上下文摘要\n不依赖原始工具日志接续（待实现）;
+    }
+  endif
+else (需要 MainAgent)
+  partition "CampusMateService · 深度决策投递" #E5F1EC {
+    :发送完整原话、相关历史与有效条件\n保留原任务、原业务实例及版本（待实现）;
+  }
+  partition "CampusClaw · MainAgent 深度处理" #E8EEF8 {
+    :装载运行历史及中心上下文快照\nMainAgent 理解目标、依赖与回复归属;
+    :委派直接绑定的 SubAgent\n或经受控工具回调中心旧 Agent（待实现）;
+    :保存子任务状态\n回传实际结果及可公开上下文摘要（待实现）;
+  }
+endif
+partition "CampusMateService · 上下文与展示" #E5F1EC {
+  :登记结果、有效条件和原处理方\n按版本更新路由上下文并展示（待实现）;
+}
+stop
+legend bottom
+直达路径绕过 MainAgent；深度路径调用中心旧能力时复用方案一的受控回调。
+中心保存跨入口路由上下文；CampusClaw 保留自己的运行历史，不相互覆盖。
+工具链路：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+endlegend
+@enduml
+
+@startuml intent_option_fast_advisory
+' 证据：意图识别三种方案对比.md 的方案三；快速模型位置由本稿提出，不是已确认部署。
+' 设计原因：建议不授予执行权；把快速模型放在 CampusClaw 可就近读取业务上下文。
+' 核验边界：本图是待实现候选流程；没有把多一次模型调用当作已证明的性能收益。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam wrapWidth 230
+skinparam shadowing false
+title 方案三：快速建议与 MainAgent 最终决策
+start
+partition "CampusMateService · 上游接入" #E5F1EC {
+  :鉴权、校验关联与去重\n透传用户原话及可信身份;
+}
+partition "CampusClaw · 上下文与建议" #E8EEF8 {
+  :读取业务上下文及授权能力快照（待实现）;
+  :快速模型给出路由建议（待实现）\n建议场景或 Agent、任务关联及不确定信号;
+  :MainAgent 结合原话和真实上下文决策\n可采纳、改判或澄清\n建议本身不能触发执行;
+}
+if (本轮需要调用业务能力吗？) then (需要)
+  partition "CampusClaw · 调用准备" #E8EEF8 {
+    :选择授权能力并准备调用输入\n旧 Agent 使用完整问题或原实例接续（待实现）;
+  }
+  if (该项能力在哪里？) then (CampusClaw)
+    partition "CampusClaw · 子任务执行" #E8EEF8 {
+      :调用直接绑定的 SubAgent\n传递明确子任务及必要事实;
+    }
+  else (中心旧 Agent)
+    partition "CampusClaw · 旧能力调用" #E8EEF8 {
+      :通过受控业务工具请求中心旧 Agent（待实现）;
+    }
+    partition "CampusMateService · 受控业务回调" #E5F1EC {
+      :解析可信目标并校验参数\n判断权限及必要确认;
+      :调用旧 Agent\n业务操作交工具服务\n返回实际结果或等待项（待实现）;
+    }
+  endif
+  partition "CampusClaw · 结果与业务上下文" #E8EEF8 {
+    :MainAgent 汇总实际结果\n保存有效条件及子任务等待状态（待实现）;
+  }
+else (直接回复或澄清)
+  partition "CampusClaw · 业务交互" #E8EEF8 {
+    :MainAgent 生成回复或澄清问题\n保存对应任务关联（待实现）;
+  }
+endif
+partition "CampusMateService · 对外交互" #E5F1EC {
+  :展示结果或待回答问题\n下一轮原话仍交 CampusClaw;
+}
+stop
+legend bottom
+图中快速模型位于 CampusClaw；若放在中心，须读取 CampusClaw 的只读上下文快照。
+MainAgent 可以改判；不能只给它建议而隐藏原话或把建议当作授权。
+工具链路：可信绑定解析 → 参数校验 → 权限及必要确认 → 工具服务执行 → 结果回传。
+endlegend
+@enduml
+
+@startuml intent_energy_main_sequence
+' 证据：意图识别三种方案对比.md 的能耗两轮案例；中心旧数据主题 Agent 的入口限制来自用户说明。
+' 设计原因：服务级边界不拆成内部类；主模型在工具调用前与结果返回后各调用一次，作为本例计数假设。
+' 核验边界：本图为待实现候选调用流程，不是最新源码观察；旧 Agent 内部模型次数 B1、B2 尚未核验。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 300
+skinparam BoxPadding 12
+hide footbox
+title 方案一：两轮能耗查询经 MainAgent 调度
+autonumber
+actor "运维人员" as U
+box "中心侧 · 上游" #E5F1EC
+participant "CampusMateService" as M
+end box
+box "Agent Runtime · 下游" #E8EEF8
+participant "CampusClaw" as C
+end box
+participant "工具服务" as T #FFF1DA
+note over M
+两轮均先完成入口鉴权及关联校验
+业务查询前依次解析可信目标、校验参数、判断权限
+此只读查询无需交互确认；业务执行由工具服务负责
+end note
+
+U -> M ++ : 查询 A 楼昨天的能耗
+activate U
+M -> C ++ : 校验入口后转交原话与可信关联（待实现）
+C -> C ++ : 读取业务上下文\n调用 MainAgent（M1）
+return 数据主题能力与完整的昨日查询问题
+C -> M ++ : 解析绑定、校验参数后调用旧 Agent\n（完整的昨日问题，待实现）
+M -> M ++ : 处理独立问题\n（内部模型 B1 次，未核验）
+M -> T ++ : 查询 A 楼昨日能耗\n（已校验目标、参数与权限）
+return 实际能耗记录
+return 该查询的业务结果
+return 数据主题 Agent 的实际结果
+C -> C ++ : 调用 MainAgent（M2）\n根据工具结果组织回答
+return 昨日能耗回答
+return 已保存业务上下文的回答及可信关联
+return 返回昨日能耗结果
+deactivate U
+
+== 用户查看结果后追问 ==
+U -> M ++ : 今天呢
+activate U
+M -> C ++ : 校验入口后转交“今天呢”与可信关联（待实现）
+C -> C ++ : 读取原查询上下文\n调用 MainAgent（M3）
+return 原任务接续与“查询 A 楼今天的能耗”
+C -> M ++ : 解析绑定、校验参数后调用旧 Agent\n（完整的今日问题，待实现）
+M -> M ++ : 处理独立问题\n（内部模型 B2 次，未核验）
+M -> T ++ : 查询 A 楼今日能耗\n（已校验目标、参数与权限）
+return 实际能耗记录及数据时间
+return 该查询的业务结果
+return 数据主题 Agent 的实际结果
+C -> C ++ : 调用 MainAgent（M4）\n根据工具结果组织回答
+return 今日能耗回答
+return 已更新业务上下文的回答及可信关联
+return 返回今日能耗结果
+deactivate U
+
+legend bottom
+模型计数：主模型 M1～M4 共 4 次；旧 Agent 的 B1、B2 次数尚未核验。
+自调用表示该服务协调的处理步骤，不表示模型必须部署在该 Pod。
+中心保留鉴权、消息关联与展示记录；用于理解追问的业务上下文由 CampusClaw 管理。
+endlegend
+@enduml
+
+@startuml intent_energy_fast_sequence
+' 证据：意图识别三种方案对比.md 的能耗两轮案例；沿用快速判断与按需自然语言补全的候选设计。
+' 设计原因：同一确定单意图由中心处理，两轮均不需要调用 CampusClaw；计数区分快速模型与补全模型。
+' 核验边界：本图为待实现候选调用流程；快速判断一次成功、无重试、无额外压缩调用是案例假设。
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 300
+skinparam BoxPadding 12
+hide footbox
+title 方案二：两轮能耗查询由中心快速直达
+autonumber
+actor "运维人员" as U
+box "中心侧 · 上游" #E5F1EC
+participant "CampusMateService" as M
+end box
+box "Agent Runtime · 下游" #E8EEF8
+participant "CampusClaw" as C
+end box
+participant "工具服务" as T #FFF1DA
+note over M
+两轮均先完成入口鉴权及关联校验
+业务查询前依次解析可信目标、校验参数、判断权限
+此只读查询无需交互确认；业务执行由工具服务负责
+end note
+note over C
+本例两轮均不进入此服务
+MainAgent 调用为零
+不需要向此服务同步本例上下文
+end note
+
+U -> M ++ : 查询 A 楼昨天的能耗
+activate U
+M -> M ++ : 校验入口后调用快速模型（F1，待实现）\n输入：原话与授权能力
+return 新任务与数据主题场景
+M -> M ++ : 按配置定位旧 Agent，执行原完整问题\n（内部模型 B1 次，未核验）
+M -> T ++ : 查询 A 楼昨日能耗\n（已校验目标、参数与权限）
+return 实际能耗记录
+return 数据主题 Agent 的实际结果
+return 返回昨日能耗结果\n（已保存原问、原答及任务关联）
+deactivate U
+
+== 用户查看结果后追问 ==
+U -> M ++ : 今天呢
+activate U
+M -> M ++ : 校验入口后调用快速模型（F2，待实现）\n输入：今天呢、相关问答及任务
+return 接续原任务及可信任务关联
+M -> M ++ : 校验原任务与处理方后\n调用补全模型（R1，待实现）
+return 查询 A 楼今天的能耗
+M -> M ++ : 执行补全后的独立问题\n（内部模型 B2 次，未核验）
+M -> T ++ : 查询 A 楼今日能耗\n（已校验目标、参数与权限）
+return 实际能耗记录及数据时间
+return 数据主题 Agent 的实际结果
+return 返回今日能耗结果\n（已保留原话及补全问题）
+deactivate U
+
+legend bottom
+模型计数：快速模型 F1、F2 共 2 次，补全模型 R1 共 1 次；旧 Agent 的 B1、B2 次数尚未核验。
+首次完整问题不改写；追问先确定原任务及处理方，再补全，不让补全模型重新选 Agent。
+上下文由中心以代码保存；本例不另调用摘要或参数提取模型，内部处理仍可能含多次 B 类调用。
+endlegend
+@enduml
+
+@startuml intent_phase_one_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam shadowing false
+skinparam wrapWidth 230
+title 第一阶段：MainAgent 统一理解与推进
+' 源码：main@3ade086fcbbe1f88b6729ef5f85d0e595d5b9421。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/BoundAgentTool.java：execute。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java：runChild。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventService.java：submit。
+' 已观察行为：直接绑定 Child 每次创建并关闭；定向答案有既有事件入口。
+' 设计原因：先消除中心前置语义链，桥接旧能力并补齐多任务业务接续；新增集成待实现。
+start
+partition "CampusMateService · 上游入口" #E9F5EF {
+  :01 接收原话并校验身份、权限与重复消息\n维护可信回复关联（待实现集成）;
+  :02 有效定向答案按原协议投递原目标\n普通输入原话交 MainAgent（待实现集成）;
+}
+partition "CampusClaw · 理解与规划" #EAF1FB {
+  :03 MainAgent 结合任务上下文理解输入\n区分新任务、接续及混合目标（待实现集成）;
+  :04 按需建立处理项与依赖\n补全旧能力所需的独立问题（待实现）;
+}
+if (当前可推进项需要调用业务能力？) then (需要)
+  if (目标能力在哪一侧？) then (中心旧能力)
+    partition "CampusMateService · 受控工具回调" #E9F5EF {
+      :解析可信绑定并校验参数\n检查权限及必要确认（待实现桥接）;
+      :原能力/工具服务执行业务\n返回原实例结果或缺失项（待实现桥接）;
+    }
+  else (Claw 业务 Agent)
+    partition "CampusClaw · 绑定 Child 执行" #EAF1FB {
+      :通过直接绑定的 Agent 工具委派\n每次创建 Child Session，结束关闭;
+    }
+  endif
+else (无需调用)
+  :MainAgent 回答一般问题或组织澄清\n仅限允许范围（待实现集成）;
+endif
+partition "CampusClaw · 任务推进" #EAF1FB {
+  :05 结合实际结果推进各项\n保留完成项，记录局部等待（待实现）;
+}
+partition "CampusMateService · 上游展示" #E9F5EF {
+  :06 安全投影并返回答案或待补充项\n保持任务与展示关联（待实现集成）;
+}
+stop
+legend bottom
+第一阶段不运行前置快模型，不强制串行执行旧改写、拆分和分类链。
+图中步骤按可推进处理项应用；不表示已支持并行，也不恢复旧工具调用栈。
+endlegend
+@enduml
+
+@startuml intent_phase_two_flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam shadowing false
+skinparam wrapWidth 230
+title 第二阶段：快速直达与 MainAgent 深度处理
+' 源码：main@3ade086fcbbe1f88b6729ef5f85d0e595d5b9421。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java：create。
+' 已观察行为：Session 工厂复用 Agent 内核；不证明中心快速路由或上下文同步已完成。
+' 设计原因：复用第一阶段深度通道，只让可靠的单意图直达；中心全部新增快速协作待实现。
+start
+partition "CampusMateService · 上游判断" #E9F5EF {
+  :01 校验身份、权限及重复消息\n读取可信回复关联（待实现集成）;
+  :02 有有效关联则按原归属定位\n否则快模型结合相关上下文判断（待实现）;
+  :03 代码复核目标与任务归属\n原 MainAgent 任务不能被快路径截走（待实现）;
+  if (确认系统无能力承接？) then (确认)
+    :输出 UNK 并说明不支持\n低置信不等于无能力（待实现）;
+    stop
+  else (否)
+  endif
+}
+if (当前任务由 MainAgent 处理？) then (是)
+  partition "CampusMateService · 深度投递" #E9F5EF {
+    :04A 保留原任务或建立新任务关联\n交接必要上下文，方式后续设计（待实现）;
+  }
+  partition "CampusClaw · MainAgent 深度处理" #EAF1FB {
+    :原任务返回原 MainAgent\n新复杂/混合/不确定输入进入 MainAgent（待实现）;
+    :复用第一阶段的调用、接续与汇总\n不重新执行已经完成的动作（待实现集成）;
+  }
+else (确定的直达新任务或原直达任务接续)
+  if (按可信配置定位的处理方在哪侧？) then (中心旧能力)
+    partition "CampusMateService · 快路径执行" #E9F5EF {
+      :04B 必要时补全独立自然语言问题\n完整问题不额外改写（待实现）;
+      :校验及授权后执行或接续原实例\n业务执行交工具服务（待实现直达）;
+    }
+  else (Claw 业务 Agent)
+    partition "CampusClaw · 指定 Agent 直达" #EAF1FB {
+      :04C 按 agentId 或原任务关联投递\n不经过 MainAgent（待实现直达集成）;
+      :指定业务 Agent 执行或接续\n回传实际结果（待实现集成）;
+    }
+  endif
+endif
+partition "CampusMateService · 上游展示" #E9F5EF {
+  :05 根据实际结果更新路由关联并展示\n不覆盖执行方的权威状态（待实现）;
+}
+stop
+legend bottom
+快路径可关闭，第一阶段 MainAgent 通道始终保留。
+原 MainAgent 任务的补充和确认归原任务；独立新任务不因此绑定整个 chat。
+endlegend
+@enduml
+
+@startuml intent_phase_architecture
+!theme plain
+!pragma layout smetana
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 28
+skinparam ranksep 46
+hide empty members
+title 意图入口与任务执行的全局职责
+' 源码：main@3ade086fcbbe1f88b6729ef5f85d0e595d5b9421。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java：create。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/BoundAgentTool.java：execute。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java：runChild。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java：prepare。
+' 已观察行为：工厂和绑定委派可复用；MainAgent 任务协调、中心桥接及快速协作待实现。
+' 设计原因：服务部署分离，业务任务与临时执行分离；第二阶段不替代第一阶段主链。
+top to bottom direction
+package "CampusMateService（上游 Pod）" #E9F5EF {
+  class "Agent 网关入口\n待实现集成" as Gateway <<服务级>> {
+    接收与安全投影()
+  }
+  class "请求协调\n待实现" as Router <<服务级>> {
+    校验关联并投递()
+  }
+  class "快速决策与按需补全\n第二阶段待实现" as Fast <<服务级>>
+  class "路由上下文快照\n第二阶段待实现" as Snapshot <<每请求只读>>
+  interface "交互及路由记录\n待实现适配" as MateRecords
+  class "中心旧能力桥接\n待实现" as LegacyBridge <<服务级>> {
+    调用或接续原实例()
+  }
+  class "中心旧 Agent\n现状由用户说明" as Legacy <<独立业务实例>>
+  Gateway --> Router
+  Router --> Fast : 第二阶段可关闭
+  Fast --> Snapshot : 读取
+  Router --> MateRecords : 维护可信关联
+  LegacyBridge --> Legacy : 白名单调用
+  Gateway -[hidden]right-> LegacyBridge
+}
+package "CampusClaw（下游 Pod）" #EAF1FB {
+  interface "运行时任务入口\n待实现集成" as RuntimePort
+  class "MainAgent 任务协调\n待实现" as MainTask <<每任务>> {
+    理解并推进处理项()
+  }
+  class "任务及等待记录\n待实现" as TaskState <<持久记录>>
+  class "AgentSessionFactory" as Factory <<已有可复用>>
+  class "Agent Session / AgentLoop" as Execution <<每次执行创建并关闭>>
+  class "工具准备与执行边界\n待对齐集成" as Pipeline <<职责复用>> {
+    解析与校验()
+    授权及必要确认()
+    放行执行并回传()
+  }
+  class "绑定 Child 委派\nAgent 工具" as Child <<已有可复用>>
+  interface "Session 历史记录\n待对齐集成" as ClawRecords
+  RuntimePort --> MainTask : 第一阶段全量／第二阶段深度
+  RuntimePort --> Factory : 第二阶段指定 Agent 直达
+  MainTask "1" *-- "1..*" TaskState : 维护任务与处理项
+  MainTask --> Factory : 准备 MainAgent 执行
+  Factory ..> Execution : 创建隔离 Session
+  Execution --> Pipeline : 请求工具调用
+  Pipeline --> Child : 直接绑定目标
+  Child --> Factory : 创建 Child，结束关闭
+  MainTask --> ClawRecords : 读取与记录
+  Execution --> ClawRecords : 执行事实
+  MainTask -[hidden]right-> TaskState
+}
+package "业务执行边界（部署不新增约定）" #F7F3E8 {
+  interface "工具服务" as Business {
+    执行业务并返回实际结果()
+  }
+}
+Snapshot -[hidden]down-> RuntimePort
+Legacy -[hidden]down-> RuntimePort
+Router -down-> RuntimePort : 待实现集成
+Router --> Legacy : 第二阶段直达／原实例接续
+Pipeline -up-> LegacyBridge : 受控业务工具（待实现）
+Pipeline -down-> Business : 放行后执行
+Legacy -down-> Business : 校验及授权后执行
+legend bottom
+实线为目标依赖，菱形表示任务记录的生命周期归属；不是跨服务共享内存。
+新职责标记待实现；已有类仅表示可复用，不代表任务编排、桥接或多等待已经完成。
+Main/Child 共用内核但消息与工具实例隔离；直接绑定、禁止子级递归，无 Agent 池。
+endlegend
+@enduml
+
+@startuml intent_phase_one_sequence
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam shadowing false
+skinparam maxMessageSize 300
+title 第一阶段：通过中心旧能力查询能耗
+' 源码：main@3ade086fcbbe1f88b6729ef5f85d0e595d5b9421。
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/mate/CallTool.java：prepare。
+' 已观察行为：受管工具有准备入口；未据此证明旧 Agent 桥接和整个安全链已完成。
+' 设计原因：总览只画独立服务职责；目标解析、校验、权限先于执行业务，新增桥接待实现。
+actor "运维人员" as U
+participant "CampusMateService\n上游：入口与旧能力" as M #E9F5EF
+participant "CampusClaw\n下游：MainAgent" as C #EAF1FB
+participant "工具服务\n实际业务数据" as T #F7F3E8
+
+autonumber
+U -> M ++ : 提交查询 A 楼昨天的能耗
+activate U
+M -> M ++ : 校验身份、权限及消息关联
+return 可信请求与关联
+M -> C ++ : 提交原话与可信关联（待实现集成）
+C -> C ++ : 理解目标并生成独立自然语言查询
+return 完整查询与能力目标
+C -> M ++ : 调用已绑定的中心数据主题工具（待实现桥接）
+M -> M ++ : 解析可信目标并校验参数
+return 已校验的业务调用
+M -> M ++ : 判断权限（本次只读查询无需确认）
+return 业务执行许可
+M -> T ++ : 查询 A 楼昨日能耗
+return 实际能耗记录及数据时间
+return 原业务实例与查询结果
+C -> C ++ : 记录任务结果并组织答复（待实现集成）
+return 该任务答复
+return 答案及任务关联
+M -> M ++ : 转换为安全公共结果
+return 公共答复
+return 返回昨日能耗结果
+deactivate U
+@enduml
