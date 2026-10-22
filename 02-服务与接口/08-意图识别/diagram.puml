@@ -446,7 +446,7 @@ endlegend
 @enduml
 
 @startuml intent_type_new_task
-' 证据：意图识别场景汇总.md 的场景 1、2、4，以及用户确认的中心与边侧部署分工。
+' 证据：意图识别重构设计.md#scenarios 的场景 1、2、4，以及用户确认的中心与边侧部署分工。
 ' 设计原因：快速识别输出标签或明确 agentId，中心根据可信配置选择执行位置。
 ' 核验边界：本图为待实现流程，不新增源码实现结论。
 !theme plain
@@ -486,7 +486,7 @@ endlegend
 @enduml
 
 @startuml intent_type_continue
-' 证据：意图识别场景汇总.md 的场景 3、5、6、7，与用户确认的原处理方接续规则。
+' 证据：意图识别重构设计.md#scenarios 的场景 3、5、6、7，与用户确认的原处理方接续规则。
 ' 设计原因：中心只关联原任务，追问、补充、确认与修改由原处理方理解。
 ' 核验边界：业务新调用接续待实现，不表示恢复旧工具调用栈。
 !theme plain
@@ -526,7 +526,7 @@ endlegend
 @enduml
 
 @startuml intent_type_task_control
-' 证据：意图识别场景汇总.md 的场景 8；用户确认中心定位原任务、原处理方继续处理。
+' 证据：意图识别重构设计.md#scenarios 的场景 8；用户确认中心定位原任务、原处理方继续处理。
 ' 设计原因：取消请求与实际终止分开，不把停止请求重新分类成新业务。
 ' 核验边界：控制接入及任务级取消协作待实现，具体协议未冻结。
 !theme plain
@@ -565,7 +565,7 @@ endlegend
 @enduml
 
 @startuml intent_type_attribution
-' 证据：意图识别场景汇总.md 的场景 9，以及用户确认的归属不明交 MainAgent 规则。
+' 证据：意图识别重构设计.md#scenarios 的场景 9，以及用户确认的归属不明交 MainAgent 规则。
 ' 设计原因：两项操作等待时不猜测确认对象，由 MainAgent 组织必要澄清。
 ' 核验边界：跨服务交互关联及澄清接续待实现。
 !theme plain
@@ -603,7 +603,7 @@ endlegend
 @enduml
 
 @startuml intent_type_task_structure
-' 证据：意图识别场景汇总.md 的场景 10～13，与用户确认的 MainAgent 编排职责。
+' 证据：意图识别重构设计.md#scenarios 的场景 10～13，与用户确认的 MainAgent 编排职责。
 ' 设计原因：中心只识别需规划，MainAgent 处理批量、多目标、依赖及单个复杂目标。
 ' 核验边界：中心旧能力工具桥接及结构化子任务状态待实现，不宣称已实现并行。
 !theme plain
@@ -647,7 +647,7 @@ endlegend
 @enduml
 
 @startuml intent_type_mixed_input
-' 证据：意图识别场景汇总.md 的场景 14、15，以及用户确认的混合输入交 MainAgent 规则。
+' 证据：意图识别重构设计.md#scenarios 的场景 14、15，以及用户确认的混合输入交 MainAgent 规则。
 ' 设计原因：保留原任务关联和完整原话，避免补充被丢弃或变参被当成原确认。
 ' 核验边界：跨任务协调和旧状态机桥接待实现，中心不自行拆分规划。
 !theme plain
@@ -692,7 +692,7 @@ endlegend
 @enduml
 
 @startuml intent_type_boundary
-' 证据：意图识别场景汇总.md 的场景 16～18，以及用户确认的 UNK 拒答语义。
+' 证据：意图识别重构设计.md#scenarios 的场景 16～18，以及用户确认的 UNK 拒答语义。
 ' 设计原因：失效与重复由代码判断；识别拿不准与系统确实无能力分开。
 ' 核验边界：以下为待实现的中心入口及能力边界流程。
 !theme plain
@@ -737,7 +737,7 @@ endlegend
 @enduml
 
 @startuml intent_type_general
-' 证据：意图识别场景汇总.md 的场景 19，以及用户确认的新任务输出标签或明确 agentId 规则。
+' 证据：意图识别重构设计.md#scenarios 的场景 19，以及用户确认的新任务输出标签或明确 agentId 规则。
 ' 设计原因：普通交谈与能力咨询由配置中的通用 Agent 承接，不因缺少业务标签直接拒答。
 ' 核验边界：通用 Agent 的部署和路由配置待实现、待核验。
 !theme plain
