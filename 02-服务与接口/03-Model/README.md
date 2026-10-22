@@ -163,7 +163,7 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 
 | # | 事项 | 负责人 | 来源 |
 |---|---|---|---|
-| T1 | Mate getAgent 对没有绑定模型的 Agent 目前按存储完整性错误返回 500 `AGENT_MODEL_BINDING_MISSING`（[元数据设计 §6.5](../../03-数据与存储/02-Agent元数据GaussDB/README.md)），Claw 会误报为 Mate 不可用。建议 Mate 改为返回 200 和空 `bindingModels`，把“未配置模型”作为合法状态；或者 Claw 读取错误响应的 `resCode` 单独映射 | Mate、用户 | D3、F1 |
+| T1 | Mate 的 getAgent 和 runtime 接口对没有绑定模型的 Agent 都按存储完整性错误返回 500 `AGENT_MODEL_BINDING_MISSING`（源码见[证据 §1.5.1](source-evidence.md#model-live-query-evidence)），Claw 会误报为 Mate 不可用；目录未缓存时 Claw 先调 runtime 接口，同样会失败。建议 Mate 两个接口都改为返回 200 和空 `bindingModels`，把“未配置模型”作为合法状态；或者 Claw 读取错误响应的 `resCode` 单独映射 | Mate、用户 | D3、F1 |
 | T2 | 每条消息查询一次 getAgent 是否可接受；上线前压测，必要时改为短时缓存或轻量接口 | Claw | D1、D2 |
 | T3 | R5、R6 由需求推导，需用户确认切换模型、发消息、Subagent、定时执行都按实时结果校验 | 用户 | §2.1 |
 | T4 | 受管目录的 `refresh` 在主线没有调用方，Agent 的 SYSTEM、Skill、工具绑定在 Mate 修改后同样不会生效；是否另立主题处理 | 用户 | §2 开头 |

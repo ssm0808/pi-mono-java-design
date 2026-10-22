@@ -109,7 +109,12 @@ pi 当次通过 ls-remote 确认默认分支 main，并在临时仓库 fetch 得
 | J-ML-09 | `runtimeapi/service/command/SessionModelConfigurationService.java`、`SessionThinkingConfigurationService.java`、`CommandValuesService.java`、`runtimeapi/session/RuntimeSessionUpdateService.java`、`runtimeapi/compaction/RuntimeCompactionService.java`、`schedule/session/ScheduledSessionStarter.java`（L129–130） | 模型选择、切换、深度思考、压缩和定时执行均经 `resolve` 取快照 |
 | J-ML-10 | `runtimeapi/error/RuntimeErrorCode.java` | 已有 `AGENT_MODEL_NOT_CONFIGURED`（422）、`AGENT_SERVICE_UNAVAILABLE`（503）、`MODEL_NOT_AVAILABLE`（422），无需新增错误码 |
 
-Mate 侧依据[元数据设计 §5.1、§6.5](../../03-数据与存储/02-Agent元数据GaussDB/README.md)（设计仓 `main@1dbb984847735a14a5d5f69faefc5fa3ead0f139`）：`bindingModels` 按 `model_order` 返回；更新时要求至少一个模型；已存储 Agent 缺少模型绑定时报存储完整性错误 `AGENT_MODEL_BINDING_MISSING`，HTTP 500。Mate 源码本次未核验。
+Mate 侧依据[元数据设计 §5.1、§6.5](../../03-数据与存储/02-Agent元数据GaussDB/README.md)（设计仓 `main@1dbb984847735a14a5d5f69faefc5fa3ead0f139`）：`bindingModels` 按 `model_order` 返回；更新时要求至少一个模型。缺少模型绑定时的行为已于 2026-10-22 核对 Mate 源码 `superheromeZzh/mate-agent-definition-service` `main@4b957a3a846659f5b7569c9d6133abc070cd2e3c`（该仓最近一次推送为 2026-09-15）：
+
+| 编号 | 仓库相对路径与符号 | 已观察行为 |
+|---|---|---|
+| M-ML-01 | `src/main/java/com/huawei/hicampus/mate/agentdefinition/service/impl/AgentDefinitionServiceImpl.java`：`getAgent`（L162）→ `assembleAgentInfo`（L540）；`getRuntimeAgent`（L172–179）；`requireModelBindings`（L563） | getAgent 与 runtime 接口都调用 `requireModelBindings`，模型绑定为空时抛 `AgentDataCorruptionException(AGENT_MODEL_BINDING_MISSING)` |
+| M-ML-02 | `src/main/java/com/huawei/hicampus/mate/agentdefinition/controller/ApiExceptionHandler.java`：`INTERNAL_ERROR_CODES`（L47）、`resolveStatus`（L177–182） | 该错误码属于内部错误集合，返回 HTTP 500 并记录 error 日志 |
 
 ### 1.5.2 外部基线
 
