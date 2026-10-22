@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.40.0 |
+| 文档版本 | 3.41.0 |
 | 更新日期 | 2026-10-22 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
@@ -24,7 +24,7 @@ Runtime 采用同一 POST 提交用户事件并接收该请求的 SSE，GET 读�
 
 | 本模块负责 | 所属模块维护的协作边界 |
 |---|---|
-| Runtime、Cron、Subagent 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile、工具实例、受管目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
+| Runtime、Cron、Subagent 的执行对象装配与关闭 | [工具系统](../02-CampusClaw工具系统/README.md)维护 profile 与工具实例，[智能体本地目录](../10-CampusClaw智能体本地目录/README.md)维护目录与缓存；[M10 定时任务](../08-CampusClaw定时任务/README.md)维护待实现的后台受理与 Run 关联 |
 | 模型与工具循环的入口协作 | [Model](../../02-服务与接口/03-Model/README.md)维护业务 Agent 设置的模型选择与流适配 |
 | 父子执行的独立上下文与生命周期 | [工具系统 Agent 工具](../02-CampusClaw工具系统/built-in-tool-contracts.md)维护调用参数与结果 |
 | Session 运行对象与持久化恢复的衔接 | [会话记忆](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护上下文与存储 |
@@ -102,13 +102,9 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 
 ## 7. Manager 与多 Agent Runtime 核心
 
-### 7.1 Agent 发布目录
+### 7.1 智能体本地目录
 
-`AgentRuntimeManager.prepare(agentId)` 读取完整缓存，缺失时准备并发布受管目录；目录不完整（如删除 `agent.json`）时同样经临时目录校验后原子替换，失败保留旧目录；运行时不提供强制重建入口。Runtime、Cron 与 Subagent 共用准备入口。目录文件、名称/版本校验和缓存语义由 [工具系统](../02-CampusClaw工具系统/README.md)维护；Agent 默认 mode 由 [元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
-
-![元数据发布与执行快照](设计图/元数据/metadata_runtime_directory_mapping.svg)
-
-[原尺寸 SVG](设计图/元数据/metadata_runtime_directory_mapping.svg) · [PlantUML 源码](设计图/元数据/diagram.puml#L1)
+Runtime、Cron 与 Subagent 在执行前共用同一个准备入口，取得智能体本地目录的已解析快照并在执行期间固定；目录结构、准备与重建、失败处理由[智能体本地目录设计](../10-CampusClaw智能体本地目录/README.md)维护。Agent 默认 mode 由[元数据设计](../../03-数据与存储/02-Agent元数据GaussDB/README.md#44-agent-mode)维护。
 
 ### 7.2 工具装配与 Mate 调用
 
@@ -136,7 +132,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 ## 9. 实施校准与范围外能力
 
-按依赖顺序验收：受管目录与工厂 → 独立执行对象 → 事务准入与有序追加 → 流投影与关闭 → 父子取消、确认与恢复。每一步分别验证对象生命周期、事务回滚、并发与资源释放；具体用例由各模块验收章节维护。
+按依赖顺序验收：智能体本地目录与工厂 → 独立执行对象 → 事务准入与有序追加 → 流投影与关闭 → 父子取消、确认与恢复。每一步分别验证对象生命周期、事务回滚、并发与资源释放；具体用例由各模块验收章节维护。
 
 数据库索引、轮询周期、批次、超时与 SSE 容量需要真实执行计划和压测。Pod 失联后的自动接管、运行中 FollowUp 队列不属于当前已确认能力。已接受写入或工具副作用遇到网络不确定时先对账，不能自动重放。
 
@@ -145,6 +141,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.41.0 | 2026-10-22 | §7.1 改为链接智能体本地目录设计，删除元数据发布图。 |
 | 3.40.0 | 2026-10-22 | 同步 HTTP 1.78.0 与 Model 2.13.0：模型绑定改为每次请求实时读取 Mate getAgent；删除管理面 refresh，元数据图去掉目录中的模型。 |
 | 3.39.0 | 2026-10-21 | 同步 HTTP 1.76.0：创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE。 |
 | 3.38.0 | 2026-10-20 | 命令可选值接口改为按 Agent 查询（sessionId 可选），删除 Mate 聊天命令接口引用，同步 HTTP 1.75.0。 |

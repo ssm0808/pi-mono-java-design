@@ -1,0 +1,239 @@
+@startuml agent_local_dir_overview
+' 源码基线：pi-mono-java main 3ade086fcbbe1f88b6729ef5f85d0e595d5b9421（2026-10-22 fetch）
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java：create
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java：resolve
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java：prepare、loadIfComplete、rebuild、publish
+' 已观察行为：本地副本完整时不访问 Mate；缺失或不完整时从 Mate 重建并整体替换。
+' 架构变更：本地目录不再保存模型（待实现，见 Model §2）。
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 200
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+hide footbox
+autonumber
+
+title 新建会话时准备智能体本地目录
+actor 用户 as User
+participant "Claw" as Claw
+participant "Mate" as Mate
+database "Claw 节点本地磁盘" as Disk
+
+User -> Claw ++ : 为“设备告警处置”智能体新建会话
+activate User
+Claw -> Disk ++ : 读取该智能体的本地目录
+return 本地目录（缺失或不完整）
+Claw -> Mate ++ : 查询智能体配置
+return 系统提示、技能清单、Subagent 清单和工具绑定
+Claw -> Mate ++ : 逐个查询技能
+return 技能正文与资源文件
+Claw -> Disk ++ : 写入候选目录，校验后整体替换本地目录
+return 已发布的本地目录
+Claw -> Claw : 固定本次会话使用的已解析快照
+return 返回新会话
+deactivate User
+@enduml
+
+@startuml agent_local_dir_rebuild
+' 源码基线：pi-mono-java main 3ade086fcbbe1f88b6729ef5f85d0e595d5b9421（2026-10-22 fetch）
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java：prepare、withAgentLock、rebuild、loadExistingModeOverrides、writeRuntimeTree、loadSnapshot、publish
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/MateServiceClient.java：getAgentRuntime、querySkillInfo
+' 已观察行为：同一节点内按智能体加锁；候选目录与本地目录同级，校验通过后用原子移动替换，失败恢复旧目录。
+' 架构变更：refresh 已删除（pi-mono-java#381）；目录不再写模型（待实现）。
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 200
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+hide footbox
+autonumber
+
+title 重建本地目录（UC1）
+participant "准备入口" as Entry
+participant "目录管理器" as Manager
+participant "Mate" as Mate
+database "Claw 节点本地磁盘" as Disk
+
+Entry -> Manager ++ : 准备该智能体的本地目录
+activate Entry
+Manager -> Manager : 取得该智能体的目录锁
+Manager -> Disk ++ : 复查本地目录是否完整
+return 不完整
+Manager -> Disk ++ : 读取已有 PLAN.md、BUILD.md
+return 业务模式文件
+Manager -> Mate ++ : 查询智能体配置
+return 智能体配置
+Manager -> Mate ++ : 逐个查询技能
+return 技能正文与资源文件
+Manager -> Disk ++ : 写入同级候选目录（含业务模式文件）
+return 候选目录
+Manager -> Disk ++ : 按读取规则校验候选目录
+return 候选目录的已解析快照
+Manager -> Disk ++ : 用候选目录整体替换本地目录
+return 已发布的本地目录
+Manager -> Manager : 释放目录锁
+return 返回已解析快照
+deactivate Entry
+@enduml
+
+@startuml agent_local_dir_apply_change
+' 源码基线：pi-mono-java main 3ade086fcbbe1f88b6729ef5f85d0e595d5b9421（2026-10-22 fetch）
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java：loadSnapshot、loadSettings、rebuild
+' 测试证据：pi-mono-java#381 AgentRuntimeManagerTest：deletingIdentityRebuildsFromMateAndPreservesBothModeOverrides
+' 已观察行为：agent.json 缺失使本地目录不完整，下一次准备从 Mate 重建并保留 PLAN.md、BUILD.md。
+' 产品约束：运行时没有强制重建入口，由运维人员在 Claw 节点上操作。
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 200
+skinparam sequenceArrowColor #425B70
+skinparam sequenceLifeLineBorderColor #BAC4CC
+skinparam sequenceParticipantBackgroundColor #F1F5F9
+skinparam sequenceParticipantBorderColor #8496A4
+hide footbox
+autonumber
+
+title 让修改后的智能体配置在 Claw 生效（BU2、UC2）
+actor 运维人员 as Ops
+actor 用户 as User
+participant "Claw" as Claw
+participant "Mate" as Mate
+database "Claw 节点本地磁盘" as Disk
+
+Ops -> Disk ++ : 删除该智能体本地目录中的 agent.json
+activate Ops
+return 本地目录变为不完整
+deactivate Ops
+== 之后任意时刻 ==
+User -> Claw ++ : 新建会话
+activate User
+Claw -> Disk ++ : 读取该智能体的本地目录
+return 本地目录（不完整）
+Claw -> Mate ++ : 查询智能体配置并逐个查询技能
+return 修改后的智能体配置
+Claw -> Disk ++ : 重建本地目录（保留 PLAN.md、BUILD.md）
+return 已发布的本地目录
+return 返回按新配置创建的会话
+deactivate User
+@enduml
+
+@startuml agent_local_dir_classes
+' 源码基线：pi-mono-java main 3ade086fcbbe1f88b6729ef5f85d0e595d5b9421（2026-10-22 fetch）
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtime/AgentRuntimeManager.java、PreparedAgentRuntime.java、MateServiceClient.java
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/agent/FileAgentDirectoryResolver.java、RuntimeAgentPromptLoader.java
+' 源码证据：modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java：create
+' 架构变更：settings.json 不再保存模型，模型由 Mate getAgent 实时读取（待实现）。
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam classBackgroundColor #F8FAFC
+skinparam classBorderColor #8496A4
+skinparam packageBackgroundColor #FFFFFF
+skinparam packageBorderColor #BAC4CC
+skinparam noteBackgroundColor #FFFBEF
+skinparam noteBorderColor #D2C6A5
+hide empty members
+set separator none
+top to bottom direction
+
+title 智能体本地目录的目标类图
+
+package "使用方" {
+  class FileAgentDirectoryResolver <<HTTP 会话与命令>> {
+    +resolve(agentId) : AgentDirectorySnapshotDTO
+    +prepare(agentId) : PreparedAgentRuntime
+  }
+  class AgentSessionFactory <<Runtime、定时执行、Subagent>> {
+    +create(request) : 会话
+  }
+  class "Help、技能命令" as CachedReaders <<只读>> {
+    只读本地副本，不访问 Mate
+  }
+}
+
+package "目录管理（Spring 单例）" {
+  class AgentRuntimeManager {
+    -locks : 每个智能体一把锁
+    +prepare(agentId) : PreparedAgentRuntime
+    +prepareCached(agentId) : PreparedAgentRuntime
+    -rebuild(agentId, agentRoot)
+    -publish(agentId, agentRoot, staging)
+    -requireAgentRoot(agentId) : Path
+  }
+  class RuntimeAgentPromptLoader {
+    +loadSnapshot(dir) : AgentPromptSnapshotDTO
+    +loadOverrides(dir) : PLAN.md、BUILD.md
+  }
+  class SkillLoader {
+    按会话同一规则校验技能
+  }
+}
+
+package "外部" {
+  interface MateServiceClient {
+    +getAgentRuntime(agentId) : AgentRuntime
+    +querySkillInfo(skillId) : SkillInfo
+  }
+}
+
+package "已解析快照（每次准备新建，不可变）" {
+  class PreparedAgentRuntime <<record>> {
+    agentId
+    agentRoot
+    metadata : AgentRuntime
+    skills : List<SkillInfo>
+    prompts : AgentPromptSnapshotDTO
+  }
+}
+
+package "Claw 节点本地磁盘：agent/{agentId}/.campusclaw/" as LocalDir {
+  class "agent.json" as AgentFile <<文件>> {
+    身份、名称、版本、enabled、介绍
+  }
+  class "settings.json" as SettingsFile <<文件>> {
+    schemaVersion=1
+    mode
+    bindingTools
+    不含模型（待实现）
+  }
+  class "SYSTEM.md" as SystemFile <<文件>> {
+    系统提示
+  }
+  class "PLAN.md / BUILD.md" as ModeFiles <<业务部署，可选>>
+  class "agents/{name}.json" as SubagentFile <<文件>> {
+    Subagent 身份与固定版本
+  }
+  class "skills/{name}/" as SkillDir <<目录>> {
+    skill.json、SKILL.md
+    references/、templates/
+  }
+}
+
+FileAgentDirectoryResolver --> AgentRuntimeManager : prepare
+AgentSessionFactory --> AgentRuntimeManager : prepare
+CachedReaders --> AgentRuntimeManager : prepareCached
+AgentRuntimeManager --> MateServiceClient : 目录缺失或不完整时
+AgentRuntimeManager --> RuntimeAgentPromptLoader
+AgentRuntimeManager --> SkillLoader
+AgentRuntimeManager ..> PreparedAgentRuntime : 创建
+AgentRuntimeManager --> LocalDir : 校验读取、整体替换
+RuntimeAgentPromptLoader --> ModeFiles : 只读并在重建时保留
+
+note bottom of PreparedAgentRuntime
+  会话、定时执行和 Subagent 各自固定一份；
+  本地目录之后被替换，不影响已固定的快照。
+end note
+@enduml

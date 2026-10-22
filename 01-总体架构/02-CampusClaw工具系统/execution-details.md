@@ -70,7 +70,7 @@
 
 ![单次工具调用生命周期](tool_invocation_pipeline.svg)
 
-[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L462) · [原尺寸 SVG](tool_invocation_pipeline.svg)
+[PlantUML 源码：`tool_invocation_pipeline`](diagram.puml#L410) · [原尺寸 SVG](tool_invocation_pipeline.svg)
 
 Pipeline 先校验已注册工具的输入 Schema，再让工具准备本次调用。普通静态工具只固定已校验参数；`CallTool` 还要在当前 Session 的可信 Skill 绑定内解析业务目标、校验业务参数并形成不可变的 `PreparedToolInvocation`。准备成功后才调用 before hook；允许执行后发出执行开始事件并执行该准备结果。工具返回结果或抛出普通执行异常后，Pipeline 归一化结果，进入 after hook，最后发出结束事件并返回结果。
 
@@ -90,7 +90,7 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 先校�
 
 ![业务工具共用远端执行](call_mate_tool_sequence.svg)
 
-[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L355) · [原尺寸 SVG](call_mate_tool_sequence.svg)
+[PlantUML 源码：`call_mate_tool_sequence`](diagram.puml#L303) · [原尺寸 SVG](call_mate_tool_sequence.svg)
 
 代理使用已绑定的业务名称和直接参数；`CallTool` 解析外层名称与参数。两者分别携带 Agent 直接关联、直接 Skill 关联的业务工具范围，委托同一个 `MateToolExecutor` 准备可信调用。准备结果固定目标 ID、实际校验定义和参数；解析或校验失败时在 Host hook 前返回错误。准备成功后，Host 按该目标执行权限判断和必要确认；放行后执行器才让 Mate client 发出一次请求。
 
@@ -108,7 +108,7 @@ Agent 业务代理的注册 Schema 包含完整业务参数；`CallTool` 先校�
 
 ![批次并行与串行屏障](tool_batch_scheduling.svg)
 
-[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L513) · [原尺寸 SVG](tool_batch_scheduling.svg)
+[PlantUML 源码：`tool_batch_scheduling`](diagram.puml#L461) · [原尺寸 SVG](tool_batch_scheduling.svg)
 
 调度器把连续 `PARALLEL` 调用组成并行段，等待整段完成后再执行后续调用；每个 `SEQUENTIAL` 调用构成屏障。因此前两个调用可并行，`CallTool` 等待它们完成后执行，最后两个调用再组成新的并行段。工具模式的权威清单见[主设计 §7](README.md#7-pipelinehook-与批量调度)。批次中有提问、计划提交或用户确认等交互工具时，调度前先检查其位置；位置合法才按本图分段执行，规则与整批拒绝见[主设计 §7.1](README.md#interactive-tool-batch)（待实现）。
 

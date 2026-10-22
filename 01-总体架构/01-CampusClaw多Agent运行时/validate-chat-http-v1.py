@@ -553,7 +553,7 @@ def validate_help_artifacts(models: list[dict[str, Any]]) -> None:
     for phrase in ("作用", "name", "help", "text", "暂无介绍", "AGENT_NOT_AVAILABLE", "已确认"):
         require(phrase in visible, f"Help no-script surface is missing {phrase}")
     guide = (HELP_ROOT / "README.md").read_text(encoding="utf-8")
-    for phrase in ("显式刷新", "toIdentity", "toRuntime", "进程重启", "schemaVersion", "Agent 级锁"):
+    for phrase in ("智能体本地目录", "toIdentity", "toRuntime", "进程重启", "schemaVersion", "Agent 级锁"):
         require(phrase in guide, f"Help cache implementation acceptance is missing {phrase}")
 
 
