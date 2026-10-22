@@ -1,10 +1,10 @@
 # Model
 
-版本：2.12.1 · 2026-10-17 · M02。当前设计只通过 CampusMate 调用模型；业务 Agent 设置决定模型绑定；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现；模型调用改用 JDK HttpClient、用 Redis 全局许可限制并发（[§5](#http-transport)）待实现。
+版本：2.13.0 · 2026-10-22 · M02。当前设计只通过 CampusMate 调用模型；Agent 的模型绑定每次通过 Mate getAgent 实时读取，本地目录不再保存模型（[§2](#model-source)，待实现）；每个新执行查询 Mate 窗口，输出额度由 Mate 控制；查询与输出策略迁移、旧全局目录删除待实现；模型调用改用 JDK HttpClient、用 Redis 全局许可限制并发（[§5](#http-transport)）待实现。
 
 | 内容 | 维护位置 |
 |---|---|
-| 模型选择、Provider 分层、调用适配与验收 | 本文 |
+| 模型来源与选择、Provider 分层、调用适配与验收 | 本文 |
 | Mate 模型信息查询与执行快照 | [模型能力](model-capabilities.md)；新增查询精确契约由该专题维护，待实现 |
 | Chat 请求、响应、错误码和示例 | [Chat 接口说明](chat-api.html)，由 [chat-api.json](chat-api.json) 生成；输出额度由 Mate 控制，其他 Chat 行为保持 |
 | 用量表、事务与统计 | [用量持久化](usage.md) |
@@ -26,13 +26,157 @@ Runtime 选择模型、执行工具并保存会话；AI 模块把上下文转换
 
 ## 2. 模型来源
 
-Agent 的 `.campusclaw/settings.json` 维护 `defaultModel/bindingModels`；默认模型必须属于绑定列表，缺失、空白、重复或不一致时失败。`AgentRuntimeManager` 加载设置，`PreparedAgentRuntime/AgentDirectorySnapshotDTO` 固定同一次准备的绑定数据；本地模型列表与选择不访问远端，也不填虚假能力。
+运营人员在 Mate 上给“设备告警处置”这类业务 Agent 换了模型，或者把某个模型从 Agent 上解绑，用户下次新建会话、打开模型选择或继续对话时，应该马上按新配置走。目前做不到：Claw 第一次准备 Agent 时把模型绑定写进本地 `.campusclaw/settings.json`，之后一直读这份缓存；强制刷新的 `AgentRuntimeManager.refresh` 在主线代码里没有调用方，Mate 上的修改要等本地目录被删掉才会生效。本节让模型绑定只以 Mate 为准：Claw 不再在本地目录保存模型，每次需要时调用 Mate 的 getAgent 实时读取。
+
+本节内容全部待实现。Agent 身份、SYSTEM、Skill、工具绑定和 Subagent 清单仍按原方式缓存在受管目录，它们的陈旧问题不在本节范围（见 [§2.9](#model-source-todo) T4）。
+
+<a id="model-source-requirements"></a>
+
+### 2.1 需求
+
+| # | 需求 | 类型 | 来源 |
+|---|---|---|---|
+| R1 | 构建 Agent 本地目录时不再保存模型相关记录（默认模型、绑定模型列表） | 功能 | 用户需求（2026-10-22） |
+| R2 | 每次创建会话时调用 Mate getAgent 查询默认模型 | 功能 | 用户需求（2026-10-22） |
+| R3 | 查询到 Agent 没有配置模型时报错，提示需要先配置模型 | 功能 | 用户需求（2026-10-22） |
+| R4 | 展示可选模型（`/model` 可选值）也调用 getAgent | 功能 | 用户需求（2026-10-22） |
+| R5 | Mate 暂时不可用时不能提示“需要配置模型”，要提示稍后重试 | 稳定性 | 由 R3 推导，待确认 |
+| R6 | 切换模型、已有会话继续对话、定时任务和 Subagent 也按 getAgent 的实时结果校验模型 | 约束 | 由 R1 推导：本地不再有模型列表，这些入口没有别的来源，待确认 |
+
+<a id="model-source-flow"></a>
+
+### 2.2 正常流程与失败处理
+
+正常流程：
+
+1. 用户新建会话。Claw 先准备 Agent 运行目录（缓存命中时不访问 Mate），再调用 getAgent 读取该 Agent 当前绑定的模型列表。
+2. 列表中的第一个模型就是默认模型（Mate 按 `model_order` 返回）。Claw 校验它支持深度思考后，把它作为会话当前模型保存。
+3. 用户打开模型选择时，Claw 再调用一次 getAgent，返回当前绑定的模型列表；带会话时当前值是会话保存的模型，不带会话时是默认模型。
+4. 用户切换模型时，Claw 调用 getAgent 确认目标模型仍在列表里，再保存。
+5. 用户在已有会话里发消息时，Claw 在接受消息前调用 getAgent：会话模型仍在列表里就继续用；已被解绑就换成当前默认模型，先记录模型变更，再接受消息。
+
+失败处理：getAgent 返回的列表为空时，按需求报 `AGENT_MODEL_NOT_CONFIGURED`（需要配置模型）；Mate 超时、连不上或返回 5xx 时报 `AGENT_SERVICE_UNAVAILABLE`（稍后重试），不把它当成“没配置模型”，也不回退到任何旧值。完整分类见 [§2.7](#model-source-failure)。
+
+<a id="model-source-sequence"></a>
+
+### 2.3 新建会话的整体时序
+
+场景：用户在园区工作台为“设备告警处置”Agent 新建会话，从请求到拿到会话结束。前提是 Agent 在 Mate 上存在且已启用。状态：待实现。
+
+| 参与者 | 职责 | 映射 |
+|---|---|---|
+| 用户 | 新建会话、查看会话当前模型 | 工作台前端 |
+| Claw | 准备 Agent 运行目录、查询模型、选默认模型、保存会话 | `RuntimeSessionService`、`FileAgentDirectoryResolver`、`AgentRuntimeManager`、`MateServiceClient`、`RuntimeModelManager` |
+| Mate | 返回 Agent 当前绑定的模型 | `GET /mate-service/v1/agents/{agentId}`（getAgent） |
+| Claw 数据库 | 保存会话及其当前模型 | `RuntimeSessionRepository` |
+
+![新建会话时实时读取 Agent 模型](agent_model_live_create.svg)
+
+[原尺寸 SVG](agent_model_live_create.svg) · [PlantUML 源码](diagram.puml#L372)
+
+| 阶段 | 详细时序 |
+|---|---|
+| 步骤 3～4：读取 Agent 模型 | 每个入口都用同一个查询，入口差异见 [§2.5](#model-source-entries) |
+| 步骤 5：选择默认模型 | 规则见 [§2.6](#model-source-default) |
+
+<a id="model-source-decisions"></a>
+
+### 2.4 关键设计决策
+
+基线核验日期 2026-10-22，提交与源码位置见[源码证据 §1.5](source-evidence.md#model-live-query-evidence)。
+
+| # | 要解决的问题 | 基线怎么做 | 业务约束 | 我们的选择 | 代价 |
+|---|---|---|---|---|---|
+| D1 | Agent 的模型配置在 Mate 修改后，Claw 怎样尽快生效 | Claude Managed Agents：用 Agent ID 创建会话时由服务端取 Agent 最新版本（公开文档）。Codex：远端模型目录在本地缓存 5 分钟，带 ETag 刷新。OpenCode：models.dev 目录缓存 5 分钟，另带内置快照兜底。pi：默认模型来自本地 `settings.json`，可用模型由进程内模型运行时实时计算，不涉及远端 | 模型绑定由 Mate 管理，Claw 不是最终决定方；需求要求实时；Claw 是多实例部署，本地缓存在实例之间不一致；受管目录的强制刷新没有触发方 | 本地目录不再保存模型。每个需要模型的请求调用一次 getAgent，不做缓存；同一请求内查到的结果传给后续步骤复用，不重复查询 | 新建会话、打开模型选择、切换模型、每条用户消息、每次 Subagent 和定时执行都多一次 Mate 请求；Mate 不可用时这些入口失败。后者影响有限：模型调用本身就经过 Mate，Mate 不可用时对话原本也无法进行。不选“保留本地文件，补一个刷新触发”：需要 Mate 主动通知或定时轮询，生效时间仍不确定。不选 Codex/OpenCode 式 5 分钟缓存：修改最多延迟 5 分钟才生效，且各实例不一致；压测发现 getAgent 压力过大时再考虑（T2） |
+| D2 | 调用 Mate 的哪个接口读取模型 | 无可对照实现 | 需求指定 getAgent；Claw 已经在不带用户凭据的情况下调用 getAgent 读取工具绑定（`HttpMateToolClient#queryToolIdsByAgentId`）；runtime 接口还要批量解析工具与 Subagent 依赖，比 getAgent 重 | 使用 getAgent `GET /mate-service/v1/agents/{agentId}`，只读取 `bindingModels` | getAgent 返回完整 Agent 聚合，只用其中一个字段；Mate 读取五张表。若压测显示负担过重，再请 Mate 提供只返回模型的轻量接口 |
+| D3 | 查询失败或 Agent 没有模型时怎么办 | Codex：拉取失败时保留上一次成功的目录，不把失败当成空目录。pi：没有可用模型时提示用户配置（`formatNoModelsAvailableMessage`） | 本地不再有可以回退的模型记录；运营人员需要区分“没配置模型”和“Mate 故障”才能处理 | 列表为空报 `AGENT_MODEL_NOT_CONFIGURED`；Mate 故障报 `AGENT_SERVICE_UNAVAILABLE`；都不回退到旧值或其他模型 | Mate 短暂故障期间无法新建会话、无法发送消息，不像 Codex 那样用旧数据继续。Mate 对“Agent 没有模型”目前返回 HTTP 500，Claw 会误判为 Mate 故障，需要 Mate 调整（T1） |
+| D4 | 已有会话保存的模型被解绑后怎么办 | pi：恢复会话时先用会话记录的模型，不可用时改用默认模型并提示（`sdk.ts` 恢复逻辑）。Claude Managed Agents：会话是否随 Agent 新版本变化，公开文档未说明 | 会话当前模型是会话自己的状态，保存在 Claw 数据库，不属于本地目录；同一会话的模型变化要能在历史中看到 | 会话继续保存当前模型。每条消息接受前按 getAgent 的结果校验：仍可用就保留，已解绑就换成当前默认模型，沿用现有的模型变更事件（原因值保持 `agentRefresh`） | 解绑后用户的下一条消息会使用另一个模型，用户只能从模型变更事件得知；没有默认模型时消息被拒绝 |
+
+<a id="model-source-entries"></a>
+
+### 2.5 各入口的查询时机
+
+所有入口都通过 `AgentDirectoryResolver.resolve(agentId)` 取得模型快照：准备运行目录（缓存优先，不含模型），再调用 getAgent 填入默认模型和可选模型。查询发生在 Session 锁之外；锁内只用同一份快照复核，不再访问 Mate。
+
+| 入口 | 何时查询 | 用到什么 | 现有代码位置 |
+|---|---|---|---|
+| 新建会话 | 创建前一次 | 默认模型 | `RuntimeSessionService#create` |
+| 查看可选模型 `/model` | 每次请求一次 | 可选模型、默认模型（不带会话时） | `SessionModelConfigurationService`、`CommandValuesService` |
+| 切换模型（UpdateSession 或 `/model <id>`） | 每次请求一次 | 可选模型 | `RuntimeSessionUpdateService`、`SessionModelConfigurationService` |
+| 深度思考开关 | 每次请求一次 | 会话模型或默认模型的能力 | `SessionThinkingConfigurationService` |
+| 发送消息 | 接受消息前一次；本次执行装配时复用，不再查询 | 校验会话模型、必要时取默认模型 | `RuntimeSessionModelReconciler#reconcile`；`RuntimeSessionEngineRegistry#requireModelAllowed` 改为使用同一快照 |
+| 手工压缩 | 开始前一次 | 校验会话模型 | `RuntimeCompactionService` |
+| 定时执行 | 每次触发一次 | 默认模型 | `ScheduledSessionStarter` |
+| Subagent | 每次启动一次，查询 Subagent 自己的 Agent | 校验 Subagent 是否允许所选模型 | `SubagentExecutionService#requireModelAllowed` |
+
+[模型信息查询](model-capabilities.md)（`GET /models/{modelId}`，待实现）在每个新执行中也查询一次 Mate，两者读取不同的数据：getAgent 决定“能用哪些模型”，模型信息决定“选中模型的上下文窗口”。首版不合并。
+
+<a id="model-source-default"></a>
+
+### 2.6 默认模型与本地目录
+
+- **默认模型。** Mate 没有单独的默认模型字段，getAgent 返回的 `bindingModels` 按 `model_order` 排序，第一个就是默认模型，与现有 `AgentRuntime#defaultModel` 的规则相同。新会话默认开启深度思考，默认模型必须支持深度思考，否则报 `AGENT_MODEL_NOT_CONFIGURED`（现有规则不变）。
+- **列表校验。** `bindingModels` 缺失或为空时视为未配置模型；元素为空白或重复时视为 Mate 返回的数据无效，同样报 `AGENT_MODEL_NOT_CONFIGURED` 并记录原始响应摘要。Claw 不检查模型在 Mate 模型网关中是否存在，调用时由 Mate Chat 判断。
+- **本地目录。** `AgentRuntimeManager` 写 `settings.json` 时不再写 `defaultModel`、`bindingModels`；构建目录和读取缓存时不再要求模型非空，所以没有配置模型的 Agent 也能准备好目录，后续由 getAgent 报出“需要配置模型”。runtime 接口仍会返回 `bindingModels`，Claw 忽略它。
+- **旧目录。** 已发布目录里的旧模型字段读取时忽略，不需要迁移，`schemaVersion` 保持 1。不升级版本是为了避免上线后所有 Agent 同时重建目录；旧字段在下一次重建时自然消失。
+
+<a id="model-source-failure"></a>
+
+### 2.7 失败处理与恢复
+
+不变量：
+
+- 模型可选范围只以本次 getAgent 的结果为准；Claw 不回退到旧值、本地文件或其他 Agent 的模型。
+- 查询失败时不保存会话、不切换模型、不接受用户消息，也不产生模型变更事件。
+- “没有配置模型”和“Mate 不可用”返回不同的错误码。
+
+| 失败 | 发生阶段 | 副作用状态 | 处理方 | 系统处置 | 用户可见结果与下一步 | 不保证项 |
+|---|---|---|---|---|---|---|
+| F1 Agent 没有绑定模型 | getAgent 返回 | 未发生 | Claw | 拒绝本次请求 | 422 `AGENT_MODEL_NOT_CONFIGURED`，提示在 Mate 为 Agent 配置模型后重试 | 依赖 Mate 对空绑定返回 200 和空列表（T1） |
+| F2 Mate 超时、连接失败或 5xx | getAgent 请求 | 未发生 | Claw | 记录原始异常后拒绝，不重试 | 503 `AGENT_SERVICE_UNAVAILABLE`，稍后重试 | 不区分 Mate 内部的具体原因 |
+| F3 Mate 返回 4xx（如 Agent 不存在） | getAgent 请求 | 未发生 | Claw | 拒绝，沿用 runtime 接口 4xx 的现有映射 | 422 `AGENT_NOT_AVAILABLE` | 不单独区分 Agent 已删除 |
+| F4 默认模型不支持深度思考 | 选择默认模型 | 未发生 | Claw | 拒绝 | 422 `AGENT_MODEL_NOT_CONFIGURED` | 无 |
+| F5 切换的目标模型不在列表 | 切换模型 | 未发生 | Claw | 拒绝 | 422 `MODEL_NOT_AVAILABLE`，重新打开模型选择 | 列表展示后到提交前的变化只在提交时发现 |
+| F6 会话模型已被解绑，默认模型可用 | 接受消息前 | 已提交（模型变更事件） | Claw | 换成默认模型，先写模型变更（必要时写深度思考变更），再接受消息 | 消息正常处理，历史中出现模型变更 | 用户事先不会收到提醒 |
+| F7 会话模型已被解绑，且没有默认模型 | 接受消息前 | 未发生 | Claw | 拒绝，SSE 不建立 | 422 `AGENT_MODEL_NOT_CONFIGURED` | 无 |
+| F8 查询后、执行中模型被解绑 | 执行中 | 执行继续 | Claw | 本次执行用已固定的模型跑完；下一条消息再校验 | 本轮回答仍来自原模型 | 不中断进行中的执行 |
+| F9 Subagent 不允许父执行所选模型 | Subagent 启动 | 未发生 | Claw | 按现有 Subagent 失败处理 | 父 Agent 收到工具失败结果 | 无 |
+
+<a id="model-source-capacity"></a>
+
+### 2.8 性能、监控与验收
+
+- **请求量。** getAgent 次数约等于“新建会话 + 打开模型选择 + 切换模型 + 用户消息 + 手工压缩 + 定时执行 + Subagent 启动”的次数之和。单次耗时未测量；超时沿用 `campusmate.runtime.request-timeout`，不新增配置项。
+- **监控。** 按入口记录 getAgent 的次数、耗时和失败数（区分 F1、F2、F3），用于判断 T2 是否需要缓存或轻量接口。
+- **验收（待实现）。**
+  - 新建的受管目录 `settings.json` 不含 `defaultModel`、`bindingModels`；含旧字段的目录可以正常读取。
+  - Mate 修改模型绑定后，不重启、不删除目录，下一次新建会话、打开模型选择和发送消息都使用新绑定。
+  - 一次请求只调用一次 getAgent（发送消息时校准与执行装配共用一份快照）；查询发生在 Session 锁外。
+  - 空列表返回 `AGENT_MODEL_NOT_CONFIGURED`；Mate 超时、5xx 返回 `AGENT_SERVICE_UNAVAILABLE`；两种情况都不保存会话、不写事件。
+  - 会话模型被解绑时，下一条消息先写模型变更再写用户消息；没有默认模型时拒绝且不写任何记录。
+  - Subagent 和定时执行分别查询自己 Agent 的模型。
+  - 测试只在 `MateServiceClient` 测试中使用 HTTP 测试桩，其他测试替换为接口桩。
+
+<a id="model-source-todo"></a>
+
+### 2.9 待确认事项
+
+| # | 事项 | 负责人 | 来源 |
+|---|---|---|---|
+| T1 | Mate getAgent 对没有绑定模型的 Agent 目前按存储完整性错误返回 500 `AGENT_MODEL_BINDING_MISSING`（[元数据设计 §6.5](../../03-数据与存储/02-Agent元数据GaussDB/README.md)），Claw 会误报为 Mate 不可用。建议 Mate 改为返回 200 和空 `bindingModels`，把“未配置模型”作为合法状态；或者 Claw 读取错误响应的 `resCode` 单独映射 | Mate、用户 | D3、F1 |
+| T2 | 每条消息查询一次 getAgent 是否可接受；上线前压测，必要时改为短时缓存或轻量接口 | Claw | D1、D2 |
+| T3 | R5、R6 由需求推导，需用户确认切换模型、发消息、Subagent、定时执行都按实时结果校验 | 用户 | §2.1 |
+| T4 | 受管目录的 `refresh` 在主线没有调用方，Agent 的 SYSTEM、Skill、工具绑定在 Mate 修改后同样不会生效；是否另立主题处理 | 用户 | §2 开头 |
+
+<a id="model-capability-boundary"></a>
+
+### 2.10 与模型信息查询的关系
 
 每个新执行在锁外单独查询 Mate 当前选中模型的 `contextWindow`，应用服务在锁内复核 Session 版本、模型与绑定后，固定该执行的不可变模型信息。自动压缩、Tool Loop 和原根确认续跑共用结果；下一次新执行再次查询。独立手工压缩和 Subagent/Cron 各自查询。能力不写入 Agent 目录，不由 refresh 控制更新；查询失败不回退旧窗口。精确字段、入口、锁边界及压缩规则由[模型信息专题](model-capabilities.md)统一维护。
 
-Claw 不查询或消费 maxTokens，不为普通 Chat 或摘要指定输出额度；Mate 自行管理输出参数及上游差异。删除 `campusmate.model.context-window/max-output-tokens` 与 Java 默认值。现有已发布绑定仍是模型使用范围的唯一权威，远端信息不能扩大允许列表。
+Claw 不查询或消费 maxTokens，不为普通 Chat 或摘要指定输出额度；Mate 自行管理输出参数及上游差异。删除 `campusmate.model.context-window/max-output-tokens` 与 Java 默认值。getAgent 返回的绑定仍是模型使用范围的唯一依据，模型信息查询不能扩大可选范围。
 
-这是产品约束与架构变更：绑定按业务发布，动态窗口按执行读取，避免能力长期陈旧；Mate 统一控制生成额度。代价是新执行多一次查询及故障依赖，并失去 Claw 自有摘要输出预算。与 pi 的差异及源码证据见[架构对比 A06](../../01-总体架构/07-Agent架构对比/README.md#a06)。
+这是产品约束与架构变更：绑定以 Mate 实时配置为准，动态窗口按执行读取，避免能力长期陈旧；Mate 统一控制生成额度。代价是新执行多一次查询及故障依赖，并失去 Claw 自有摘要输出预算。与 pi 的差异及源码证据见[架构对比 A06](../../01-总体架构/07-Agent架构对比/README.md#a06)。
 
 <a id="provider"></a>
 
@@ -72,7 +216,7 @@ Provider 身份与协议路由分开，避免按厂商堆叠中央分支。内�
 
 ![Chat 调用时序](chat-sequence.svg)
 
-[PlantUML 源码](diagram.puml#L200) · [原尺寸 SVG](chat-sequence.svg)
+[PlantUML 源码](diagram.puml#L205) · [原尺寸 SVG](chat-sequence.svg)
 
 ### 请求映射
 
@@ -159,7 +303,7 @@ Provider 仅解析 Usage，Runtime 保存和汇总；事务、缺失 Usage、分
 
 ![一次模型调用的连接与许可](model-call-permit.svg)
 
-[原尺寸 SVG](model-call-permit.svg) · [PlantUML 源码](diagram.puml#L314)
+[原尺寸 SVG](model-call-permit.svg) · [PlantUML 源码](diagram.puml#L319)
 
 许可在发出请求之前申请，在流结束（完成、失败或取消）之后归还，每次调用只归还一次。这保证同一时刻占用连接的调用不超过全局许可数：一条连接要么正在承载某个调用，要么在连接池里空闲，空闲连接只来自已经结束的调用。
 
@@ -354,7 +498,7 @@ Redis 连接沿用 Spring Boot 的 `spring.data.redis.*`（地址、密码、库
 | 步骤 | 实施内容 | 验收 |
 |---|---|---|
 | S0 · 模型能力（待实现） | 按[能力专题 C1～C4](model-capabilities.md#5-java-分层与实施切片)实现 Mate 查询、自主输出策略、执行快照及默认值删除 | 验证每个新执行一次查询、锁外读取与竞争、窗口变化、所有调用无输出额度及镜像一致性 |
-| S1 · 模型选择 | 固定 §2 的设置加载与快照链 | 覆盖缺失、空白、重复、默认值不在列表、Agent 隔离，以及默认/切换/压缩/Subagent/Cron 同源；禁止回退 |
+| S1 · 模型选择（待实现） | 按 [§2](#model-source) 删除本地目录中的模型记录，所有入口改由 getAgent 实时取得默认模型和可选模型 | [§2.8](#model-source-capacity) 验收项；覆盖空列表、Mate 故障、解绑后的会话、Agent 隔离，以及默认/切换/压缩/Subagent/Cron 同源；禁止回退 |
 | S2 · 全局目录清理 | 删除 `ModelRegistry`、两处 JSON 探测、`ModelCatalogService`、`CatalogRuntimeModelManager` 及专用环境凭据解析；迁移 SSE 仍使用的成本计算 | Spring 不再装配上述目录 Bean；启动无外部模型文件探测及加载日志；无消费者的能力辅助方法删除 |
 | S3 · 调用与依赖清理 | 移除 AI Service 的目录依赖；删除 Anthropic、OpenAI Completions、OpenAI Responses、Mistral 具体适配器及专属测试，按下表清理 SDK 并同步公司镜像 | 只内置 CampusMate，空 API 注册表可启动；新旧身份遵守 §3；公共消息、流、枚举与有消费者的工具不误删 |
 | S5 · 参数预览（PR 已实现） | 通用增量解析、身份快照、内部诊断及独立完整解析 | 每字符分片、嵌套数组/对象、Unicode、身份延迟/多工具交错、快照只读与隔离；预览超限不拒绝完整调用；重复键/尾随输入兼容；诊断不序列化 |
@@ -379,6 +523,7 @@ CampusMate 请求与流处理使用现有 Jackson、Spring WebFlux 的 `WebClien
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.13.0 | 2026-10-22 | 本地 Agent 目录不再保存模型，创建会话、可选模型、切换模型和消息校准都实时调用 Mate getAgent；没有模型时报需要配置模型。 |
 | 2.12.1 | 2026-10-17 | AI 模块未使用的 json-schema-validator 声明改由工具系统 §9.7 删除。 |
 | 2.12.0 | 2026-10-16 | 模型调用改用 JDK HttpClient 并删除 Reactor Netty，用 Redis 全局许可（Redisson 客户端）把所有实例合计的模型调用限制在 100 个，Redis 故障时降级为每实例 50 个，复用连接且不预热。 |
 | 2.11.0 | 2026-10-09 | AI 提供通用只读参数预览与内部原始 JSON 诊断，保持完整解析和执行边界。 |

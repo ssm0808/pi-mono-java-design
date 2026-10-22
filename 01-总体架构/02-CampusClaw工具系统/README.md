@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.28.3 |
+| 文档版本 | 2.29.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；[§9.7](#tool-schema-subset) 自写 Schema 子集校验器已在 pi-mono-java#371（`main@2b9a6ad`）实现，§9.7.6 T2 现网定义普查未完成；SearchTools、发现与校验的一致性接线、前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-20 |
+| 更新日期 | 2026-10-22 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -299,7 +299,7 @@ public record AgentWorkspaceBoundary(String agentId, Path root, Path realRoot) {
 
 ## 6. 公共轻量 AgentSession
 
-`AgentSessionFactory.create` 调用 `AgentRuntimeManager.prepare(agentId)`，校验运行条件与 Agent 启用状态，再用 `bindingModels`、Model Manager 可用性和凭据解析可用模型。Factory 基于受管快照构造工作区边界与不可变工具上下文，装配工具，安装模型、SYSTEM 与有序不可变 hook 链，创建独立的 `ManagedAgentSession`。状态、消息队列和取消域按实例隔离。
+`AgentSessionFactory.create` 调用 `AgentRuntimeManager.prepare(agentId)`，校验运行条件与 Agent 启用状态，再用本次请求从 Mate getAgent 实时读取的 `bindingModels`（待实现，见 [Model §2](../../02-服务与接口/03-Model/README.md#model-source)）、Model Manager 可用性和凭据解析可用模型。Factory 基于受管快照构造工作区边界与不可变工具上下文，装配工具，安装模型、SYSTEM 与有序不可变 hook 链，创建独立的 `ManagedAgentSession`。状态、消息队列和取消域按实例隔离。
 
 入口选择、消息恢复、事件订阅和最终关闭由 Host 负责。具体创建顺序见[执行细节：Session 创建](execution-details.md#session-creation)；工具集合遵守 §4 的 profile 与绑定规则。
 
@@ -386,8 +386,7 @@ agent/{agentId}/.campusclaw/
     └── templates/
 ```
 
-`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 Agent 默认 `mode`、`defaultModel`、
-`bindingModels` 和直接工具绑定 `bindingTools`；`agents/{agentName}.json` 保存一个直接 Subagent 的身份、描述、enabled 和
+`agent.json` 只保存当前 Agent 身份；`settings.json` 保存 Agent 默认 `mode` 和直接工具绑定 `bindingTools`，不保存模型：默认模型和 `bindingModels` 每次请求实时调用 Mate getAgent 读取（待实现，见 [Model §2](../../02-服务与接口/03-Model/README.md#model-source)），旧目录中的模型字段读取时忽略；`agents/{agentName}.json` 保存一个直接 Subagent 的身份、描述、enabled 和
 固定版本；`skill.json` 保存 `schemaVersion=1`、ID、名称、版本和该 Skill 的 `bindingTools`。工具绑定包含技术名、展示名、ID 和权限等可信元数据，供本次执行读取；文件位置不改变 Agent/Skill 归属，也不能代替执行时的启停与权限检查。相关字段已在主线实现，核验范围见[名称来源证据](source-evidence.md#tool-display-binding-evidence)。名称必须与路径逐字符
 一致，所属索引内唯一。扫描结果形成不可变的 `skillName -> skillId` 和
 `agentName -> BoundAgent` 索引。
@@ -402,11 +401,11 @@ agent/{agentId}/.campusclaw/
 
 `prepare(agentId)` 先完整验证缓存；命中时不访问 Mate。缺失或不完整时取得 per-agent
 锁，再次检查后访问 Mate，在同级临时目录写入完整树，校验名称、ID、版本、模型和路径，
-最后原子发布。失败删除候选树并保留旧目录。
+最后原子发布。失败删除候选树并保留旧目录。目录构建不再校验模型，没有绑定模型的 Agent 也能准备目录，由模型查询报出需要配置模型。
 
 `refresh(agentId)` 只由受管管理流程显式调用，强制拉取并构建候选树；成功后原子替换，
 失败保留旧树。活动 execution 继续使用自身不可变 runtime 快照。空闲数据库 Session 在
-下一次接受用户 Entry 前读取刷新后的目录：当前模型仍在新 `bindingModels` 且具备凭据时
+下一次接受用户 Entry 前实时读取 getAgent 的 `bindingModels`（模型不随 refresh 更新，待实现）：当前模型仍在其中且具备凭据时
 保留；失效时切换到具备凭据的新 default，并原子持久化模型及必要的 thinking 变更事件，
 事件先于 `user.message` 投影。没有可用 default 时拒绝本次执行且不接受用户 Entry。
 工具配置不参与 refresh。首版不提供 TTL、后台刷新、版本比较或 Subagent 版本不匹配时的隐式自愈。
@@ -779,12 +778,12 @@ Subagent 消息历史或完整事件流。父取消必须传播；成功结果�
 `Cron` 保留 `create/list/delete/trigger/status/runs`，删除 `model`、`system_prompt` 和
 `tools`。Job 自动保存当前受管 `agentId + prompt` 及调度元数据，所有管理动作按当前
 Agent 过滤。触发时重新 `prepare(agentId)`，使用该 Agent 当时的 SYSTEM、Skills、
-default model 和 `cron` profile，不使用创建时的模型或工具快照。这里的“当时”指 prepare 实际取得的已发布目录；缓存命中不会自动刷新 Mate 数据库最新版本。
+default model 和 `cron` profile，不使用创建时的模型或工具快照。这里的“当时”对 SYSTEM、Skill 和工具指 prepare 实际取得的已发布目录，缓存命中不会自动刷新 Mate 数据库最新版本；对模型指本次触发时 getAgent 的实时结果（待实现）。
 
 模型可用集合统一为：
 
 ```text
-usableModels = settings.bindingModels
+usableModels = getAgent.bindingModels（每次请求实时读取，待实现）
                intersect Model Manager available models
                intersect models with usable credentials
 ```
@@ -989,6 +988,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.29.0 | 2026-10-22 | 受管目录不再保存模型，默认模型和 bindingModels 每次请求实时读取 Mate getAgent。 |
 | 2.28.3 | 2026-10-20 | 差分对照改为不依赖外部实现的性质测试：丢弃不收紧、无害丢弃不变、关键字顺序无关；§9.7 校验器已实现，T2 普查未完成。 |
 | 2.28.2 | 2026-10-20 | 测试也不再依赖 json-schema-validator，删除与 networknt 的差分对照（待实现）。 |
 | 2.28.1 | 2026-10-19 | 丢弃保护补充 `patternProperties`、`prefixItems` 同级情形并把 `format`、`x-` 定为无害丢弃，数值边界限定为有限值（待实现）。 |
