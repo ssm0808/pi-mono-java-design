@@ -178,7 +178,7 @@ Mate 公共层把连接绑定到 Chat；Claude 是公开流与历史对账的参
 我们采纳临时 preview 与权威记录的区分，同时保留自己的产品边界。
 代价是两跳需要明确的事件桥接；内部入口代码已经存在，公共桥接还不能用设计文档冒充实现证据。
 
-**企业凭据专项（2026-09-19，M03/M06）。** Claw 捕获四项可选 Header 作为执行凭据；其余请求头按 denylist 全量透传至 Mate tool execute（2026-10-22，denylist 范围与语义见 [HTTP §7.1](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#71-凭据读取与透传)）。空或部分快照不触发工具 unavailable，实际 execute 的凭据判断归 Mate；[HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)维护精确边界，[M03 §9.2](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)维护工具条件。此为 CampusClaw 产品约束及职责调整，不由外部 Agent 的认证机制推导，也不改变本节 SSE 比较。收益是避免在 Claw 重复维护 Mate 凭据规则，代价是缺失凭据到工具实际调用时才反馈；固定 Java `21c3f59b` 三处本地检查仍待移除，路径与符号见[专项证据](../01-CampusClaw多Agent运行时/source-evidence.md#credential-forwarding-evidence)。不新增外部基线结论、不升级历史 SHA；Mate 联调与空/部分 Header 出站验收待实现测试证明。
+**企业凭据专项（2026-09-19，M03/M06）。** Claw 捕获四项可选 Header 作为执行凭据；入站其余请求头不做业务过滤、直接透传至 Mate tool execute，仅 JDK HttpClient 硬拒绝的受限传输头由传输层剔除（2026-10-22，语义见 [HTTP §7.1](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#71-凭据读取与透传)）。空或部分快照不触发工具 unavailable，实际 execute 的凭据判断归 Mate；[HTTP §7](../01-CampusClaw多Agent运行时/chat-http-v1-design.md#credential-forwarding)维护精确边界，[M03 §9.2](../02-CampusClaw工具系统/README.md#mate-credential-forwarding)维护工具条件。此为 CampusClaw 产品约束及职责调整，不由外部 Agent 的认证机制推导，也不改变本节 SSE 比较。收益是避免在 Claw 重复维护 Mate 凭据规则，代价是缺失凭据到工具实际调用时才反馈；固定 Java `21c3f59b` 三处本地检查仍待移除，路径与符号见[专项证据](../01-CampusClaw多Agent运行时/source-evidence.md#credential-forwarding-evidence)。不新增外部基线结论、不升级历史 SHA；Mate 联调与空/部分 Header 出站验收待实现测试证明。
 
 <a id="a03"></a>
 
@@ -801,7 +801,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
-| 1.110.0 | 2026-10-22 | M03/M06 企业凭据专项补充：工具执行快照扩展为携带入站 denylist 之外的全部请求头，随 Mate tool execute 透传。 |
+| 1.110.0 | 2026-10-22 | M03/M06 企业凭据专项补充：工具执行快照扩展为携带入站全部请求头（不做业务过滤），随 Mate tool execute 透传。 |
 | 1.109.0 | 2026-10-21 | M05 补充 Mate 不可达返回 503 与模型显示名由 Mate 替换 `model:` 链接。 |
 | 1.108.0 | 2026-10-20 | M05 记录 2026-10-20 命令接口对齐：新对话清单范围、按 Agent 的可选值、rename 与 argumentRequired、Builtin 文本结果，删除 Mate 命令选项分层。 |
 | 1.107.2 | 2026-10-20 | A20 的验证方式改为性质测试，实现状态更新为已在 `main@2b9a6ad` 实现、现网普查未完成。 |
