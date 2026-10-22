@@ -2,11 +2,11 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.76.0 |
+| 文档版本 | 1.77.0 |
 | 状态 | 当前目标；实现状态按源码证据分别记录 |
 | 精确契约 | [统一接口页](chat-api-review.html)；[catalog.json](接口契约/catalog.json) 指定唯一模型 |
 | 源码范围 | [源码证据](source-evidence.md)；统一更新的 Header 移除核验见 §8.4，历史核验保留在 §8.1～§8.3 |
-| 更新日期 | 2026-10-21 |
+| 更新日期 | 2026-10-22 |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
@@ -369,9 +369,11 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 所有操作的 Accept-Language 都只用于接口语言处理，不设置 Session 或模型回答语言，缺失或不支持时回退 en-US。普通 JSON Accept 可省略。所有操作均按 §2 忽略额外传入的 If-Match/Idempotency-Key，不生成配套 ETag。Builtin 的精简示例不移除现有内部快照或 Compact 释放链路。精确值及分支示例由操作 JSON 唯一维护，Help 从 Builtin 示例派生。
 
-普通 HTTP 新执行只捕获本次请求的四项值，复用不可变 `MateCredentials`；全部缺失时使用空快照，不把空快照等同于缺少 Host 执行上下文。凭据不完整不能使已配置的 `CallMateTool` 被隐藏或返回 unavailable。资源不存在、执行上下文缺失、工具无法解析、取消和权限确认等既有失败仍由所属层处理，不为了让 Mate 判断凭据而跳过这些条件。
+普通 HTTP 新执行捕获本次请求的四项凭据值，并按 denylist 捕获其余请求头作为透传 Header，两者一并存入不可变 `MateCredentials` 快照（透传见下文；2026-10-22 起）。凭据全部缺失时凭据字段为空快照，不把空快照等同于缺少 Host 执行上下文。凭据不完整不能使已配置的 `CallMateTool` 被隐藏或返回 unavailable。资源不存在、执行上下文缺失、工具无法解析、取消和权限确认等既有失败仍由所属层处理，不为了让 Mate 判断凭据而跳过这些条件。
 
-实际调用 Mate tool execute 时，仅发送快照中已提供的非空值，使用原 Header 名称和值；null 和空字符串沿用请求构建器的省略行为，不生成默认值、不补 Bearer、不借用其他请求或 Session 的凭据。Header 的 HTTP 语法约束仍由协议组件处理，不属于凭据完整性判断。工具发现、模型调用和其他出站请求不得读取该快照。
+实际调用 Mate tool execute 时，发送快照中已提供的非空凭据值（原名原值），并随请求合并全部透传 Header；null 和空字符串沿用请求构建器的省略行为，不生成默认值、不补 Bearer、不借用其他请求或 Session 的凭据。Header 的 HTTP 语法约束仍由协议组件处理，不属于凭据完整性判断。工具发现、模型调用和其他出站请求不得读取该快照。
+
+透传 Header 覆盖入站请求中 denylist 之外的全部请求头（如 `x-plane-type` 这类业务路由 Header），选择全量透传而不是逐个加字段，是因为 Mate 侧会持续新增业务 Header，逐字段透传要同时改凭据快照、捕获点和出站构建器三处，且漏登记即静默丢失。denylist 只含三类：逐跳/传输头与 JDK HttpClient 受限头（`Host`、`Content-Length`、`Connection`、`Keep-Alive`、`Proxy-*`、`TE`、`Trailer`、`Transfer-Encoding`、`Upgrade`、`Expect`——透传会破坏出站请求或直接被传输层拒绝）；出站构建器固定设置的实体协商头（`Content-Type`、`Accept`、`Accept-Encoding`——出站请求体按工具契约重新序列化）；四项凭据 Header 本身（由快照专字段携带，出站前再剔除同名大小写变体，凭据 Header 永不重复、永不被透传值覆盖）。捕获与大小写无关并保留原始大小写，同名多值按 RFC 9110 逗号合并为单值，空值跳过，结果不可变。透传 Header 不参与凭据完整性判断，不写日志、ResultBean、Session、Event 或工具结果。入站非预期 Header 也会到达工具后端，这是全量透传的既定代价，由上游网关与内网信任边界负责清洗；实现依据见主仓 `docs/designs/mate-tool-client.md` §4.1 与 ADR-0104。定时执行没有入站请求，透传为空。
 
 #### 7.1.1 定时执行的凭据来源（待实现）
 
@@ -383,7 +385,7 @@ API。由于目前只已知成功调用形状 `normal(...)`，设计不猜测
 
 ### 7.2 生命周期与失败结果
 
-普通 HTTP 捕获的四项值仅保存在本次执行或命令处理的内存对象中。Subagent 可只读使用同一次父执行快照，不存入 Subagent Session。中断、工具确认、计划审核和问题回答请求不覆盖原执行凭据；等待期间保留原快照，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt、Event 或工具结果，Spring 单例不保存原值。
+普通 HTTP 捕获的四项凭据与透传 Header 仅保存在本次执行或命令处理的内存对象中。Subagent 可只读使用同一次父执行快照，不存入 Subagent Session。中断、工具确认、计划审核和问题回答请求不覆盖原执行凭据；等待期间保留原快照，真正结束后释放。Header 不写日志、ResultBean、Session、Prompt、Event 或工具结果，Spring 单例不保存原值。
 
 Mate 判断凭据是否可用并返回成功或失败。Claw 将 Mate 的执行失败按既有工具结果通道转换为 `isError=true`，不把已经接受的 Events 请求改报为“缺少 Header”的入口错误，也不因空快照在调用前伪造 Mate 认证失败。保留可安全展示的错误信息，不原样转发上游 HTTP 信封或可能含秘密的错误正文；公共错误码与文本投影沿用现有契约，不新增凭据专用码。网络、超时或不可解析响应同样按既有工具失败处理，不能断言是凭据错误。实际 execute 不自动重放。
 
@@ -498,6 +500,7 @@ Claude 公开证据：[Update Session](https://platform.claude.com/docs/en/api/b
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.77.0 | 2026-10-22 | 工具执行凭据快照扩展为携带入站 denylist 之外的全部请求头（如 `x-plane-type`），随 Mate tool execute 原值合并发送；denylist 范围、捕获语义、凭据变体剔除与信任边界见 §7.1。 |
 | 1.76.0 | 2026-10-21 | 创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE（待实现）。 |
 | 1.75.0 | 2026-10-20 | 可选值接口改为 ListAgentCommandValues（`GET /agents/{agentId}/commands/{commandName}/values?sessionId=`），清单新增 argumentRequired、`name` 改为 `rename`、不带 sessionId 时含 rename/model/thinking/mode，Builtin 成功只返回文本，技能命令受理错误码与普通消息一致。 |
 | 1.74.0 | 2026-10-18 | ListSessionThinkingValues 与 ListSessionModes 合并为 ListSessionCommandValues（`GET /sessions/{sessionId}/commands/{commandName}/values`），model、thinking、mode 共用，结构 `{currentValue, values}`；非选项型命令返回 404 COMMAND_VALUES_NOT_FOUND。ListSessionModels（`GET /sessions/{sessionId}/models`）一并删除，会话可选模型改由本接口的 model 取值提供，`/model` 无参执行仍返回 currentModelId、models。 |
