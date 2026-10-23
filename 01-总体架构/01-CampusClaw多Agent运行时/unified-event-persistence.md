@@ -1,6 +1,6 @@
 # 统一执行历史与事件持久化
 
-版本：1.5.0 · 2026-10-23 · 状态：Runtime 主会话持久化已实现；Subagent 持久化、Session 分类与逐工具可靠提交增量待实现。
+版本：1.6.0 · 2026-10-23 · 状态：Runtime 主会话持久化已实现；Subagent 持久化、Session 分类、可配置深度与逐工具可靠提交增量待实现。
 
 [Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../04-CampusClaw命令系统/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
@@ -66,15 +66,15 @@
 
 [原尺寸](设计图/统一事件持久化/unified_child_history.svg) · [PlantUML 源码](设计图/统一事件持久化/diagram.puml#L71)
 
-子上下文仍从自己的任务消息开始，不继承父完整对话；保留 M03 的模型、工作区、最大深度 1 和禁止循环规则。父只接收许可的进度和最后非空 Assistant 文本；内部关系用于授权查询和排障，不在现有公共工具 JSON 中增加 executionId/childSessionId。管理端子历史入口及 Mate 映射需后续单独对齐精确 API，未完成前不宣称浏览器已能展开。
+子上下文仍从自己的任务消息开始，不继承父完整对话；模型、工作区、可配置深度及独立的自身委派/循环边界遵循[M03](../02-CampusClaw工具系统/README.md#subagent-depth)，不在本节维护第二份上限。具备剩余额度的 Subagent 可以作为下一次内部调用的父执行，各级仍新建自己的持久 Session。结果只逐级回到直接父调用，不合并各级历史；父只接收许可的进度和最后非空 Assistant 文本。内部关系用于授权查询和排障，不在现有公共工具 JSON 中增加 executionId/childSessionId。管理端子历史入口及 Mate 映射需后续单独对齐精确 API，未完成前不宣称浏览器已能展开。
 
-父取消定向传播到关系中的原 child_execution_id，不能按子 Session 的当前最新执行猜测目标。停止请求不等于已终止：只在实际退出并保存终态后释放相应占用；失联保留未知。父失败或停止时请求取消其尚未结束的 Subagent，父正常完成或确认实际停止前须等待这些原执行真实收尾，等待期间不持数据库锁；未知不得伪造为已终止。Cron 的非交互限制继续传入 Subagent，ASK 或问答工具不得通过子任务绕过。子结果/终态先提交，父 Agent ToolResult 后提交；父提交失败不删除或重跑已经完成的 Subagent。
+父取消定向传播到关系中的原 child_execution_id，不能按子 Session 的当前最新执行猜测目标。停止请求不等于已终止：只在实际退出并保存终态后释放相应占用；失联保留未知。父失败或停止时请求取消其尚未结束的直接 Subagent，再由各级沿原关系传播；每级父正常完成或确认实际停止前都等待自己的直接 Subagent 真实收尾，从而覆盖后代，等待期间不持数据库锁；未知不得伪造为已终止。Cron 的非交互限制继续传入所有后代，ASK 或问答工具不得通过子任务绕过。子结果/终态先提交，父 Agent ToolResult 后提交；父提交失败不删除或重跑已经完成的 Subagent。
 
 <a id="subagent-visibility"></a>
 
 ### 4.1 Session 分类与公开入口隔离
 
-主会话和 Subagent 的持久化分类及跨表一致性由[数据库设计](../../03-数据与存储/Claw数据库设计.md#session-kind)唯一定义，本增量待实现。分类由可信 Host 创建，模型或公共请求不能指定或修改；`parent_session_id` 仍只表示复制来源，父调用关系继续使用 t_session_execution_links 的原有六字段，不另存状态或结果副本。
+主会话和 Subagent 的持久化分类及跨表一致性由[数据库设计](../../03-数据与存储/Claw数据库设计.md#session-kind)唯一定义，本增量待实现。分类由可信 Host 创建，模型或公共请求不能指定或修改；`parent_session_id` 仍只表示复制来源，父调用关系继续使用 t_session_execution_links 的原有六字段，不另存状态或结果副本。内部允许 Subagent 作父端不改变公开可见集合，所有层级的 Subagent 仍被下列主会话入口排除。
 
 | 入口 | 隔离要求 |
 |---|---|
@@ -181,6 +181,7 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.6.0 | 2026-10-23 | 委派深度引用服务配置权威，内部关系支持逐级委派、结果回传和定向取消，公共可见范围保持。 |
 | 1.5.0 | 2026-10-23 | 增加主会话与 Subagent 的显式分类、公共入口隔离和内部授权边界，并核实既有 Runtime/Cron 持久化状态。 |
 | 1.4.0 | 2026-10-15 | 定时受理服务改名为 `ScheduledSessionStarter`。 |
 | 1.3.0 | 2026-10-15 | 父 Agent 通过 `Agent` 工具调用的 Agent 统一称为 Subagent。 |

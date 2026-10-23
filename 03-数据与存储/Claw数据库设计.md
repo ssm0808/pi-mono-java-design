@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.25.0 · 日期：2026-10-23 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.26.0 · 日期：2026-10-23 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -674,7 +674,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | t_sessions.session_kind | VARCHAR(16)，NOT NULL，无数据库 DEFAULT | `main` 表示主会话，`subagent` 表示 Agent 工具受理的独立 Subagent；由每个创建入口显式写入，创建后不变 |
 | ck_t_sessions_kind | CHECK (session_kind IN ('main', 'subagent')) | 数据库约束单行取值；不把跨表一致性伪装为 CHECK |
 
-普通 Session 创建和 Cron 新建 Session 均写 `main`；Cron 关联已有 Session 时只接受 `main`。Subagent 受理写 `subagent`，并在同一短事务中创建其唯一 [t_session_execution_links](#subagent-links) 记录、首消息和原执行。关系的父端必须为 `main`，子端必须为 `subagent`；主会话不得作为关系的子端。涉及分类或关联的创建、写入与清理均由相应短事务复核上述一致性，SQL 单行 CHECK 无法跨表证明它。单侧 Session 删除后按既有保留规则留下纯 ID 关系，不为检查一致性复活已删除会话，也不新增级联外键。
+普通 Session 创建和 Cron 新建 Session 均写 `main`；Cron 关联已有 Session 时只接受 `main`。Subagent 受理写 `subagent`，并在同一短事务中创建其唯一 [t_session_execution_links](#subagent-links) 记录、首消息和原执行。内部关系父端可以是 `main` 或仍有委派额度的 `subagent`，子端必须为 `subagent`；主会话不得作为关系的子端。父深度与下一深度关系由可信 Host 按[M03 深度规则](../01-总体架构/02-CampusClaw工具系统/README.md#subagent-depth)校验，不增加关系表字段。涉及分类或关联的创建、写入与清理均由相应短事务复核上述一致性，SQL 单行 CHECK 无法跨表证明它。单侧 Session 删除后按既有保留规则留下纯 ID 关系，不为检查一致性复活已删除会话，也不新增级联外键。
 
 `parent_session_id` 继续只表示历史复制来源，不表达 Subagent 归属。公共主会话操作、用户请求查询与内部 Subagent 访问的隔离规则由[统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#subagent-visibility)维护；分类不增加公共请求或响应字段，不代替 Mate 授权。字段与 CHECK 的[目标 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)只面向首版新环境完整安装结构，不提供生产迁移或回填；若已有部署，必须另案评估，禁止用含 DROP 的安装脚本覆盖存量数据。
 
@@ -785,6 +785,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.26.0 | 2026-10-23 | 父调用关系允许具备剩余深度的 Subagent 作为父端，公共主会话分类与独立保留规则保持。 |
 | 1.25.0 | 2026-10-23 | 增加 Session 显式分类及其与父调用关系的事务校验，公开主会话查询排除 Subagent。 |
 | 1.24.0 | 2026-10-21 | §3.1：Mate 不再保存任务归属表，`t_schedule.user_id` 成为定时任务归属的唯一来源，除列表筛选外还用于单个任务的归属判断、创建配额与 Session 归属登记。 |
 | 1.23.0 | 2026-10-21 | §3.1 增加例外：`t_schedule.user_id` 保存任务创建者，任务与 Run 列表由 Claw 按用户筛选，替代 Mate 拉取全部后过滤。 |

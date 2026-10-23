@@ -2,7 +2,7 @@
 
 [返回工具系统主设计](README.md)
 
-版本：1.11.0；整理日期：2026-10-17。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13；Read 文本读取边界见 §14，Schema 校验器与依赖见 §15。
+版本：1.12.0；整理日期：2026-10-23。以下结论只适用于各行记录的源码提交，保留原核验范围；设计仓整理基线为 `9f83dc1771500ace26360c0982cb1954e2f37de4`。旧提交差距不代表最新实现状态。活动工具的历史主线状态见 §4，三项退役工具的源码删除边界见 §5，工具展示名的来源与实现范围见 §6；注册与发现的历史专项见 §8，文档组织与图形选择见 §10，参数纠正与用户展示见 §11，参数校验、确认与执行的顺序见 §12，SearchTools 最新基线和 PR #323 进度见 §13；Read 文本读取边界见 §14，Schema 校验器与依赖见 §15，[§16](#subagent-depth-evidence)只升级本次 Subagent 深度和装配范围。
 
 | 基线 | 提交 |
 |---|---|
@@ -442,3 +442,19 @@ CampusClaw 采用 `Skill → SearchTools → CallTool`：Skill 正文引用唯�
 | DeepSeek Harness | `master@1517a4dbca0a2789ff1d41ba439600f8547d23fa` | `packages/core/tools/src/json-schema.ts` · `assertSupportedJsonSchema`、`validateJsonSchemaValue`；`packages/mcp/mcp-client/src/tools.ts` · `createMcpToolDefinition` | 自写严格子集：`type`、`oneOf`、`properties`、`required`、`additionalProperties`（仅布尔）、`items`、`enum`、`const` 及四个注解，其余关键字拒绝；`oneOf` 至少两个分支且不许有同级关键字，`required` 的字段必须出现在 `properties`。只用于自有工具，MCP 输入 Schema 原样透传且本地不校验 |
 
 DeepSeek Harness 的子集规则比 CampusClaw 更严：`CronTool` 在 `oneOf` 旁边还有同级 `properties` 和 `required`，分支内 `required` 的字段也不在分支 `properties` 中，按 DSH 规则会被拒绝，所以 §9.7 不照搬这两条限制。
+
+<a id="subagent-depth-evidence"></a>
+
+## 16. Subagent 深度与工具披露（2026-10-23）
+
+本次重新 fetch 公共实现仓默认分支 `main@e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2`，在保留用户工作树的前提下按明确提交核验下列范围。主设计[§10.1](README.md#subagent-depth)的服务配置、整树上限与逐级披露为**待实现**；只升级这些 Java 符号，不重新核定其他工具或外部 Agent 基线。
+
+| 源码路径与符号 | 已观察实现与差距 |
+|---|---|
+| [tool/agent/SubagentExecutionService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#L41) · MAX_CHILD_DEPTH/execute/requireAvailableDepth | 最大深度是固定常量 1，执行时检查 context.depth；没有服务配置或根 maxDepth 快照，新的内部原因码与受理复核仍待实现 |
+| 同文件 [runChild](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#L83)；[session/AgentSessionFactory.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/AgentSessionFactory.java#L82) · create | Subagent 创建请求不提供 agentToolFactory；工厂把 Host 提供的工具工厂交给装配上下文，嵌套需要同时调整可信上下文与工厂接线，不能只放大常量 |
+| 同文件 [resolveChildModel](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#L130) | 查询当前 Subagent 自身目录快照和模型绑定，调用默认模型解析，不以父模型作自动回退；多级执行继续复用 Model 规则，不新增另一套模型来源 |
+| [tool/builtin/BuiltInToolProperties.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/BuiltInToolProperties.java#L47) · childAgent/toolsFor；[DefaultBuiltInToolFactory.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/builtin/DefaultBuiltInToolFactory.java#L73) · contextualTool | 现有 Subagent 默认清单无 Agent，缺 Host 工厂时构造 unavailable 工具；目标改为候选包含、按实际剩余额度与可信能力过滤，原始显式空配置语义不变 |
+| [tool/agent/SubagentExecutionContext.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionContext.java#L30) · root；[SubagentExecutionService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#L157) · requireNoCycle/requireNotSelfBound | 根 depth=0、祖先集含当前 Agent；源码仍拒自身绑定及祖先 ID。自身默认免绑定委派是另一个已定待实现目标，不把这些拒绝继续当有效目标；更大深度不自动允许非自身跨 Agent 祖先回指 |
+
+配置不进入模型参数、Agent 目录或数据库身份副本；每次新建 Session 与内部关系仍走统一历史的原六字段。未运行 Java 或真实模型测试，没有新增 Maven 依赖；同轮独立持久化缺口见[统一历史证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md#session-kind-evidence)。

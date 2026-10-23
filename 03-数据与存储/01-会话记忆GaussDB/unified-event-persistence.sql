@@ -9,7 +9,8 @@ ALTER TABLE t_sessions ADD CONSTRAINT ck_t_sessions_kind
 -- 无数据库默认值：普通创建与 Cron 新建写 main，Subagent 受理写 subagent。
 -- Cron 关联会话仅接受 main；parent_session_id 仍只表示历史复制来源。
 -- 分类与 t_session_execution_links 的跨表一致性由创建、写入和清理短事务校验：
--- 父端为 main、子端为 subagent，Subagent 与唯一关系、首消息和原执行同事务创建。
+-- 父端为 main 或仍有委派额度的 subagent，子端为 subagent；深度关系由 Host 按 M03 校验。
+-- Subagent 与唯一关系、首消息和原执行同事务创建，不增加关系字段。
 -- 单行 CHECK 不校验其他表；单侧删除后可保留纯 ID 关系，不复活已删除会话。
 
 ALTER TABLE t_session_entries ADD COLUMN tool_call_entry_id VARCHAR(128);
