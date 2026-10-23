@@ -1,6 +1,6 @@
 # 统一执行历史与事件持久化
 
-版本：1.4.0 · 2026-10-15 · 状态：统一受理、Subagent 持久化、逐工具提交及统计投影均待实现。
+版本：1.5.0 · 2026-10-23 · 状态：Runtime 主会话持久化已实现；Subagent 持久化、Session 分类与逐工具可靠提交增量待实现。
 
 [Runtime 主设计](README.md) · [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#pending-changes) · [源码证据](unified-event-persistence-evidence.md) · [定时任务](../08-CampusClaw定时任务/README.md#normal-acceptance) · [Skill 统计](../04-CampusClaw命令系统/03-Skill加载统计/README.md) · [Session 存储](../../03-数据与存储/01-会话记忆GaussDB/README.md)
 
@@ -18,13 +18,13 @@
 
 | 范围 | 已观察实现 | 目标及理由 |
 |---|---|---|
-| Runtime | Java main `769e8659` 的 Coordinator 安装 Projector；Entry 与公共事件同事务；工具结果主要在 TurnEnd 保存 | 保留共享追加骨架，增加每个最终工具结果的可靠提交点 |
-| Cron | main 仍是进程内调度、JSON/JSONL 和直接 Factory + prompt | 最新 Cron 0.31.2 / execution 0.1.0 已规定每 Run 新建 Session、原子受理后进 Runtime；本设计复用这一方向，不改调度策略 |
-| Subagent | main 直接创建内存 ManagedAgentSession，父侧接收进度与最后文本 | 每次真实 Agent 调用关联独立持久化 Session，统一执行与历史，不把内存对象当数据库资源 |
+| Runtime | Java main `e8da1b77` 的 Coordinator 安装 Projector，Repository 在同一事务写 Entry 与公共事件；主会话历史已持久化 | 保留共享追加骨架，增加每个最终工具结果的可靠提交点；原有持久化不标为待实现 |
+| Cron | 同一 `e8da1b77` 已由 ScheduledSessionStarter 经 Repository 受理、Coordinator 执行，支持新建和关联主会话 | 复用现有数据库历史路径；分类增量要求新建写 main、关联只接受 main，不改 M10 的调度或保留策略 |
+| Subagent | 同一 `e8da1b77` 仍直接创建内存 ManagedAgentSession，父侧接收进度与最后文本 | 每次真实 Agent 调用关联独立持久化 Session，统一执行与历史，不把内存对象当数据库资源 |
 | pi | 普通示例以 --no-session 运行子进程，但返回 details 含子消息；experimental durable 示例另建 conversation | 借鉴完整消息恢复语义；不把普通示例说成独立持久化子 Session，也不照搬 experimental API |
 | Codex / OpenCode | 非 ephemeral Codex child thread 有独立 rollout；OpenCode Task 创建/复用带 parentID 的 Session，消息与 parts 有数据库投影 | 借鉴独立子历史与父侧摘要分离；CampusClaw 首版每次新调用新建 Subagent，不照搬跨次 task_id 复用 |
 
-完整 SHA、默认分支、核对日期、路径和符号见[证据](unified-event-persistence-evidence.md)。本方案属于架构变更；独立授权、安全投影、非交互 Cron 和不重放是产品约束及安全边界。源码快照不是稳定发布或新方案验收。
+完整 SHA、默认分支、核对日期、路径和符号见[证据](unified-event-persistence-evidence.md#session-kind-evidence)；本次只升级 Java 主会话、Cron、Subagent 和分类相关范围，以及 pi 普通示例与结果提交顺序；其他外部基线保留各自核验归属。本方案属于架构变更；独立授权、安全投影、非交互 Cron 和不重放是产品约束及安全边界。源码快照不是稳定发布或新方案验收。
 
 ## 3. 三种入口，一套持久化执行链
 
@@ -54,7 +54,7 @@
 
 内部父子关系 `t_session_execution_links` 的字段、主键、唯一约束与清理由 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#subagent-links)维护，目标待实现。一条父调用至多受理一个 Subagent；不复用表示历史复制来源的 t_sessions.parent_session_id，也不复制正文、工具结果或运行终态。
 
-受理前，Agent Pipeline 先做可信绑定解析与参数校验，再由 Host 校验权限/必要确认。然后事务内复核父 execution 固定身份、未停止、父调用存在与未完成、子任务容量以及授权快照有效性；受理和父停止争用同一父 execution 权威锁。Subagent 自己保存可信访问范围与非秘密来源，读取时重新授权；不是持有父 ID 就能读 Subagent。业务凭据只传本次内存执行，不进入关系、Session 元数据或消息。
+受理前，Agent Pipeline 先做可信绑定解析与参数校验，再由 Host 校验权限/必要确认。然后事务内复核父 execution 固定身份、未停止、父调用存在与未完成、子任务容量以及授权快照有效性；受理和父停止争用同一父 execution 权威锁。授权结果与可信服务来源仅用于本次内存执行快照，Claw 不持久化用户 owner、tenant、scope 或请求 Header；内部读取仍按 Mate 当前授权重新检查，不是持有父 ID 就能读 Subagent。业务凭据不进入关系、Session 元数据或消息，身份归属遵循[数据库边界](../../03-数据与存储/Claw数据库设计.md#mate-ownership)。
 
 同父调用的重复内部通知只返回原关联和状态，不再创建、prompt 或重放；未知提交先读库对账。必须先取得一次启动权，再执行。进程失联后的接管只做对账，不自动接管业务执行。Parent 与 Subagent 都计入 Runtime 的相应容量，父等待期间不持数据库锁；Subagent 配额需独立预留或直接拒绝，不得让所有父任务占满资源后无限等待子任务槽。
 
@@ -68,7 +68,26 @@
 
 子上下文仍从自己的任务消息开始，不继承父完整对话；保留 M03 的模型、工作区、最大深度 1 和禁止循环规则。父只接收许可的进度和最后非空 Assistant 文本；内部关系用于授权查询和排障，不在现有公共工具 JSON 中增加 executionId/childSessionId。管理端子历史入口及 Mate 映射需后续单独对齐精确 API，未完成前不宣称浏览器已能展开。
 
-父取消定向传播到关系中的原 child_execution_id，不能取消子 Session 后续的新对话。停止请求不等于已终止：只在实际退出并保存终态后释放相应占用；失联保留未知。Cron 的非交互限制继续传入 Subagent，ASK 或问答工具不得通过子任务绕过。子结果/终态先提交，父 Agent ToolResult 后提交；父提交失败不删除或重跑已经完成的 Subagent。
+父取消定向传播到关系中的原 child_execution_id，不能按子 Session 的当前最新执行猜测目标。停止请求不等于已终止：只在实际退出并保存终态后释放相应占用；失联保留未知。父失败或停止时请求取消其尚未结束的 Subagent，父正常完成或确认实际停止前须等待这些原执行真实收尾，等待期间不持数据库锁；未知不得伪造为已终止。Cron 的非交互限制继续传入 Subagent，ASK 或问答工具不得通过子任务绕过。子结果/终态先提交，父 Agent ToolResult 后提交；父提交失败不删除或重跑已经完成的 Subagent。
+
+<a id="subagent-visibility"></a>
+
+### 4.1 Session 分类与公开入口隔离
+
+主会话和 Subagent 的持久化分类及跨表一致性由[数据库设计](../../03-数据与存储/Claw数据库设计.md#session-kind)唯一定义，本增量待实现。分类由可信 Host 创建，模型或公共请求不能指定或修改；`parent_session_id` 仍只表示复制来源，父调用关系继续使用 t_session_execution_links 的原有六字段，不另存状态或结果副本。
+
+| 入口 | 隔离要求 |
+|---|---|
+| Session 读取、配置更新、删除与命令；公开事件提交、历史及轮次读取 | 只接受主会话；执行前在所属事务内复核，不能把知道内部 ID 当成对子资源的授权 |
+| 按 Agent 查询用户请求与 total | 总数和分页同时只统计主会话，避免将 Subagent 的首任务消息混入用户请求 Trace |
+| 用户中断、工具确认、计划审核与问题回答 | 保持主会话既有目标与一次消费语义；父中断通过内部关联定向传播，不将 Subagent 暴露为新的公开控制目标 |
+| Cron 新建或关联 Session | 新建为主会话，关联目标必须已经是主会话，不能借 Cron 启动 Subagent 的下一轮 |
+| 目标中的列表和复制 | 继续限定主会话；现有存储目标不等于已经存在公开列表或复制接口 |
+| 内部执行、对账、审计和保留清理 | 经专用内部服务按真实 Session 分类、固定执行和 Mate 授权处理，不能调用公开主会话入口绕过隔离 |
+
+公开读取、配置、消息/命令及控制请求即使持有真实 Subagent ID，也沿既有不可见资源语义返回 `SESSION_NOT_FOUND`，不新增子资源错误目录。DELETE 保持既有“不存在亦返回 204”的幂等契约：对子资源视为不可见并返回同样回执，不删除其记录或触发清理。列表与 Trace 查询直接排除，不泄漏内部 Session 的存在。
+
+每次 Agent 新调用仍创建新 Subagent，仅保存历史不开放跨次续聊；不增加新的 HTTP、公开分类字段、恢复参数或 UI 展开承诺。当前 Subagent 工具 profile 的确认、问答等能力边界保持，持久化不会自动提供主会话的交互续跑能力；Cron 的非交互限制随执行继续传递。公共事件只读取该 Session 自己的安全投影，不能把 Subagent 原始事件直接送入父流；父 Agent ToolResult 的既有正文形态保持，不追加内部 ID 或全量子历史。父子 Usage 各自累计，父摘要不再次计入子用量。
 
 ## 5. 保存哪些记录，如何保持一次提交
 
@@ -162,6 +181,7 @@ STOP_REQUESTED 不拒绝同一原执行已在途调用的真实结果；实际�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.5.0 | 2026-10-23 | 增加主会话与 Subagent 的显式分类、公共入口隔离和内部授权边界，并核实既有 Runtime/Cron 持久化状态。 |
 | 1.4.0 | 2026-10-15 | 定时受理服务改名为 `ScheduledSessionStarter`。 |
 | 1.3.0 | 2026-10-15 | 父 Agent 通过 `Agent` 工具调用的 Agent 统一称为 Subagent。 |
 | 1.2.0 | 2026-10-14 | 根执行终态提交增加事务内终态扩展点，供定时任务结束 Run。 |

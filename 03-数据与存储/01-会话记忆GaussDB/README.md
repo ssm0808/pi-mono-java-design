@@ -1,8 +1,8 @@
 # CampusClaw Java GaussDB Session 线性事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.22.0<br>
-> 日期：2026-10-10<br>
+> 版本：v0.23.0<br>
+> 日期：2026-10-23<br>
 > 状态：单条追加时间线已确认；主线顺序 Mapper 已核验，统一历史增量待实现<br>
 > Java 核验基线：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；本地源码快照，不代表最新远端<br>
 > pi 专项基线：默认分支 `main`，2026-09-22 隔离 fetch，`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`；默认分支快照不等于稳定发布<br>
@@ -19,6 +19,8 @@
 内部读取以 `session_id + entry_seq` 为边界，公共 ListEvents 以 `session_id + event_seq` 为边界；均不按父链递归、不新增当前路径成员表或分支缓存。`parent_id`、`active_leaf_id` 沿用原字段名，分别表示前一条 Entry 与最新 Entry，供完整性和并发检查使用，不决定查询可见集合。
 
 本专题的四张基础表是 `t_sessions`、`t_session_entries`、`t_session_sequences`、`t_session_materialized`。它们不是当前 Runtime 数据库的完整表清单：已实现的 `t_session_events`、`t_session_event_projection`、内部 Record、统计和执行控制等表继续存在，不因本设计删除。公共事件字段、投影和数字分页由 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)维护；压缩算法由[压缩与恢复](./compaction.md)维护。
+
+主会话与 Subagent 复用上述存储机制，但各自维护独立时间线、序号、Usage 和安全事件。其显式分类、创建入口及跨表一致性唯一维护在[数据库设计的 Session 分类](../Claw数据库设计.md#session-kind)，本增量待实现。普通公开会话入口只面向主会话，不因持久化 Subagent 而开放其继续对话、配置、确认或复制；内部留档与授权读取边界见[统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#subagent-visibility)。父会话保留自己的完整历史，其中 Agent 工具结果只保存 Subagent 最终文本，不复制其完整对话；删除继续保持两端独立保留。
 
 ![CampusClaw Session 线性存储目标结构](./设计图/memory-architecture.svg)
 
@@ -95,6 +97,8 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 [原尺寸 SVG](./设计图/memory-data-model.svg) · [查看 PlantUML 源码](./设计图/diagram.puml#L155)
 
 表结构统一由 [Claw 数据库设计](../Claw数据库设计.md#current-schema)维护，本图仍说明 Session 基础关系，不代表全库只有四张表。以下保留原章节入口，避免旧链接失效。
+
+图中的基础字段不替代[分类目标增量](../Claw数据库设计.md#session-kind)；该增量不改变图中各表的独立归属与追加依赖。
 
 ### 3.1 `t_sessions`
 
@@ -265,6 +269,7 @@ Entry 时间线完整不代表每条都进入模型。配置、控制、独立 U
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.23.0 | 2026-10-23 | 引用 Session 显式分类并隔离 Subagent 的公共主会话入口，保持独立历史、Usage 与保留边界。 |
 | v0.21.0 | 2026-10-10 | 表字段集中到 Claw 数据库设计，关联全库 SQL 并更新主线非递归查询核验。 |
 | v0.20.0 | 2026-10-10 | 补充唯一工具结果和父子执行关联，清理保留 Skill 累计并登记历史缺口。 |
 | v0.19.0 | 2026-10-02 | Session 与事件目标时间列统一到秒，保持提交序号排序和新建环境交付范围。 |

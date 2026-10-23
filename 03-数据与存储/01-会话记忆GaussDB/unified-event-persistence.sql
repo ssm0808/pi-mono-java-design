@@ -1,6 +1,17 @@
 -- Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
 -- 待实现：对 Session 基础模型的目标补充，不是生产升级/迁移脚本。
 -- 实施时合并进完整安装 DDL；不重复定义既有公共事件、控制和根执行表。
+-- 仅面向首版新环境；已有部署的迁移与回填须另案评估，禁止用安装脚本覆盖存量数据。
+ALTER TABLE t_sessions ADD COLUMN session_kind VARCHAR(16) NOT NULL;
+COMMENT ON COLUMN t_sessions.session_kind IS '会话分类，main 表示主会话，subagent 表示 Agent 工具受理的独立 Subagent';
+ALTER TABLE t_sessions ADD CONSTRAINT ck_t_sessions_kind
+    CHECK (session_kind IN ('main', 'subagent'));
+-- 无数据库默认值：普通创建与 Cron 新建写 main，Subagent 受理写 subagent。
+-- Cron 关联会话仅接受 main；parent_session_id 仍只表示历史复制来源。
+-- 分类与 t_session_execution_links 的跨表一致性由创建、写入和清理短事务校验：
+-- 父端为 main、子端为 subagent，Subagent 与唯一关系、首消息和原执行同事务创建。
+-- 单行 CHECK 不校验其他表；单侧删除后可保留纯 ID 关系，不复活已删除会话。
+
 ALTER TABLE t_session_entries ADD COLUMN tool_call_entry_id VARCHAR(128);
 COMMENT ON COLUMN t_session_entries.tool_call_entry_id IS '仅工具最终结果填写的同会话调用 Entry ID，用于唯一结果约束';
 ALTER TABLE t_session_entries ADD CONSTRAINT ck_session_tool_result_ref CHECK (
@@ -35,5 +46,5 @@ COMMENT ON COLUMN t_session_execution_links.parent_tool_call_entry_id IS '父会
 COMMENT ON COLUMN t_session_execution_links.created_at IS '关联创建的 UTC 秒级时间';
 CREATE INDEX idx_session_child_parent_execution
     ON t_session_execution_links (parent_session_id, parent_execution_id);
--- 不设级联删除；可信 scope/授权快照归子 Session/首执行，绝不复制秘密凭据。
+-- 不设级联删除；授权及可信服务来源仅在本次内存执行快照中使用，Claw 不落用户归属或秘密。
 -- 父子分别保留；双方均可清理且原执行已明确收尾后，才清除此最小关系。

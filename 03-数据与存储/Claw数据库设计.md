@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.24.0 · 日期：2026-10-21 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.25.0 · 日期：2026-10-23 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -148,7 +148,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - `CONSTRAINT ck_t_sessions_resource_version CHECK (resource_version > 0)`
 - `CONSTRAINT ck_t_sessions_display_name CHECK (display_name IS NULL OR octet_length(display_name) BETWEEN 1 AND 80)`
 
-目标边界：目标中 resource_version 仅作内部一致性版本，不暴露 ETag 或客户端条件更新；主线 SQL 注释仍含旧 ETag 用途，不作为有效接口规则。created_at/updated_at 的秒级目标及 PR 归属见 §3；不增加用户范围或归属列，PR 偏差见 §5.5。
+目标边界：目标中 resource_version 仅作内部一致性版本，不暴露 ETag 或客户端条件更新；主线 SQL 注释仍含旧 ETag 用途，不作为有效接口规则。created_at/updated_at 的秒级目标及 PR 归属见 §3；不增加用户范围或归属列，PR 偏差见 §5.5。主会话与 Subagent 的显式分类见[待实现增量](#session-kind)，不将其混入上表的主线物理快照。
 
 <a id="t_session_entries"></a>
 
@@ -663,6 +663,21 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 本节承接已存在的设计增量，不借数据库文档整理新增业务行为。main 和 PR #332 未包含下列统一历史结构，实施状态为**待实现**；具体接口、执行流程与待决项仍由关联模块维护。
 
+<a id="session-kind"></a>
+
+### 6.0 Session 分类
+
+`t_sessions` 复用既有独立时间线、事件、执行控制与 Usage 存储，通过以下显式字段区分主会话与 Subagent；分类不依赖复制来源或可变 metadata。该增量**待实现**，2026-10-23 核验 `main@e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2` 尚无此列，范围见[统一历史证据](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md#session-kind-evidence)。
+
+| 对象 | 目标定义 | 写入与约束 |
+|---|---|---|
+| t_sessions.session_kind | VARCHAR(16)，NOT NULL，无数据库 DEFAULT | `main` 表示主会话，`subagent` 表示 Agent 工具受理的独立 Subagent；由每个创建入口显式写入，创建后不变 |
+| ck_t_sessions_kind | CHECK (session_kind IN ('main', 'subagent')) | 数据库约束单行取值；不把跨表一致性伪装为 CHECK |
+
+普通 Session 创建和 Cron 新建 Session 均写 `main`；Cron 关联已有 Session 时只接受 `main`。Subagent 受理写 `subagent`，并在同一短事务中创建其唯一 [t_session_execution_links](#subagent-links) 记录、首消息和原执行。关系的父端必须为 `main`，子端必须为 `subagent`；主会话不得作为关系的子端。涉及分类或关联的创建、写入与清理均由相应短事务复核上述一致性，SQL 单行 CHECK 无法跨表证明它。单侧 Session 删除后按既有保留规则留下纯 ID 关系，不为检查一致性复活已删除会话，也不新增级联外键。
+
+`parent_session_id` 继续只表示历史复制来源，不表达 Subagent 归属。公共主会话操作、用户请求查询与内部 Subagent 访问的隔离规则由[统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#subagent-visibility)维护；分类不增加公共请求或响应字段，不代替 Mate 授权。字段与 CHECK 的[目标 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)只面向首版新环境完整安装结构，不提供生产迁移或回填；若已有部署，必须另案评估，禁止用含 DROP 的安装脚本覆盖存量数据。
+
 <a id="tool-result"></a>
 
 ### 6.1 工具最终结果关联
@@ -728,7 +743,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | idx_t_sessions_agent | `t_sessions (agent_id)` | 待实现 |
 | idx_t_session_events_session_user_time | `t_session_events (session_id, created_at, event_seq) WHERE type = 'user.message'` | 待实现；GaussDB 部分索引支持与执行计划未验证，不支持时去掉 WHERE |
 
-查询必须连接 t_sessions：删除事务立即删除会话行，事件行由清理任务稍后删除，连接保证已删除会话不再返回。agent_id 不是用户归属，不参与授权判断（§3.1）。
+查询必须连接 t_sessions：删除事务立即删除会话行，事件行由清理任务稍后删除，连接保证已删除会话不再返回。落实 [Session 分类](#session-kind)后，主会话用户请求查询同时限定 `session_kind='main'`，总数与分页使用相同条件，避免把 Subagent 的任务消息当作用户请求。agent_id 不是用户归属，不参与授权判断（§3.1）。
 
 <a id="lifecycle"></a>
 
@@ -756,7 +771,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 实现仓 session_initial_data.sql / session_privileges.sql | 初始化及应用角色权限与同版本完整表清单配套；运行身份只需相应 DML，不让服务启动自动建表 |
 | 实现仓 campusclaw/scripts/install/initdb_gaussdbv5.sql | 公司安装镜像由同步脚本生成；不能单独手工修改并与 canonical DDL 脱节；本次未验收公司安装 |
 | [Session 基础 schema.sql](01-会话记忆GaussDB/schema.sql) | 历史四表基础示意，只有 17 个字段；保留关联供理解与历史核对，不是全库定义或部署入口 |
-| [统一历史增量 SQL](01-会话记忆GaussDB/unified-event-persistence.sql) | §6.1/§6.2 的待实现片段，需随目标核对后合入完整安装结构 |
+| [统一历史增量 SQL](01-会话记忆GaussDB/unified-event-persistence.sql) | §6.0～§6.2 的待实现片段，需随目标核对后合入新环境完整安装结构；不是生产迁移或存量回填脚本 |
 | [Skill 目标 schema.sql](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/schema.sql) / [写入片段](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/record-usage.sql) | §6.3 的待实现结构与 DML，不授权直接删除主线流水或日表 |
 | [Mate Agent schema.sql](02-Agent元数据GaussDB/schema.sql) | 外部元数据数据库的独立设计材料，不加入 Claw 安装脚本 |
 
@@ -770,6 +785,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.25.0 | 2026-10-23 | 增加 Session 显式分类及其与父调用关系的事务校验，公开主会话查询排除 Subagent。 |
 | 1.24.0 | 2026-10-21 | §3.1：Mate 不再保存任务归属表，`t_schedule.user_id` 成为定时任务归属的唯一来源，除列表筛选外还用于单个任务的归属判断、创建配额与 Session 归属登记。 |
 | 1.23.0 | 2026-10-21 | §3.1 增加例外：`t_schedule.user_id` 保存任务创建者，任务与 Run 列表由 Claw 按用户筛选，替代 Mate 拉取全部后过滤。 |
 | 1.22.0 | 2026-10-15 | t_skill_usage.entry_point 的 Subagent 来源值改为 SUBAGENT，约束同步改名。 |
