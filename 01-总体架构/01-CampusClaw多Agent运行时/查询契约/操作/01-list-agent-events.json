@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/agents/{agentId}/events",
     "summary": "按时间范围跨会话列出 Agent 名下的用户请求",
-    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除会话列出指定类型的完整事件，供 Mate Trace 定位用户请求。每条 user.message 对应一轮，结果附所属 sessionId，可据此展开所在轮次；响应附 total 表示范围内总条数。",
+    "description": "按 Agent 与 UTC 时间范围，跨该 Agent 全部未删除主会话列出指定类型的完整事件，供 Mate Trace 定位用户请求。每条 user.message 对应一轮，结果附所属 sessionId，可据此展开所在轮次；响应附 total 表示范围内总条数。",
     "parameters": [
       {
         "$ref": "parameters.agentId"
@@ -273,7 +273,7 @@
           ],
           [
             "范围",
-            "只读该 Agent 下未删除会话中的事件；已删除会话的残留事件不返回。定时任务与 Subagent 会话中的 user.message 同样返回。"
+            "只读该 Agent 下未删除主会话中的事件；已删除会话的残留事件及 Subagent 任务消息不返回。Cron 根会话中的 user.message 继续返回；父会话被删除不改变子会话的排除规则。"
           ],
           [
             "时间",
@@ -285,7 +285,7 @@
           ],
           [
             "分页",
-            "整数页码，规则与 ListSessionEvents 相同：默认 page=1、limit=50，limit 不超过 200。另返回 total：本次读取时满足 agentId、type 与时间范围的事件总数，与 page、limit 无关，可用于显示总数与页码；与本页在同一次一致读取中得到，前后页之间可能变化。不固定快照，翻页期间的删除或晚提交可能让后续页移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重。"
+            "整数页码，规则与 ListSessionEvents 相同：默认 page=1、limit=50，limit 不超过 200。另返回 total：本次读取时满足 agentId、type、时间范围及主会话可见条件的事件总数，与 page、limit 无关，可用于显示总数与页码；与本页使用相同主会话过滤条件，在同一次一致读取中得到，前后页之间可能变化。不固定快照，翻页期间的删除或晚提交可能让后续页移动；需要完整结果时用已结束的时间段查询，并按 sessionId + eventId 去重。"
           ],
           [
             "标识",

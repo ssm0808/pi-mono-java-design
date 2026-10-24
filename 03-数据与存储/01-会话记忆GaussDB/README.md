@@ -1,8 +1,8 @@
 # CampusClaw Java GaussDB Session 线性事件存储 SR 设计
 
 > 文档编号：SR-MEM-001<br>
-> 版本：v0.23.0<br>
-> 日期：2026-10-23<br>
+> 版本：v0.24.0<br>
+> 日期：2026-10-24<br>
 > 状态：单条追加时间线已确认；主线顺序 Mapper 已核验，统一历史增量待实现<br>
 > Java 核验基线：`fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；本地源码快照，不代表最新远端<br>
 > pi 专项基线：默认分支 `main`，2026-09-22 隔离 fetch，`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`；默认分支快照不等于稳定发布<br>
@@ -20,7 +20,7 @@
 
 本专题的四张基础表是 `t_sessions`、`t_session_entries`、`t_session_sequences`、`t_session_materialized`。它们不是当前 Runtime 数据库的完整表清单：已实现的 `t_session_events`、`t_session_event_projection`、内部 Record、统计和执行控制等表继续存在，不因本设计删除。公共事件字段、投影和数字分页由 [ListEvents](../../01-总体架构/01-CampusClaw多Agent运行时/chat-events-history-design.md)维护；压缩算法由[压缩与恢复](./compaction.md)维护。
 
-主会话与 Subagent 复用上述存储机制，但各自维护独立时间线、序号、Usage 和安全事件。其显式分类、创建入口及跨表一致性唯一维护在[数据库设计的 Session 分类](../Claw数据库设计.md#session-kind)，本增量待实现。普通公开会话入口只面向主会话，不因持久化 Subagent 而开放其继续对话、配置、确认或复制；内部留档与授权读取边界见[统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#subagent-visibility)。父会话保留自己的完整历史，其中 Agent 工具结果只保存 Subagent 最终文本，不复制其完整对话；删除继续保持两端独立保留。
+主会话与 Subagent 复用上述存储机制，但各自维护独立时间线、序号、Usage 和安全事件。其分类由 t_session_execution_links 中的 incoming link 决定，不在旧主表或 Entry 表新增物理列；创建与关系同事务，子主行仍存在时关系不得先清理，父先删除不改变子分类。完整规则唯一维护在[数据库设计的 Session 分类](../Claw数据库设计.md#session-kind)，本增量待实现。普通公开会话入口只面向主会话，不因持久化 Subagent 而开放其继续对话、配置、确认或复制；内部留档与授权读取边界见[统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#subagent-visibility)。父会话保留自己的完整历史，其中 Agent 工具结果只保存 Subagent 最终文本，不复制其完整对话；删除继续保持两端独立保留。
 
 ![CampusClaw Session 线性存储目标结构](./设计图/memory-architecture.svg)
 
@@ -98,7 +98,7 @@ pi SQLite 保留分支能力，并在写入时维护分支索引。正常追加�
 
 表结构统一由 [Claw 数据库设计](../Claw数据库设计.md#current-schema)维护，本图仍说明 Session 基础关系，不代表全库只有四张表。以下保留原章节入口，避免旧链接失效。
 
-图中的基础字段不替代[分类目标增量](../Claw数据库设计.md#session-kind)；该增量不改变图中各表的独立归属与追加依赖。
+[关系分类规则](../Claw数据库设计.md#session-kind)不新增图中基础表字段；各会话继续独立归属并复用既有追加依赖。
 
 ### 3.1 `t_sessions`
 
@@ -201,9 +201,9 @@ COMMIT
 
 ### 6.5 删除 Session
 
-按现有依赖顺序在删除事务中清理事件/执行关联与基础表，不只删四张表；外部资源清理由其既有机制处理。不用本次设计增加 `ON DELETE CASCADE` 或跳过约束。具体 Runtime 删除/保留策略继续有效；父子执行关联按统一历史的双端保留与实际收尾条件清理，不随单侧 Session 级联删除。
+按现有依赖顺序在删除事务中清理事件/执行关联与基础表，不只删四张表；外部资源清理由其既有机制处理。不用本次设计增加 `ON DELETE CASCADE` 或跳过约束。具体 Runtime 删除/保留策略继续有效；父子执行关联按统一历史的双端保留与实际收尾条件清理；子 t_sessions 行仍存在时 incoming link 不得先删，不随单侧 Session 级联删除。
 
-[M05 使用统计](../../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)从新 LIVE 成功工具结果同事务维护累计，不建立独立事实或采集链。删除与追加争用相同生命周期锁，清理前登记统计历史缺口，不扣累计；活跃/未知执行须先停止或对账，不能通过删除解除占用。恢复、复制不计数，from/to 与日表仍待核实。三入口及父子关联由[统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)维护；[补充 DDL](unified-event-persistence.sql)增加工具结果关联与独立执行关系，不复用表示复制来源的 parent_session_id。四表基础模型仍非完整安装 DDL。
+独立的 [M05 使用统计](../../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)目标从新 LIVE 成功工具结果同事务维护累计，不建立独立事实或采集链。删除与追加争用相同生命周期锁，清理前登记统计历史缺口，不扣累计；活跃/未知执行须先停止或对账，不能通过删除解除占用。恢复、复制不计数，from/to 与日表仍待核实。三入口及父子关联由[统一历史](../../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)维护；[补充 DDL](unified-event-persistence.sql)仅新增父子执行关系，不复用表示复制来源的 parent_session_id。通用工具结果去重与统计增量独立维护，不作为 Subagent 留档前置。四表基础模型仍非完整安装 DDL。
 
 ## 7. 顺序读取、分页和模型上下文
 
@@ -269,6 +269,7 @@ Entry 时间线完整不代表每条都进入模型。配置、控制、独立 U
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| v0.24.0 | 2026-10-24 | Subagent 仅新增父子关系并以 incoming link 分类，保持共表独立历史与公开主会话边界。 |
 | v0.23.0 | 2026-10-23 | 引用 Session 显式分类并隔离 Subagent 的公共主会话入口，保持独立历史、Usage 与保留边界。 |
 | v0.21.0 | 2026-10-10 | 表字段集中到 Claw 数据库设计，关联全库 SQL 并更新主线非递归查询核验。 |
 | v0.20.0 | 2026-10-10 | 补充唯一工具结果和父子执行关联，清理保留 Skill 累计并登记历史缺口。 |

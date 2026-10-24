@@ -4,8 +4,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 1.114.0 |
-| 更新日期 | 2026-10-23 |
+| 文档版本 | 1.115.0 |
+| 更新日期 | 2026-10-24 |
 | 文档职责 | 按模块解释架构取舍与实现差距，支撑设计讨论、架构答辩和面试 |
 | 工具状态专项基线 | 2026-09-18 已 fetch Java 默认分支 main，核验 `8c5fda1dde51675859bc9c07e145dbe253656dea`；仅更新 A03/A05/A08 及 A07 提问展示子集，路径与符号见[§12](../06-CampusClaw计划模式/source-evidence.md#12-主线实现状态核验2026-09-18)，不升级外部基线或其他模块结论 |
 | 退役工具专项基线 | A10 单独采用 Java `8c5fda1dde51675859bc9c07e145dbe253656dea` 与 pi main `e4ce7b449f4d91589c8760d6fbfa6eaaf82b05fe`；仅更新工具组合与删除边界，其他条目的历史证据不变 |
@@ -21,7 +21,7 @@
 | 工具发现专项基线 | A11：2026-09-22 fetch OpenCode `dev@fe3f3a41f79ad292cc3c7c629567385a20ec5130`、Codex `main@ac7634b9f73ec1bf96466be7a5869f0949d20b30`；沿用 DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`。仅升级 Skill、固定搜索、延迟工具暴露与远端工具适配结论；默认分支快照不等于稳定发布，其他模块历史证据不变 |
 | 参数恢复专项基线 | A11：2026-09-22 确认 pi `main@95fbc04997eaee961eb673fa7923e9220609ebd5`、DSH `master@c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`；CampusClaw PR #323 开发提交从 `c9a2340f87bda6dff6bbd352f6995f8551206bb5` 更新到 `ae6645caaade3b9520220a34af940210850ef36a`，只升级确认前准备、模型恢复反馈和 SearchTools 差距，见[M03 专项证据](../02-CampusClaw工具系统/source-evidence.md#search-tools-evidence) |
 | Command 状态专项基线 | M05：用户指定 Java `53eff85c7f41de23eb434e027782f5085a8b8e45`；只复核 Runtime 命令、严格名称、展开文本恢复与 Slash 交互，见[当前实现](../04-CampusClaw命令系统/README.md#current-runtime-status)；不升级外部基线或统计结论 |
-| 统一历史专项基线 | A09/A15 保留 2026-10-10 四仓证据；A15 于 2026-10-23 重新 fetch Java main `e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2`、pi main `14c8118412bffc8f8df7a088fde51d2ffa74fd8f`，仅升级主会话/Cron 持久化、Subagent 留档与普通示例的局部结论，完整范围见[统一证据 §7](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md#session-kind-evidence)；其他基线与统计结论不批量升级 |
+| 统一历史专项基线 | A09/A15 保留 2026-10-10 四仓证据；A15 的 pi 普通示例沿用 2026-10-23 `main@14c8118412bffc8f8df7a088fde51d2ffa74fd8f`。2026-10-24 重新 fetch Java `origin/main@bc031ed8aa82dac700421163a4cce25d9f023e6b`，只核验 Subagent 持久化与同库共表接入，完整范围见[统一历史证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)；其他外部基线与统计结论保留原归属 |
 | Skill 统计历史基线 | A09：2026-10-10 核验 #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的工具、三入口、采集及事务；隔离 fetch pi `main@42a3497d03ad17e308a2299fa824727894f2c0ec` 只更新 Start/End、后置 hook 与订阅结论，Codex/OpenCode 保留历史研究 |
 | 决定消费终态专项基线 | A03/M06：Java `74f1b8314c9a5eb3d1659dfed2ab90b787dd647f` 的共享枚举、三类领取 SQL、markTerminal 与安装 DDL；仅新增内部 CANCELED 目标，不升级其他条目或外部基线结论 |
 | 线性历史专项基线 | A12：pi main `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed`，2026-09-22 已确认默认分支并隔离 fetch；Java 本地 `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12`；只升级分支索引与 Session 历史读取结论 |
@@ -654,18 +654,19 @@ Mate 负责可信接口定义、授权和凭据来源的决定已明确；[配�
 
 | 维度 | 结论 |
 |---|---|
-| 模块与主设计 | M01/M03/M04/M06/M10；[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)唯一维护受理、父子关系、完整记录、逐工具提交和失败边界，复用其完整目标类图 |
-| 问题 | 定时巡检调用子诊断 Agent，如何让主/子过程均可追溯，同时避免为统计再造执行历史？ |
-| 最新基线 | 2026-10-23 局部升级 Java main e8da1b77、pi main 14c81184；Codex main 322bbf4d、OpenCode dev 055d95bb 保留 2026-10-10 归属，不当作本次最新实现；完整 SHA、旧新范围及路径符号见[证据 §7](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md#session-kind-evidence) |
+| 模块与主设计 | M01/M03/M04/M06/M10；[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)唯一维护同库共表、受理、父子关系、完整记录和失败边界，复用其完整目标类图 |
+| 问题 | 定时巡检调用诊断 Subagent，如何分别保存父子完整过程，同时复用现有 Session 存储与生命周期？ |
+| 源码核验范围 | 2026-10-24 Java origin/main bc031ed8；pi main 14c81184 保留 2026-10-23 归属，Codex main 322bbf4d、OpenCode dev 055d95bb 保留 2026-10-10 归属；完整 SHA、旧新范围及路径符号见[统一历史证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)，不升级外部基线或统计结论 |
 | pi | core 默认不内建 Subagent；仓库普通示例 --no-session，父 content 返回最终文本、details 保留消息，没有独立持久子会话；不把历史 experimental durable 证据合成同一种实现。最终结果事件先于模型上下文推进，但 listeners 可先于 appendMessage，不能据此推断提交后公开输出 |
 | Codex / OpenCode | 历史固定版本分别核验非 ephemeral thread 的 rollout、Task 的子 Session 与消息/Part 持久化；父摘要与子完整历史可以分开。此次不升级其最新接口或所有 delta 的保留能力 |
-| CampusClaw 已观察 | e8da1b77 的 Runtime 与 Cron 已经 Repository/Coordinator 持久化；Subagent 仍直接 Factory+prompt；无 Session 分类列，公开按 ID 操作和 Agent 用户请求聚合尚无 Subagent 隔离；工具结果仍在 TurnEnd 保存 |
-| CampusClaw 目标 | 复用持久受理与独立历史；主会话与 Subagent 通过[显式分类](../../03-数据与存储/Claw数据库设计.md#session-kind)隔离，Cron 仅新建或关联主会话；委派深度采用[M03 的服务配置与整树快照](../02-CampusClaw工具系统/README.md#subagent-depth)，具备剩余额度的 Subagent 可继续委派。每次调用新建 Session，父保留自己的历史及 Agent 工具最终文本；内部关系不扩大公共 HTTP，独立保留不级联 |
-| 差异类别 | 架构变更：统一持久宿主和结果提交端口；产品约束：独立历史、定向取消、Cron 非交互和未知不重放；安全加固：公共主会话入口排除 Subagent，内部恢复与安全投影分离，授权身份仅在内存使用 |
-| 理由与代价 | 可追溯多级诊断且不让内部任务混入用户请求；部署方限制层数，各级固定上限、独立预留容量与取消收尾增加装配、存储和协调成本，仍无法使外部副作用和本库 exactly-once |
-| 状态与验收 | 主会话与 Cron 历史已实现；可配置深度、分类、独立 Subagent 历史及逐工具可靠提交增量待实现。按 U1–U5 与 M03 深度边界验收入口隔离、Trace 总数/分页一致、根快照、逐级取消及容量拒绝；不宣称已支持子续聊或浏览器展开 |
+| CampusClaw 已观察 | bc031ed8 的 Runtime 与 Cron 已经 Repository/Coordinator 持久化；Subagent 仍直接 Factory+prompt，尚未接入独立 Session 历史及父子关联。追加与执行控制直接锁定既有 t_sessions，公开按 ID 操作和 Agent 用户请求聚合尚无 Subagent 隔离 |
+| CampusClaw 目标 | 采用[统一稿的同库共表方案](../01-CampusClaw多Agent运行时/unified-event-persistence.md)：每次调用新建独立 Session ID，复用 Session、历史、执行与清理表，只新增六字段父子关系表，不增加 session_kind/tool_call_entry_id 旧表列。是否作为 child_session_id 出现决定子身份；公开主会话入口、Trace 分页与总数、Cron 关联排子，公用内部 Repository 不全局排子。委派深度仍采用[M03 服务配置与整树快照](../02-CampusClaw工具系统/README.md#subagent-depth)，有剩余额度的 Subagent 可继续委派 |
+| 差异类别 | 架构变更：Subagent 接入同一持久宿主，使用独立 ID 而非第二套存储；产品约束：父侧只收最终文本、定向取消、Cron 非交互和未知不重放；安全加固：公开主会话入口排子，内部历史与公共安全投影分离，授权身份仅在内存使用 |
+| 理由与代价 | 保留多级诊断过程而不复制存储和生命周期；代价是共表读写量增加，公开入口须按子端关系隔离，子 Session 存续时必须保留入边关系，备份恢复须保持一致。各级容量和取消收尾仍增加协调成本；不承诺外部副作用与本库 exactly-once |
+| 范围边界 | 只补齐完整 Subagent 过程记录与既有执行收尾；不新增公开子查询、续聊、独立控制、浏览器展开或第二套生命周期。通用工具结果去重及 Skill 统计重构保持所属专题范围，不是本增量的前置交付 |
+| 状态与验收 | 主会话与 Cron 历史已实现；Subagent 共表持久化、关系推导分类和公开入口隔离待实现，可配置深度与自身能力保持 M03 的待实现状态。按统一稿与 M03 验收独立历史、受理原子性、Trace 总数/分页一致、入边保留、逐级取消及真实收尾；文档校验不代表产品验收 |
 
-**设计表达。** Subagent 是独立的持久会话，父调用保存关系与摘要。Cron 只改变发起方式，历史写入不随入口另造实现；Skill 次数从这些已提交结果派生。
+**设计表达。** Subagent 使用自己的 Session ID 保存完整过程，父调用只保留关系及最终文本。父子复用既有表与执行机制，关系用于主会话入口隔离；记录完整历史不自动提供子查询、续聊或故障后自动执行。
 
 <a id="a16"></a>
 
@@ -825,6 +826,7 @@ J01～J05 使用 Java commit `f61906b9136246ca60f333704b6fc92b5420d0ec`。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.115.0 | 2026-10-24 | A15 采用同库共表与关系推导分类，仅新增父子关联表并明确完整记录与通用去重、统计的范围边界。 |
 | 1.114.0 | 2026-10-23 | A15 引用服务级委派深度与整树快照，说明多级独立历史、容量和取消边界。 |
 | 1.113.0 | 2026-10-23 | A15 增加主会话与 Subagent 的分类隔离，并局部核实 Java 持久化状态与 pi 普通扩展的结果保存边界。 |
 | 1.112.0 | 2026-10-22 | 新增 M13 与 A21：智能体本地目录的本地副本、更新时机与原子替换，对比 Claude Managed Agents、pi、Codex、OpenCode。 |

@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.32.0 |
+| 文档版本 | 2.33.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；[§9.7](#tool-schema-subset) 自写 Schema 子集校验器已在 pi-mono-java#371（`main@2b9a6ad`）实现，§9.7.6 T2 现网定义普查未完成；SearchTools、发现与校验的一致性接线、前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-23 |
+| 更新日期 | 2026-10-24 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -732,7 +732,9 @@ Subagent 消息从空集合开始，工作区指向自己的 `agent/{subagentId}
 Subagent 消息历史或完整事件流。父取消必须传播；成功结果只返回最后一条非空 Assistant
 文本。Subagent 内部可以执行多个 LLM/tool turn。
 
-父侧不接收完整历史仅是投影边界：Subagent 自己必须保存完整消息、调用、最终结果和终态。独立授权、父调用唯一关联、逐工具提交、取消与删除规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
+父侧不接收完整历史仅是投影边界：Subagent 自己必须保存完整消息、调用、最终结果和终态。每次新调用分配独立 Session ID，历史和执行复用既有表，只新增六字段的 `t_session_execution_links`，不在 `t_sessions` 或 `t_session_entries` 新增列。分类、父调用唯一关联、记录提交、取消与保留规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
+
+该增量用于记录完整 Subagent 过程，不增加公开 Subagent 查询、续聊、独立控制入口或第二套存储；公开主会话入口、Agent 用户请求分页与总数及 Cron 关联按子端关系排除 Subagent，公用内部 Repository 继续处理所有 Session。子 Session 仍存在时，其入边关联不得清理。通用工具结果去重及 Skill 统计重构保持独立专题范围，不因接入 Subagent 持久化而改变字段或口径。2026-10-24 Java `origin/main@bc031ed8aa82dac700421163a4cce25d9f023e6b` 的核验范围见[统一历史证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)；本节深度和自身能力的待实现状态不变。
 
 <a id="subagent-depth"></a>
 
@@ -928,6 +930,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - max-depth 缺省 1，显式 1/2/3 通过；0、-1、非数值和 YAML 小数 1.5 启动失败，小数不得先截断；根为 0、逐级加 1、整树固定上限；配置 2 时允许第一层再委派、第二层准备与受理均拒绝第三层且无确认/新会话；各级取消和实际收尾、深链容量拒绝均需验收；
 - 原非空 profile 仅有 Agent 且因深度耗尽被过滤时，允许的直接业务代理仍可装配；原始显式 [] 才禁用全部工具；
 - 父与 Subagent Session 实例隔离但使用相同 Factory/执行语义；
+- 每次新调用的独立 Session 与父调用关系同事务提交，完整记录写入既有历史/执行表；不新增旧表列、公开 Subagent 操作或第二套生命周期；公开主会话入口与 Trace 分页/总数、Cron 关联排子，内部历史、执行控制和清理仍可处理 Subagent，子 Session 存续期间保留入边关系；
 - Cron Job 按 Agent 隔离，触发时使用当前配置，不接受旧 payload 字段。
 - Slash Command 与模型工具分开注册和测试，所有命令都不出现在模型工具清单中；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
@@ -972,6 +975,7 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.33.0 | 2026-10-24 | Subagent 完整过程共用既有 Session 存储，仅新增父子关联表并保持公开主会话边界和独立专题范围。 |
 | 2.32.0 | 2026-10-23 | Subagent 最大深度改为服务配置与整树固定快照，按剩余额度披露 Agent 并逐级控制执行和取消。 |
 | 2.31.0 | 2026-10-22 | 受管目录改称智能体本地目录并移入独立设计，§8 只保留工具系统依赖的三点，两张目录图随之迁出。 |
 | 2.30.0 | 2026-10-22 | 删除没有生产调用方的受管目录 refresh；目录重建改为删除 `agent.json` 后由 prepare 完成并保留模式覆盖，两张图改名。 |
