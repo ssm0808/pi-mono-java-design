@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 2.31.0 |
+| 文档版本 | 2.33.0 |
 | 状态 | 当前目标；Skill / CallTool、Agent 代理、确认前可信准备和参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；[§9.7](#tool-schema-subset) 自写 Schema 子集校验器已在 pi-mono-java#371（`main@2b9a6ad`）实现，§9.7.6 T2 现网定义普查未完成；SearchTools、发现与校验的一致性接线、前端可恢复展示待实现，其余能力按源码证据分项判断 |
-| 更新日期 | 2026-10-22 |
+| 更新日期 | 2026-10-24 |
 | 源码基线与范围 | [源码证据](source-evidence.md)，按实际分析提交区分装配、压缩与凭据行为 |
 | 精确工具契约 | [12 个框架工具与业务代理契约](built-in-tool-contracts.md) |
 
@@ -147,7 +147,7 @@ launchd/crontab 仅作为遗留源码观察，不是 TOB 目标实现。
 | 产品约束 | Skill 加载和 SearchTools 不激活工具或授予权限 | 搜索结果只提供模型调用说明，执行身份由宿主可信绑定确定 |
 | 架构改造 | Model Manager、受管 Runtime 与 Tool 共用单一 `campusmate` 配置树 | Mate 与 CampusMate 是同一个服务，不保留顶层 `mate` |
 | 架构改造 | Runtime 与 Tool 共用 `campusmate.endpoints.skill-info-path-template` | 两个旧键调用完全相同的 Skill HTTP operation |
-| 产品约束 | Subagent 只按直接绑定名称调用，首版深度 1 | 避免全局枚举、循环和无边界递归 |
+| 产品约束 | Subagent 按当前 Agent 自身或直接绑定的名称调用；服务配置限定最大深度，默认 1 | 自身能力可委派，逐级绑定仍受控；可配置上限避免无边界递归，规则见[§10.1](#subagent-depth) |
 
 ## 4. 工具集合与入口配置
 
@@ -215,6 +215,7 @@ campusclaw:
       - Skill
       - SearchTools
       - CallTool
+      - Agent
 ```
 
 三个键遵循相同严格规则：
@@ -233,7 +234,7 @@ campusclaw:
 |---|---|---|
 | 入口枚举 | `ToolEntryPoint.CHILD_AGENT` | `ToolEntryPoint.SUBAGENT` |
 | 工具配置键 | `campusclaw.tools.child-agent` | `campusclaw.tools.subagent`，不保留旧键别名 |
-| 运行时字段与方法 | `childAgentsByName`、`childAgentNames`、`ChildManifest`、`MAX_CHILD_DEPTH`、`validateChildRuntime` 等 | 对应改为 `subagents`/`subagent` 词根，如 `subagentsByName`、`subagentNames`、`SubagentManifest`、`MAX_SUBAGENT_DEPTH` |
+| 运行时字段与方法 | `childAgentsByName`、`childAgentNames`、`ChildManifest`、`MAX_CHILD_DEPTH`、`validateChildRuntime` 等 | 对应改为 `subagents`/`subagent` 词根，如 `subagentsByName`、`subagentNames`、`SubagentManifest`；固定深度常量改为[配置与根执行快照](#subagent-depth) |
 | 运行方法 | `SubagentExecutionService.runChild` | `runSubagent` |
 | 绑定读取注释 | `PreparedAgentRuntime.bindingAgents` 写“直接子 Agent 绑定”“委派时刻” | “返回当前 Agent 直接绑定的 Subagent；仅为候选元数据，权限、调用链与深度在 `Agent` 工具调用时校验” |
 | 日志与异常文本 | `Child Agent` | `Subagent` |
@@ -242,8 +243,7 @@ campusclaw:
 
 放弃保留 `child-agent` 旧键别名：目前只有内置 `application.yml` 使用该键，别名会让两套名称长期并存；代价是部署环境若覆盖了旧键会因未知键阻止启动，发布说明须写明迁移。放弃 `SubAgent` 拼写：与上述基线及现有 `SubagentExecutionService` 不一致。验收：主代码与 `campusclaw/` 镜像中不再出现 `CHILD_AGENT`、`child-agent` 和 Child 词根标识符；旧键配置启动失败并提示未知键；三入口缺省 profile 与严格校验测试按新键通过。
 
-`Cron` 只在 Runtime profile 中出现，防止 Cron execution 管理或递归创建 Job。首版最大
-Subagent 深度为 1，因此 Subagent profile 不暴露必然不可执行的 `Agent`。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
+`Cron` 只在 Runtime profile 中出现，防止 Cron execution 管理或递归创建 Job。上例是缺省候选清单；Subagent 的 `Agent` 还须按[剩余深度和可信上下文](#subagent-depth)过滤，默认上限为 1 时仍不向 Subagent 披露。显式空 profile 或非空配置中排除 `Agent` 时保持禁用，深度配置不替代工具配置。定时入口首版不提供人工交互；默认不装配提问或审核工具之外，还须按 [M10 非交互执行约束](../08-CampusClaw定时任务/README.md#noninteractive)处理业务权限 ASK、自定义问题与误配的交互工具。
 
 ### 4.3 工具装配接口
 
@@ -701,7 +701,7 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 
 ## 10. Subagent Execution
 
-本图只回答父执行如何调用一个直接绑定的 Subagent 并取得结果。绑定解析、Subagent 运行准备和进度投影由 Subagent execution service 编排；公共 Factory 装配运行对象，SubagentRunAcceptanceService 创建独立持久 Session，再由公共 Runtime 执行。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Subagent；具体校验顺序、模型回退条件与隔离对象见本节正文。
+本图只回答父执行如何调用一个直接绑定的 Subagent 并取得结果，自身能力委派沿用同一执行与深度边界。绑定解析、Subagent 运行准备和进度投影由 Subagent execution service 编排；公共 Factory 装配运行对象，SubagentRunAcceptanceService 创建独立持久 Session，再由公共 Runtime 执行。身份、版本、深度、ancestry 和可用模型校验在运行前完成，失败不启动 Subagent；具体校验顺序、模型回退条件与隔离对象见本节正文。
 
 ![Subagent Execution](subagent_execution_sequence.svg)
 
@@ -716,28 +716,47 @@ DSH 还要求 `oneOf` 不与 `type`、`properties` 等同级、`required` 的字
 }
 ```
 
-`agentName` 只能来自当前父 Agent 的 `agents/{agentName}.json`。执行前按顺序校验精确
-直接绑定、自绑定、enabled、固定版本、最大深度、ancestry 循环、Subagent 目录完整性和
-模型可用性。版本不匹配是明确错误，不触发隐式目录重建。
+`agentName` 按可信快照精确解析当前 Agent 自身或直接绑定的目标；绑定引用来自当前调用方的 `agents/{agentName}.json`，自身无需加入绑定。执行前校验名称、参数、enabled、适用的固定版本、最大深度、ancestry、Subagent 目录完整性和模型可用性，再进入权限判断与必要确认。版本不匹配是明确错误，不触发隐式目录重建。自身默认可委派属于已定待实现目标；源码当前的自绑定拒绝只在[证据](source-evidence.md#subagent-depth-evidence)登记，不作为有效目标继续沿用。
 
 | 组件 | 职责 |
 |---|---|
 | `BoundAgentTool` | 实现模型工具 `Agent`，完成参数、进度和结果投影 |
-| `BoundAgentResolver` | 按名称解析直接绑定并校验身份、版本、深度和 ancestry |
-| `SubagentExecutionContext` | 固化父子 ID、深度、ancestry、父模型、thinking、取消和进度 sink |
+| `BoundAgentResolver` | 按名称解析自身或直接绑定目标并校验身份、适用版本、深度和 ancestry |
+| `SubagentExecutionContext` | 固化父子 ID、当前深度、根执行的 maxDepth 快照、ancestry、thinking、模式、安全约束、取消和进度 sink |
 | `SubagentExecutionService` | 准备 Subagent runtime，交由持久受理与 Runtime Coordinator 执行；不直接 prompt 绕过历史 |
 | `AgentSessionFactory` | 使用 `SUBAGENT` profile 创建独立 Subagent Session 实例（命名待实现，见 [§4.2](#subagent-naming)） |
 
-Subagent 消息从空集合开始，工作区指向自己的 `agent/{subagentId}`，SYSTEM、Skill 和工具
-来自 Subagent runtime。Subagent 有可用 default model 时优先，否则继承父 execution 的 model
-和 thinking；最终模型必须位于 Subagent `bindingModels` 且当前具备凭据。
+Subagent 消息从空集合开始，工作区指向自己的 `agent/{subagentId}`，SYSTEM、Skill 和工具来自 Subagent runtime。每级模型由该 Agent 自身当前 Mate 绑定与默认模型按[Model 统一规则](../../02-服务与接口/03-Model/README.md#model-source)决定，不自动回退父模型；thinking、调用时模式和安全约束逐层继承，最终模型仍须通过自身允许列表与运行条件校验。
 
-首版最大深度固定为 1，Subagent profile 因而不暴露 `Agent`。仍保留 ancestry 和自绑定检查，
-不能只依赖深度。父侧只接收目标、工具开始/结束和完成等高层进度，不接收 reasoning、
+最大深度及 Subagent 的 `Agent` 可见性遵循[§10.1](#subagent-depth)。自身能力委派同样占用一层；当前 Agent 调用自身是允许的目标，不等于 Session 关系环。非自身的跨 Agent 回指祖先（如 A→B→A）仍拒绝，每次受理仍新建 Session 并防止关系环；配置更深不改变这些独立边界。父侧只接收目标、工具开始/结束和完成等高层进度，不接收 reasoning、
 Subagent 消息历史或完整事件流。父取消必须传播；成功结果只返回最后一条非空 Assistant
 文本。Subagent 内部可以执行多个 LLM/tool turn。
 
-父侧不接收完整历史仅是投影边界：Subagent 自己必须保存完整消息、调用、最终结果和终态。独立授权、父调用唯一关联、逐工具提交、取消与删除规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
+父侧不接收完整历史仅是投影边界：Subagent 自己必须保存完整消息、调用、最终结果和终态。每次新调用分配独立 Session ID，历史和执行复用既有表，只新增六字段的 `t_session_execution_links`，不在 `t_sessions` 或 `t_session_entries` 新增列。分类、父调用唯一关联、记录提交、取消与保留规则唯一见[统一执行历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md)，新增链路待实现。Factory 本身不负责创建数据库资源。
+
+该增量用于记录完整 Subagent 过程，不增加公开 Subagent 查询、续聊、独立控制入口或第二套存储；公开主会话入口、Agent 用户请求分页与总数及 Cron 关联按子端关系排除 Subagent，公用内部 Repository 继续处理所有 Session。子 Session 仍存在时，其入边关联不得清理。通用工具结果去重及 Skill 统计重构保持独立专题范围，不因接入 Subagent 持久化而改变字段或口径。2026-10-24 Java `origin/main@bc031ed8aa82dac700421163a4cce25d9f023e6b` 的核验范围见[统一历史证据](../01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md)；本节深度和自身能力的待实现状态不变。
+
+<a id="subagent-depth"></a>
+
+### 10.1 服务级最大委派深度
+
+园区告警汇总可以先委派设备诊断，诊断再委派专业分析；部署方需要控制允许层数，避免代码固定一层阻断合法流程，也避免模型自行扩大执行树。服务配置如下，能力**待实现**；此节是深度、快照和工具披露的唯一有效定义，其他模块引用它。
+
+```yaml
+campusclaw:
+  subagent:
+    max-depth: 1
+```
+
+配置项 `campusclaw.subagent.max-depth` 缺省为 1，只接受大于等于 1 的整数；0、负数、非整数或不可解析值阻止启动，不静默回退，也不能把 YAML 小数 1.5 截断成 1 后放行。配置仅在服务启动时绑定，不热更新，不放入 Agent 的 settings.json、metadata 或模型工具参数。沿用已有配置与校验能力，不新增 Maven 依赖。
+
+每个 Runtime/Cron 根执行的 `currentDepth=0`，开始时固定可信 `maxDepth` 快照；每次真实 Agent 委派令下一执行深度加 1，所有后代继承同一个根上限，不按下一层服务配置或 Agent 定义重新取值。仅当 `currentDepth < maxDepth` 且可信目标与实际 Host 工厂可用时，才从已允许的 profile 中向模型披露 `Agent`；达到上限时过滤该工具，显式空配置或已排除该工具时绝不补回。默认值 1 因而保留根可委派、第一层不能再委派的行为。
+
+深度过滤只移除框架 `Agent` 条目，不改变原配置是否显式为空。原非空配置过滤后即使不剩框架工具，也仍按既有开关、绑定与权限规则装配当前 Agent 的直接业务工具代理；不能把过滤后的空列表误作原始 `[]` 而禁用它们。只有原始显式 `[]` 才保持禁用全部工具的语义。
+
+披露是提示面而不是准入凭证。准备阶段在可信目标解析和参数校验后、交互确认前强制检查深度，持久受理短事务再复核 Host 的父深度及下一深度；耗尽时返回真实 `isError=true` 和内部工具原因 `AGENT_DEPTH_LIMIT_EXCEEDED`，不询问用户、不受理子会话、不调用子模型或业务，也不新增 HTTP 错误目录。真实 Agent 工具句柄或内部委派入口被直接调用时仍须执行这两次检查；工具已从模型清单隐藏后强造的未知调用继续走通用未知工具拒绝，不要求框架按名称特判改写原因码。
+
+每级独立 Session、上下文和用量保持；结果逐级返回直接父调用，取消沿可信关系逐级传播到原执行。父等待直接 Subagent 的实际收尾，直接 Subagent 同样等待自己的后代，从而覆盖整棵执行树；等待不持数据库锁。每次新受理按现有容量规则独立预留或立即拒绝，不能让深链父执行占满槽位后无限等待后代容量。失联保留未知，不自动重新执行；完整持久化、终态与保留边界继续由[统一历史](../01-CampusClaw多Agent运行时/unified-event-persistence.md#4-subagent-的身份授权与生命周期)维护。
 
 ## 11. Cron 与模型策略
 
@@ -758,7 +777,7 @@ usableModels = getAgent.bindingModels（每次请求实时读取，待实现）
 
 - Runtime 创建或修改 Session 只能选择 `usableModels`；
 - Cron 每次触发选择 Agent 当时可用的 default；
-- Subagent 优先自身 default，否则继承父 model/thinking，并再次校验 Subagent 白名单；
+- Subagent 按自身当前 Mate 绑定与默认模型规则选择，不回退父模型；逐层继承 thinking、模式和安全约束，并校验自身模型允许列表；
 - 无可用模型时本次 Session/Execution 创建失败，不回退到未绑定模型。
 
 ## 12. 实现迁移
@@ -859,7 +878,7 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 
 - 三入口配置项缺失时使用默认值；显式 `[]` 时，即使存在业务绑定且 Mate 工具装配已启用，模型请求仍为 `tools=[]`；非空配置完全替换框架缺省值；
 - 框架 profile 拒绝未知名、旧名、重复名和大小写错误；业务名来自绑定且不覆盖框架名；
-- Subagent 缺省无 `Agent`，Cron 缺省无 `Cron`；
+- 默认深度上限下 Subagent 不披露 `Agent`；提高上限后仅在尚有剩余额度、profile 允许且 Host 工厂可用时披露；显式空配置或排除 Agent 始终禁用，Cron 缺省无 `Cron`；
 - 同一入口连续创建两个 Session，工具实例不同且应用协作者可安全共享；
 - Schema 在 before hook 前校验，hook 顺序固定；
 - CallTool 在 before hook 前完成可信目标准备和业务参数校验；参数错误不创建确认记录，Mate execute 请求数为零；
@@ -908,7 +927,10 @@ Runtime 通过 `GET /commands` 提供命令清单，通过 `POST /command` 执�
 - 普通 HTTP 执行四项全缺失、任意部分组合与 JWT/APPKEY 同时提供均不触发本地完整性拒绝；解析/确认成功后执行请求恰好一次，Mate 失败映射为 isError=true；
 - 空快照不触发 unavailable；缺 Host 上下文、发现失败、取消和确认拒绝仍保持原有处理；完整验收矩阵见 HTTP §7.3；
 - Agent 校验直接绑定、固定版本、深度、循环、父取消和模型白名单；
+- max-depth 缺省 1，显式 1/2/3 通过；0、-1、非数值和 YAML 小数 1.5 启动失败，小数不得先截断；根为 0、逐级加 1、整树固定上限；配置 2 时允许第一层再委派、第二层准备与受理均拒绝第三层且无确认/新会话；各级取消和实际收尾、深链容量拒绝均需验收；
+- 原非空 profile 仅有 Agent 且因深度耗尽被过滤时，允许的直接业务代理仍可装配；原始显式 [] 才禁用全部工具；
 - 父与 Subagent Session 实例隔离但使用相同 Factory/执行语义；
+- 每次新调用的独立 Session 与父调用关系同事务提交，完整记录写入既有历史/执行表；不新增旧表列、公开 Subagent 操作或第二套生命周期；公开主会话入口与 Trace 分页/总数、Cron 关联排子，内部历史、执行控制和清理仍可处理 Subagent，子 Session 存续期间保留入边关系；
 - Cron Job 按 Agent 隔离，触发时使用当前配置，不接受旧 payload 字段。
 - Slash Command 与模型工具分开注册和测试，所有命令都不出现在模型工具清单中；
 - Usage/估算阈值、失效边界、显式/静默/Xiaomi/可恢复 length 溢出通过测试；
@@ -953,6 +975,8 @@ SearchTools 增量按精确名称契约 → 复用可信解析 → 三入口装�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 2.33.0 | 2026-10-24 | Subagent 完整过程共用既有 Session 存储，仅新增父子关联表并保持公开主会话边界和独立专题范围。 |
+| 2.32.0 | 2026-10-23 | Subagent 最大深度改为服务配置与整树固定快照，按剩余额度披露 Agent 并逐级控制执行和取消。 |
 | 2.31.0 | 2026-10-22 | 受管目录改称智能体本地目录并移入独立设计，§8 只保留工具系统依赖的三点，两张目录图随之迁出。 |
 | 2.30.0 | 2026-10-22 | 删除没有生产调用方的受管目录 refresh；目录重建改为删除 `agent.json` 后由 prepare 完成并保留模式覆盖，两张图改名。 |
 | 2.29.0 | 2026-10-22 | 受管目录不再保存模型，默认模型和 bindingModels 每次请求实时读取 Mate getAgent。 |

@@ -2,15 +2,15 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.41.0 |
-| 更新日期 | 2026-10-22 |
+| 文档版本 | 3.42.0 |
+| 更新日期 | 2026-10-24 |
 | 职责 | M01：Agent 执行装配、入口协作与父子执行生命周期 |
 | 设计状态 | 当前目标；实现状态按专项源码证据分别判断 |
 | 源码证据 | [固定提交、路径、符号与差距](source-evidence.md) |
 
 Session 与完整事件的时间采用[统一秒级目标](time-contract.md)：UTC、无小数秒，写入和回显一致；此精度调整待实现，其他功能状态仍按各节证据。
 
-[统一执行历史](unified-event-persistence.md)维护交互、Cron、Subagent 的独立持久 Session、逐工具提交、父子关联与 Skill 同事务投影；新增能力待实现，最新源码范围见[专项证据](unified-event-persistence-evidence.md)。
+[统一执行历史](unified-event-persistence.md)维护 Subagent 完整过程的持久化：每次新调用使用独立 Session ID，复用既有 Session、历史、执行与清理表，只新增六字段的 `t_session_execution_links`。不在 `t_sessions` 或 `t_session_entries` 新增列，通用工具结果去重和 Skill 统计重构不属于该增量；能力待实现，2026-10-24 核验的 Java `origin/main@bc031ed8aa82dac700421163a4cce25d9f023e6b` 及具体范围见[专项证据](unified-event-persistence-evidence.md)。
 
 [Claw 数据库设计](../../03-数据与存储/Claw数据库设计.md#t_session_executions)统一维护Runtime所用表、字段、约束和索引；本文继续维护行为与契约。
 
@@ -99,6 +99,7 @@ Runtime 通过 `sessionId` 定位持久化配置、单条追加时间线和执�
 | 对象生命周期 | Manager、应用服务、Registry 为 Spring 单例；Catalog 为请求快照；Session、工具与 Projector 按执行隔离 |
 | 持久化 | 完整消息与已确认领域记录用于恢复；有序追加采用短事务，模型调用、工具执行和网络发送不占用行锁 |
 | 父子执行 | 父子使用相同核心类型，但独立持有消息、工作区、工具和上下文；父执行负责 Subagent 的等待与取消传播 |
+| 父子存储与可见性 | 父子同库共表，是否作为 `t_session_execution_links.child_session_id` 出现决定是否为 Subagent；公开主会话入口、Agent 用户请求分页与总数、Cron 关联排除 Subagent，公用内部存储不全局过滤 |
 
 ## 7. Manager 与多 Agent Runtime 核心
 
@@ -124,6 +125,8 @@ Command 通过 HTTP 进入应用服务。Builtin 调用窄职责服务并返回 
 
 Session 存储维护配置、单条追加时间线和内部执行状态；[会话记忆设计](../../03-数据与存储/01-会话记忆GaussDB/README.md)维护数据模型。Runtime 从输入内容块提取有序文件 ID，并形成模型提示块；上传、扫描、正文和对象删除归 [附件服务](../../02-服务与接口/01-CampusMate附件服务/README.md)。
 
+Subagent 完整记录复用同一套追加、停止、终态和清理机制，父侧只保存本次调用及最终文本。持久化不新增公开 Subagent 查询、续聊或独立控制入口，也不另建一套子会话存储；子 Session 仍存在时，其入边关联必须保留，具体规则由[统一执行历史](unified-event-persistence.md)维护。
+
 ## 8. 源码证据与目标差异
 
 [源码证据表](source-evidence.md)保存已分析的 commit、相对路径和符号。Java `a5e7775407fe5c0638b12e7a2131717ae9191bb6` 已取消 Session 更新的 If-Match/ETag，并发写入由数据库行锁加按字段合并控制，见 [HTTP §8.4](chat-http-v1-design.md#session-header-free-verified)。其他模块保留各自证据范围，这些静态观察不能证明全部目标已经实现。
@@ -141,6 +144,7 @@ Runtime 以内核语义参考 pi，以 HTTP 准入、企业凭据和持久化边
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.42.0 | 2026-10-24 | Subagent 完整记录采用同库共表与父子关联表，明确主会话入口隔离及通用结果去重和 Skill 统计的范围边界。 |
 | 3.41.0 | 2026-10-22 | §7.1 改为链接智能体本地目录设计，删除元数据发布图。 |
 | 3.40.0 | 2026-10-22 | 同步 HTTP 1.78.0 与 Model 2.13.0：模型绑定改为每次请求实时读取 Mate getAgent；删除管理面 refresh，元数据图去掉目录中的模型。 |
 | 3.39.0 | 2026-10-21 | 同步 HTTP 1.76.0：创建会话、命令清单与可选值在冷缓存时 Mate 不可达返回 503 AGENT_SERVICE_UNAVAILABLE。 |

@@ -2,7 +2,7 @@
 
 [仓库首页](../README.md) · [数据与存储](README.md)
 
-版本：1.24.0 · 日期：2026-10-21 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
+版本：1.27.0 · 日期：2026-10-24 · 范围：CampusClaw 服务自身的集中式 GaussDB 数据库。
 
 ## 1. 职责、读取方式与源码基线
 
@@ -18,12 +18,14 @@
 
 | 证据 | 完整提交与范围 |
 |---|---|
-| 当前主线 M | pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`；完整安装 DDL 19 张表，§4 为该快照的字段字典 |
+| 历史主线 M | pi-mono-java `main@769e86592285f4a25b0febaf551eddea6bc7212c`；完整安装 DDL 19 张表，§4 为该快照的字段字典 |
 | 定时任务 PR S | #332 / `codex/scheduled-task-backend@e9d31e8888a81b7fe95071e705482bb16fa10476`，Draft、未合并；base 与实际 merge-base 均为 `769e86592285f4a25b0febaf551eddea6bc7212c`；新增 3 表及既有表扩展，见 §5 |
 | 设计整理起点 | pi-mono-java-design `main@6ec8fd2b43a209b582b1a8b726f23757a2dafab2` |
 | 待实现 D | 本仓统一历史、Skill 累计与秒级时间目标；按 §3、§6 独立标识，不冒充 main 或 PR 的已实现结构 |
 
 核验“当前”是上述源码快照，不表示已经安装到生产数据库；数据库验收另列。外部 Agent 基线和 Mate 源码未重新核验，保留关联文档自己的日期与状态。
+
+2026-10-24 对 Subagent 共表与公开隔离单独复核：个人 main `bc031ed8aa82dac700421163a4cce25d9f023e6b`、公共 main `e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2`，均先重新 fetch。仅升级 §6.0、§6.2 和公开查询影响证据；§4 的 M 字段字典仍保留 2026-10-10 快照，不冒充最新全库字典，外部上游与 Skill 专题本次未升级。详见[限定证据](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence-evidence.md#shared-storage-evidence)。
 
 ### 1.2 代码与设计材料
 
@@ -45,7 +47,7 @@
 
 | 表 | 职责 | 状态 | 对应设计文件 |
 |---|---|---|---|
-| [t_sessions](#t_sessions) | 会话主表，保存会话元数据和单条时间线末端 | M；有 D 增量 | [Session 职责与恢复](01-会话记忆GaussDB/README.md) |
+| [t_sessions](#t_sessions) | 会话主表，保存会话元数据和单条时间线末端 | M；Subagent 不新增列 | [Session 职责与恢复](01-会话记忆GaussDB/README.md) |
 | [t_session_entries](#t_session_entries) | 会话历史记录表，按提交顺序保存单条只追加时间线 | M；有 D 增量 | [Session 职责与恢复](01-会话记忆GaussDB/README.md) |
 | [t_session_sequences](#t_session_sequences) | 会话序号表，为 Entry 和内部 Record 分配严格递增的持久化顺序号 | M | [Session 职责与恢复](01-会话记忆GaussDB/README.md) |
 | [t_session_records](#t_session_records) | 会话内部运行记录表，保存不参与消息时间线的 Usage 等记录 | M | [Session 职责与恢复](01-会话记忆GaussDB/README.md) |
@@ -148,7 +150,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 - `CONSTRAINT ck_t_sessions_resource_version CHECK (resource_version > 0)`
 - `CONSTRAINT ck_t_sessions_display_name CHECK (display_name IS NULL OR octet_length(display_name) BETWEEN 1 AND 80)`
 
-目标边界：目标中 resource_version 仅作内部一致性版本，不暴露 ETag 或客户端条件更新；主线 SQL 注释仍含旧 ETag 用途，不作为有效接口规则。created_at/updated_at 的秒级目标及 PR 归属见 §3；不增加用户范围或归属列，PR 偏差见 §5.5。
+目标边界：目标中 resource_version 仅作内部一致性版本，不暴露 ETag 或客户端条件更新；主线 SQL 注释仍含旧 ETag 用途，不作为有效接口规则。created_at/updated_at 的秒级目标及 PR 归属见 §3；不增加用户范围或归属列，PR 偏差见 §5.5。主会话与 Subagent 由[子端关系](#session-kind)区分，本次不新增 session_kind 列。
 
 <a id="t_session_entries"></a>
 
@@ -174,7 +176,7 @@ Agent、Tool、Skill、Model 的定义由 Mate/目录权威提供，Claw 保存�
 | idx_t_session_entries_session_parent | `(session_id, parent_id)` |
 | idx_t_session_entries_session_type | `(session_id, type)` |
 
-目标边界：parent_id 只用于末端完整性，当前主线 Mapper 已按 entry_seq 顺序读取，不能沿用历史“递归查询待实现”的全局结论。工具结果关联的未落地设计见 §6.1。
+目标边界：parent_id 只用于末端完整性，当前主线 Mapper 已按 entry_seq 顺序读取，不能沿用历史“递归查询待实现”的全局结论。通用工具结果去重的独立待实现目标见 §6.1；Subagent 留档不依赖该列增量。
 
 <a id="t_session_sequences"></a>
 
@@ -661,13 +663,25 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 ## 6. 已有目标中的结构增量
 
-本节承接已存在的设计增量，不借数据库文档整理新增业务行为。main 和 PR #332 未包含下列统一历史结构，实施状态为**待实现**；具体接口、执行流程与待决项仍由关联模块维护。
+本节分别维护独立目标。Subagent 留档仅新增 §6.2 的六字段关系表，复用既有会话、历史与执行表，不在 t_sessions/t_session_entries 新增物理列。§6.1 通用工具结果去重与 §6.3 Skill 统计仍是独立待实现专题，不作为父子关系或子历史持久化的前置条件。
+
+<a id="session-kind"></a>
+
+### 6.0 Session 分类与共表边界
+
+先确认 t_sessions 中存在该会话，再按 t_session_execution_links 的子端关系判定：存在 child_session_id 等于该 Session ID 的记录即为 Subagent；不存在 incoming link 则为主 Session。普通创建和 Cron 新建不写 incoming link；子受理与唯一 incoming link、首消息和原执行在同一短事务提交。模型和公共请求不能指定、删除或改写该关系。
+
+该规则待实现。保留 session-kind 锚点兼容已有链接，**不新增 session_kind 列或分类 CHECK**，也不把分类放入 metadata。t_sessions.parent_session_id 仍只表示历史复制来源；关系父端可以是主 Session 或有剩余委派深度的 Subagent，不能按“是否有下级”判断自身分类。
+
+只要子 Session 的 t_sessions 行仍存在，其 incoming link 不得先清理；父 Session 被删也不能改变其分类，查询不得 JOIN 父 Session 来判断关系存在。单侧删除后允许保留纯 ID 关系；关系清理的附加条件见 §6.2，不因分类需要复活已删除会话。
+
+公开单会话入口共用主 Session 校验，写操作在所属事务和既有锁内复核；跨会话 PAGE/COUNT 用同一 NOT EXISTS 子端条件。通用 find/lock、内部追加、恢复与固定执行结果查询继续支持主/子 Session，不能全局过滤子记录。公开 DELETE 对子保持 204 且不进入删除或清理；公开协议和内部读取授权仍由[统一历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#subagent-visibility)维护。
 
 <a id="tool-result"></a>
 
-### 6.1 工具最终结果关联
+### 6.1 独立通用工具最终结果关联
 
-[统一执行历史](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md)要求同一次真实调用的最终结果只能首次提交一次，统计复用该结果。现有目标 SQL 片段为 [unified-event-persistence.sql](01-会话记忆GaussDB/unified-event-persistence.sql)，不能直接当成生产升级脚本。
+通用工具结果按调用去重是[统一历史独立目标](../01-总体架构/01-CampusClaw多Agent运行时/unified-event-persistence.md#independent-enhancements)，不属于 Subagent 留档结构，不是 t_session_execution_links 的前置。下表保留其原有待实现定义；独立实施时须补齐相应安装材料和恢复消费者。[本次 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)只定义父子关系，不含这些 ALTER 或工具结果索引。
 
 | 对象 | 已有目标定义 | 状态 |
 |---|---|---|
@@ -690,18 +704,20 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | child_execution_id | VARCHAR(128) | 否 | 子会话首执行，后续聊天不能替换 |
 | parent_session_id | VARCHAR(128) | 否 | 发出调用的父会话 |
 | parent_execution_id | VARCHAR(128) | 否 | 固定父执行，用于受理与定向取消 |
-| parent_tool_call_entry_id | VARCHAR(128) | 否 | 服务端父调用身份，同次 Subagent 调用复用 |
+| parent_tool_call_entry_id | VARCHAR(128) | 否 | 父 Session 已保存工具调用 Entry 的 id，同次委派复用；不是 Provider toolCallId |
 | created_at | TIMESTAMPTZ(0) | 否 | 关联创建的 UTC 秒级时间 |
 
 无数据库 DEFAULT。`UNIQUE(parent_session_id,parent_tool_call_entry_id)` 保证同次父调用至多一条关系；`CHECK(parent_session_id <> child_session_id)` 禁止直接自关联；`idx_session_child_parent_execution(parent_session_id,parent_execution_id)` 用于按父执行查找。更深的循环与深度约束由受理流程校验。
 
-不设父子 Session 级联删除，不存正文或秘密。父子独立保留，关系只在两端历史均可清理且实际执行已收尾后删除；任何后续受理仍须证明原父资源和调用存在，不能因关联已清理而重建旧 Subagent。字段及约束来自同一[待实现 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)。
+子 Session、首消息、原 execution/segment 与关系同事务提交；引用的父调用使用现有 Entry.id，不要求在旧 Entry 表新增关联列。父调用存在、属于该固定父执行，以及深度/停止/授权校验由受理事务完成。
+
+不设父子 Session 级联删除，不存正文、状态副本或秘密。父子独立保留：**子 t_sessions 行存在时 incoming link 绝不能先删**。关系只有在子 Session 已不存在、两端历史已实际删除或清理完成且原执行明确收尾后才可清理；父先删除时仍保留子端关系，分类不检查父行。任何后续受理仍须证明原父资源和调用存在，不能因关联清理而重建旧 Subagent。字段及约束来自同一[待实现 SQL](01-会话记忆GaussDB/unified-event-persistence.sql)。
 
 <a id="skill-target"></a>
 
-### 6.3 Skill 累计投影目标
+### 6.3 独立 Skill 累计投影目标
 
-[M05](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)已将计数来源收敛为新 LIVE、最终成功、具有可信 Skill 身份的 tool.result；在结果首次插入的同一事务内累计，不另造统计事实流。§4 的 t_skill_usage 和日表仍是当前实现，不能在新链路验收前直接删除。
+本节保留 M05 的独立目标，不属于 Subagent 留档实施范围，也不作为其验收前置。[M05](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/README.md)已将计数来源收敛为新 LIVE、最终成功、具有可信 Skill 身份的 tool.result；在结果首次插入的同一事务内累计，不另造统计事实流。§4 的 t_skill_usage 和日表仍是当前实现，不能在新链路验收前直接删除。
 
 目标 t_skill_usage_stats 字段如下，由 [schema.sql](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/schema.sql)提供待实现片段；普通读取不到一行可由查询投影为零，不预建 activation_count=0 的行。
 
@@ -728,7 +744,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | idx_t_sessions_agent | `t_sessions (agent_id)` | 待实现 |
 | idx_t_session_events_session_user_time | `t_session_events (session_id, created_at, event_seq) WHERE type = 'user.message'` | 待实现；GaussDB 部分索引支持与执行计划未验证，不支持时去掉 WHERE |
 
-查询必须连接 t_sessions：删除事务立即删除会话行，事件行由清理任务稍后删除，连接保证已删除会话不再返回。agent_id 不是用户归属，不参与授权判断（§3.1）。
+查询必须连接 t_sessions：删除事务立即删除会话行，事件行由清理任务稍后删除，连接保证已删除会话不再返回。落实 [Session 分类](#session-kind)后，主会话用户请求查询同时以 `NOT EXISTS (SELECT 1 FROM t_session_execution_links l WHERE l.child_session_id = s.id)` 排除子端（s 为当前会话别名），总数与分页使用相同条件，避免把 Subagent 的任务消息当作用户请求。agent_id 不是用户归属，不参与授权判断（§3.1）。
 
 <a id="lifecycle"></a>
 
@@ -756,7 +772,7 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 | 实现仓 session_initial_data.sql / session_privileges.sql | 初始化及应用角色权限与同版本完整表清单配套；运行身份只需相应 DML，不让服务启动自动建表 |
 | 实现仓 campusclaw/scripts/install/initdb_gaussdbv5.sql | 公司安装镜像由同步脚本生成；不能单独手工修改并与 canonical DDL 脱节；本次未验收公司安装 |
 | [Session 基础 schema.sql](01-会话记忆GaussDB/schema.sql) | 历史四表基础示意，只有 17 个字段；保留关联供理解与历史核对，不是全库定义或部署入口 |
-| [统一历史增量 SQL](01-会话记忆GaussDB/unified-event-persistence.sql) | §6.1/§6.2 的待实现片段，需随目标核对后合入完整安装结构 |
+| [Subagent 关系 SQL](01-会话记忆GaussDB/unified-event-persistence.sql) | 仅 §6.2 六字段关系表及其约束索引的待实现片段；不含旧表加列、通用工具去重或统计改造；不是生产迁移或存量回填脚本 |
 | [Skill 目标 schema.sql](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/schema.sql) / [写入片段](../01-总体架构/04-CampusClaw命令系统/03-Skill加载统计/record-usage.sql) | §6.3 的待实现结构与 DML，不授权直接删除主线流水或日表 |
 | [Mate Agent schema.sql](02-Agent元数据GaussDB/schema.sql) | 外部元数据数据库的独立设计材料，不加入 Claw 安装脚本 |
 
@@ -770,6 +786,9 @@ Skill 工具成功调用累计次数；删除执行事实不减计数。对应�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 1.27.0 | 2026-10-24 | Subagent 全部共表、仅新增父子关系，以子端关系分类并与通用工具和统计增量分开。 |
+| 1.26.0 | 2026-10-23 | 父调用关系允许具备剩余深度的 Subagent 作为父端，公共主会话分类与独立保留规则保持。 |
+| 1.25.0 | 2026-10-23 | 增加 Session 显式分类及其与父调用关系的事务校验，公开主会话查询排除 Subagent。 |
 | 1.24.0 | 2026-10-21 | §3.1：Mate 不再保存任务归属表，`t_schedule.user_id` 成为定时任务归属的唯一来源，除列表筛选外还用于单个任务的归属判断、创建配额与 Session 归属登记。 |
 | 1.23.0 | 2026-10-21 | §3.1 增加例外：`t_schedule.user_id` 保存任务创建者，任务与 Run 列表由 Claw 按用户筛选，替代 Mate 拉取全部后过滤。 |
 | 1.22.0 | 2026-10-15 | t_skill_usage.entry_point 的 Subagent 来源值改为 SUBAGENT，约束同步改名。 |

@@ -1,8 +1,8 @@
 # 统一历史：源码证据与差距
 
-版本 1.0.0 · 2026-10-10。[目标设计](unified-event-persistence.md)不代表以下源码已经实现统一持久化。
+版本 1.2.0 · 2026-10-24。[目标设计](unified-event-persistence.md)不代表以下源码已经实现统一持久化。§1～§6 保留 2026-10-10 的历史核验归属，§7 保留 2026-10-23 的限定核验；[§8](#shared-storage-evidence)记录 2026-10-24 的 Java 共表与改动范围。外部上游本次未重新核验，旧差距表不作为 Subagent 通用工具或统计改造的前置清单。
 
-## 1. 本次最新快照与升级范围
+## 1. 2026-10-10 快照与升级范围
 
 对四个仓库先用 `git ls-remote --symref <upstream> HEAD` 确认默认分支，再在 `/tmp/subagent-history-baselines-20261010/*.git` 隔离 fetch，读取明确提交；没有覆盖用户工作树。默认分支源码不等于稳定发布。
 
@@ -70,3 +70,63 @@ PR #335 `dad4433d38fcb4104bd8d093f844ea2afc9612ee` 的 Skill 追溯、同步统�
 ## 6. 尚未验证
 
 通用提交端口、Subagent 持久准入、关联表、SQL 方言、同事务统计、删除竞争和性能均未实现/运行验收。本设计没有证明外部副作用 exactly-once，没有核验上游所有历史读取/裁剪选项，也没有推断托管产品服务端数据表。
+
+<a id="session-kind-evidence"></a>
+
+## 7. 2026-10-23 Session 分类与独立 Subagent 历史核验
+
+本次先确认默认分支并重新 fetch 实现仓 `superheromeZzh/pi-mono-java main@e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2`，使用明确提交读取，保留用户工作树。设计仓个人 `main@e30934e912f3d993dd3363355e18e5547010fc0a` 与公共 `main@0de537c4db46ed3e74aab943fbc961f6bce43530` 分别隔离 fetch；本设计以个人主线的已定独立保留规则为依据。pi 的普通扩展与结果提交顺序同轮重新 fetch `badlogic/pi-mono main@14c8118412bffc8f8df7a088fde51d2ffa74fd8f` 后核验。默认分支快照不等于稳定发布，以下均为静态源码证据，未运行产品、上游或真实 GaussDB 测试。
+
+### 7.1 Java 的已有机制与分类缺口
+
+下列链接固定到本次 Java 提交；路径均相对实现仓。只升级此表范围，§1～§6 的 Skill、Codex、OpenCode 及其他历史证据保持原归属。
+
+| 文件与符号 | 已观察事实与设计影响 |
+|---|---|
+| [session_schema.sql](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql#L32) · t_sessions，32～63 行 | 无 session_kind；parent_session_id 的现有注释为复制来源，不能复用成委派父身份；选定关系分类不新增该列，见 §8 |
+| [RuntimeSessionService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java#L65) · create/get/delete/newSession | 主会话已创建数据库资源；读取和删除按 sessionId 定位，没有 Subagent 分类检查 |
+| [RuntimeExecutionCoordinator.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeExecutionCoordinator.java#L98) · start/subscribe；[RuntimeEventProjector.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java#L232) · project/persistAssistant/persistToolResults | 先安装投影与确认处理再 prompt；完整消息写历史，TurnEnd 保存工具结果；主会话已有持久化，最终结果逐调用可靠提交屏障仍是目标增量 |
+| [MyBatisRuntimeSessionRepository.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L126) · acceptUserEventLocked/appendEntryLocked/appendEventsLocked；[RuntimeSessionMapper.xml](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L41) · findSession/lockSessionForUpdate | 既有 Session 锁、序号、Entry 与公共事件同事务机制可复用；当前只按 ID 和状态检查，不能直接插入 Subagent 行后向公开入口放行 |
+| [SubagentExecutionService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/tool/agent/SubagentExecutionService.java#L76) · runChild；[ManagedAgentSession.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/session/ManagedAgentSession.java#L132) · close/abort | 仍直接创建内存执行、等待 prompt、返回最后文本并 close；没有持久子 Session、父调用关系或恢复句柄；close 是取消和队列清理，不是删除 Agent 目录 |
+| [ScheduledSessionStarter.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/session/ScheduledSessionStarter.java#L118) · prepare/prepareLinkedSession/acceptSession/startExecution | 当前 Cron 已使用 Session Repository 受理、提交后调用 Coordinator；新建和关联主会话路径均存在，不再适用旧 JSONL 结论；关联路径仍需增加分类检查 |
+| [RuntimeEventReadMapper.xml](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeEventReadMapper.xml#L23) · listAgentEvents/countAgentEvents/findTurn | 用户请求聚合只按 agent_id 与 user.message 筛选；持久化 Subagent 后须对总数和分页同时加主会话条件，轮次读取同样不能当作子公开入口 |
+| [RuntimeControlEventService.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeControlEventService.java#L104) · acceptInterrupt/acceptToolConfirmation/acceptPlanConfirmation/acceptQuestionAnswer；[RuntimeSessionControlDispatcher.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/runtime/RuntimeSessionControlDispatcher.java#L94) · dispatchStopLocked | 既有控制围绕固定执行目标，不因新增子留档而开放子确认/问答；父停止需经内部关系定位原 child_execution_id |
+| [MyBatisRuntimeSessionRepository.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L470) · beginDeletion/completeCleanup；[ScheduleSessionDeleteHook.java](https://github.com/superheromeZzh/pi-mono-java/blob/e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/dispatch/ScheduleSessionDeleteHook.java#L26) · beforeDelete | idle 删除先跑 Schedule 钩子再锁会话；tombstone 与 cleanup 同事务；清理只处理该 Session 自己的数据，不删除共用 Agent 目录；保持独立保留与既有锁顺序 |
+
+本次不增加公开子查询、列表或复制能力；相关存储目标与接口状态继续由 M04 及其原证据维护。子端关系分类、独立 Subagent 历史、父子关联与公开入口隔离均待实现；本次不修改实际安装 DDL，也不设计存量迁移或生产回填。
+
+### 7.2 pi 普通示例与提交先后顺序的限定核验
+
+此次从 §1 的历史 pi `42a3497d03ad17e308a2299fa824727894f2c0ec` 仅升级下表，不改写当时 experimental durable、Codex 或 OpenCode 的事实。
+
+| 文件与符号 | 已观察事实与边界 |
+|---|---|
+| [examples/extensions/subagent/index.ts](https://github.com/badlogic/pi-mono/blob/14c8118412bffc8f8df7a088fde51d2ffa74fd8f/packages/coding-agent/examples/extensions/subagent/index.ts#L298) · runSingleAgent，298、360～383、709～710 行 | 普通仓库示例仍以 --no-session 运行独立子进程，details 保留消息与结果，父 content 返回最终文本；[官方默认功能说明](https://github.com/badlogic/pi-mono/blob/14c8118412bffc8f8df7a088fde51d2ffa74fd8f/packages/coding-agent/README.md#L19)明确不内建 Subagent，不能将该示例当作默认独立持久子会话 |
+| [src/main.ts](https://github.com/badlogic/pi-mono/blob/14c8118412bffc8f8df7a088fde51d2ffa74fd8f/packages/coding-agent/src/main.ts#L364) · createSessionManager；[session-manager.ts](https://github.com/badlogic/pi-mono/blob/14c8118412bffc8f8df7a088fde51d2ffa74fd8f/packages/coding-agent/src/core/session-manager.ts#L1160) · _persist/appendCompaction | noSession 使用内存 SessionManager；持久模式可从首条 user/assistant 开始写完整 Message JSONL，压缩保存摘要与保留边界；不具有 CampusClaw 的集中式数据库事务 |
+| [packages/agent/src/agent-loop.ts](https://github.com/badlogic/pi-mono/blob/14c8118412bffc8f8df7a088fde51d2ffa74fd8f/packages/agent/src/agent-loop.ts#L580) · 最终 ToolResult 的 message_end | 先 await 最终结果事件，再将结果推进模型上下文；该顺序不等于公共输出必定等待持久化 |
+| [agent-session.ts](https://github.com/badlogic/pi-mono/blob/14c8118412bffc8f8df7a088fde51d2ffa74fd8f/packages/coding-agent/src/core/agent-session.ts#L1142) · _handleAgentEvent，1142～1165 行 | 先通知扩展/公共 listeners，再 appendMessage；CampusClaw 的提交后发布完整公共事件仍是自己的产品约束与架构差异 |
+
+durable 示例在本次树中位于 `packages/durable/test/examples/21-subagent-foreground.ts`、`22-subagent-background.ts`；仅确认路径，不升级其实现与成熟度结论。未运行 pi 测试或实测子进程恢复。
+
+<a id="shared-storage-evidence"></a>
+
+## 8. 2026-10-24 共表留档与改动范围核验
+
+本次先重新 fetch 默认 main：个人实现仓 `ssm0808/pi-mono-java@bc031ed8aa82dac700421163a4cce25d9f023e6b`、公共实现仓 `superheromeZzh/pi-mono-java@e8da1b77d2780cb4d19d837c6f6ef95f8887e4c2`，设计来源为个人设计 main `e30934e912f3d993dd3363355e18e5547010fc0a` 与本设计分支原快照 `90aed7feb41138a43c7563f5ef760f713342a5d5`。旧 §7 的公共 e8da 快照保留，以下仅升级 Java 共表、主/子记录边界和公开隔离影响；pi、Codex、OpenCode、托管产品及 Skill 专题没有重新 fetch 或升级核验。
+
+下表路径相对个人实现仓，链接固定到完整 bc031ed8 提交；不是部署数据库或运行测试证据。
+
+| 源码与符号 | 已观察行为 | 当前设计影响 |
+|---|---|---|
+| [session_schema.sql](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql#L32) · t_sessions，32～46；t_session_entries，372～380 | 会话 14 列、Entry 7 列，无 session_kind 或 tool_call_entry_id；历史按 session_id 分开 | 子留档复用现有结构，唯一新增六字段 links；通用结果去重列不是保存历史的前提 |
+| [RuntimeEventProjector.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java#L353) · persistAssistant/persistToolCall/persistToolResults，353～371、427～438、456～467 | Assistant、各调用 Entry 和工具结果已分别写入，调用有独立服务端 Entry.id | links.parent_tool_call_entry_id 引用现有调用记录 id，不要求旧 Entry 表新增同名列，也不规定新的 Assistant＋位置 ID 协议 |
+| [RuntimeEntryCodec.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEntryCodec.java#L402) · toAgentMessage/toolResultMessage，402～409、556～569；[RuntimeContextHistoryService.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeContextHistoryService.java#L36) · restoreHistory | 按提交上界与 entry_seq 读取，使用已有 payload.tool_call_id/content 等恢复消息 | 子 Session 可复用同一历史格式；恢复读取不等于自动重新执行任务 |
+| [RuntimeEventProjector.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java#L223) · projectSafely/recordFailure，223～228、768～771 | 监听路径捕获异常、记录失败并请求中止，不是提交回执接口 | 子 Host 必须显式收到完整消息/结果/压缩的保存完成或失败；必要窄等待接线仅限子入口，不以通用全局协议重构为前置 |
+| [RuntimeSessionMapper.xml](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeSessionMapper.xml#L41) · findSession/lockSessionForUpdate；[RuntimeSessionService.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/session/RuntimeSessionService.java#L89) · get/delete | 通用 Session 读锁和公开服务只按 ID 找行；删除仅按既有状态 | 公共入口增加主 Session 校验；不要全局过滤通用 find/lock，子执行仍需正常追加和收尾 |
+| [RuntimeEventReadMapper.xml](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/resources/mapper/session/RuntimeEventReadMapper.xml#L23) · listAgentEvents/countAgentEvents/findTurn | PAGE/COUNT 只按 Agent、user.message 和时间筛选；轮次从 t_sessions 定位 | 只有跨 Session PAGE/COUNT 必须直接同加 NOT EXISTS 子端条件；单 Session 读取可共用入口校验，不能分页后剔除 |
+| [CommandCatalogService.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandCatalogService.java#L59) · listCommands/requireAgentSession；[CommandValuesService.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/service/command/CommandValuesService.java#L58) · listValues/requireAgentSession | 可选 sessionId 当前只校验存在及 agentId | 公共隔离同时覆盖带 sessionId 的命令目录和选项查询，不只覆盖会话主接口 |
+| [ScheduledSessionStarter.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/schedule/session/ScheduledSessionStarter.java#L141) · prepareLinkedSession/acceptSession；[ScheduleMapper.xml](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/resources/mapper/schedule/ScheduleMapper.xml#L88) · findSessionAgent/lockSessionAgent | 已有 Cron 关联准备和事务受理，读取只按 Session ID | 关联配置、预检和受理增加主 Session 校验，不让 Cron 开启子会话下一轮 |
+| [MyBatisRuntimeSessionRepository.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeSessionRepository.java#L215) · appendEntryLocked/appendEntryWithUsageLocked/finishExecution/lockSession；[MyBatisRuntimeExecutionControlRepository.java](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java#L79) · register/lock | 创建、读锁、运行、末端和空闲更新固定使用 t_sessions；两处 Repository 依赖此头记录 | 仅拆主表候选需适配六类会话元数据操作与两处实现，并处理删除；选定全部共表可复用这些路径 |
+| [session_schema.sql](https://github.com/ssm0808/pi-mono-java/blob/bc031ed8aa82dac700421163a4cce25d9f023e6b/modules/coding-agent-cli/src/main/resources/db/gaussdb/install/session_schema.sql#L465) · FOREIGN KEY，465～497 | 现有外键位于 execution、question、event、segment 之间，没有 REFERENCES t_sessions | 仅拆主表在数据库结构上可行，但不能据此宣称无需改内部写入或自动获得完整隔离 |
+
+本次选定方案的改动面判断来自上述现有接线，没有实测 LOC、SQL 性能、延迟或容量。新增关系、公开主 Session 校验、子写入失败反馈、原子受理及独立保留均待实现/验收；旧表通用去重和 Skill 统计目标不列为本次前置。

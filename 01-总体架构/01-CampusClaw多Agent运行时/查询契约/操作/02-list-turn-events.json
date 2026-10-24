@@ -5,7 +5,7 @@
     "method": "GET",
     "path": "/sessions/{sessionId}/events/{eventId}/turn",
     "summary": "由轮次中任意一条事件读取整轮完整事件",
-    "description": "以会话中的一条事件为起点，定位它所属的轮次，即一条用户消息从受理到结束的完整处理，按保存顺序分页返回这一轮的全部完整事件，包括确认续跑后的多段与停止请求。",
+    "description": "以主会话中的一条事件为起点，定位它所属的轮次，即一条用户消息从受理到结束的完整处理，按保存顺序分页返回这一轮的全部完整事件，包括确认续跑后的多段与停止请求。",
     "parameters": [
       {
         "$ref": "parameters.sessionId"
@@ -238,7 +238,7 @@
         "status": "404",
         "tabLabel": "404 · SESSION_NOT_FOUND",
         "label": "Not Found",
-        "summary": "Session 不存在或已删除。",
+        "summary": "Session 不存在、已删除或为 Subagent。",
         "headers": {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
@@ -353,6 +353,10 @@
           "规则"
         ],
         "rows": [
+          [
+            "范围",
+            "只读取未删除主会话；Subagent 与不存在的 Session 一样返回 404 SESSION_NOT_FOUND，不开放子轮次读取。"
+          ],
           [
             "轮次",
             "一条 user.message 受理后的完整处理即一轮，包括确认、计划审核、问题回答后的续跑段和终态 session.status_idle；执行内自动压缩属于所在轮次。"

@@ -1,13 +1,13 @@
 @startuml unified_execution_history_classes
-' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+!pragma layout smetana
+' 源码基线：个人 main bc031ed8aa82dac700421163a4cce25d9f023e6b，2026-10-24。
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
 ' runtimeapi/event/RuntimeExecutionCoordinator.java:start
-' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
-' session/AgentSessionFactory.java:create
+' runtimeapi/persistence/MyBatisRuntimeSessionRepository.java:appendEntryLocked,appendEntryWithUsageLocked
+' runtimeapi/persistence/MyBatisRuntimeExecutionControlRepository.java:register,lock
 ' tool/agent/SubagentExecutionService.java:runChild
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
-' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
+' 已观察行为：主会话与 Cron 已持久化，Subagent 仍直接创建内存执行。
+' 设计原因：复用既有会话表，仅新增父子关系；通用工具去重和统计不作为前置。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
@@ -16,171 +16,125 @@ skinparam classAttributeIconSize 0
 skinparam ArrowColor #425B70
 skinparam classBackgroundColor #F1F5F9
 skinparam classBorderColor #8496A4
-skinparam sequenceParticipantBackgroundColor #F1F5F9
-skinparam sequenceParticipantBorderColor #8496A4
-skinparam sequenceMessageAlign left
-skinparam maxMessageSize 175
-skinparam noteBackgroundColor #FFFBEF
 hide empty members
-title Unified Execution History - Target\nPending implementation: new admission links and result commit port
+title 统一执行历史的职责与生命周期
 together {
-  class "SessionEventController" as Web <<Web>>
-  class "ScheduledRun\nAcceptanceService" as Cron <<Singleton>>
-  class "SubagentRunAcceptanceService" as Subagent <<Singleton>>
+  class "公开会话入口" as Web <<单例>>
+  class "ScheduledSessionStarter" as Cron <<单例>>
+  class "Subagent 受理服务" as Subagent <<单例，待实现>>
 }
-class "SessionExecutionAdmission" as Admission <<Singleton>>
-class "RuntimeExecutionCoordinator" as Coordinator <<Singleton>>
-class "AgentSessionFactory" as Factory <<Singleton>>
-class "ExecutionTargetDTO" as Target <<Immutable>>
-class "ManagedAgentSession" as Session <<Per execution>>
-class "RuntimeEventProjector" as Projector <<Per execution>>
-class "ToolOutcomeCommitDTO" as Result <<Immutable>>
-class "ToolExecutionPipeline" as Pipeline <<Agent core>>
-interface "ToolHistoryCommitPort" as Port <<Pending implementation>>
-class "SessionEventAppender" as Appender <<Singleton / transaction>>
-class "RuntimeSessionRepository" as Repo <<Mapper boundary>>
-class "SkillUsageProjection" as Stats <<M05 / same transaction>>
-class "CommittedEventProjection" as Public <<Public safety boundary>>
-class "GaussDB\nSessions / executions / links\nEntries / public events / Skill stats" as DB <<Database>>
-Web --> Admission
-Cron --> Admission
-Subagent --> Admission
-Admission --> Coordinator : start after admission commit
-Admission -right-> Target : fixes identity
-Admission ..> Repo : atomic admission
-Coordinator -right-> Factory : assemble
+class "主会话校验\n按子端关系排除" as Visibility <<待实现>>
+class "RuntimeExecutionCoordinator" as Coordinator <<单例>>
+class "AgentSessionFactory" as Factory <<单例>>
+class "ManagedAgentSession" as Session <<每次执行>>
+class "AgentLoop / ToolExecutionPipeline" as Loop <<每次执行>>
+class "RuntimeEventProjector\n子写入完成反馈接线待实现" as Projector <<每次执行>>
+class "RuntimeExecutionPersistenceService" as Persistence <<单例，短事务>>
+class "RuntimeSessionRepository" as Repo <<数据库边界>>
+class "RuntimeExecutionControlRepository" as Control <<数据库边界>>
+class "CommittedEventProjection" as Public <<安全投影>>
+class "t_session_execution_links\n六字段父子关系" as Links <<持久记录，待实现>>
+class "GaussDB\n共用会话、历史和执行表" as DB <<数据库>>
+Web --> Visibility
+Cron --> Visibility
+Web --> Coordinator : 启动已受理执行
+Cron --> Coordinator : 启动已受理执行
+Subagent --> Coordinator : 提交后启动，待实现
+Subagent --> Persistence : 原子受理，待实现
+Visibility ..> Repo
+Coordinator --> Factory : 装配运行对象
 Coordinator "1" *-- "0..*" Session
 Coordinator "1" *-- "0..*" Projector
-Factory ..> Session : creates
-Session *-- Pipeline
-Pipeline -right-> Port : must complete
-Projector ..|> Port : host adapter
-Projector -right-> Result : fixes outcome
-Projector --> Appender
-Appender --> Repo : append once
-Appender --> Stats : LIVE Skill success
-Appender --> Public : safe payload
-Repo --> DB
-Stats --> DB : same transaction
-note bottom of DB
-  Pending implementation: shared admission and per-result commit.
-  Existing runtime classes are reused; Factory performs no DB writes.
-end note
+Factory ..> Session : 创建独立对象
+Session *-- Loop
+Projector --> Persistence : 保存消息、结果和压缩
+Projector --> Coordinator : 反馈完成或失败，接线待实现
+Persistence --> Repo : 追加所属会话历史
+Persistence --> Control : 校验固定执行与终态
+Persistence ..> Links : 同事务关联，待实现
+Projector --> Public : 转换安全输出
+Repo --> DB : 提交历史与投影
+Control --> DB : 保存执行状态
+Links --> DB : 仅新增关系表
 @enduml
 
 @startuml unified_child_history
-' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
+' 源码基线：个人 main bc031ed8aa82dac700421163a4cce25d9f023e6b，2026-10-24。
 ' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
-' runtimeapi/event/RuntimeExecutionCoordinator.java:start
-' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
-' session/AgentSessionFactory.java:create
 ' tool/agent/SubagentExecutionService.java:runChild
-' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
-' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
+' runtimeapi/event/RuntimeEventProjector.java:persistAssistant,persistToolCall,persistToolResults
+' runtimeapi/persistence/RuntimeExecutionPersistenceService.java:commitTerminal
+' 已观察行为：调用与结果可写现有 Entry，Subagent 尚无独立数据库 Session。
+' 设计原因：实现下钻；父调用引用既有 Entry.id，子先保存终态，再保存父摘要。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam classAttributeIconSize 0
 skinparam ArrowColor #425B70
-skinparam classBackgroundColor #F1F5F9
-skinparam classBorderColor #8496A4
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
 skinparam sequenceMessageAlign left
 skinparam maxMessageSize 175
-skinparam noteBackgroundColor #FFFBEF
-hide empty members
 hide footbox
 autonumber
-title One Subagent Diagnosis - Target / Pending implementation
-participant "Parent" as Parent
+title 保存一次 Subagent 诊断历史
+participant "父执行" as Parent
 participant "Host" as Host
-participant "Session" as Store
-participant "Subagent Runtime" as Subagent
-Parent -> Host : Invoke validated and permitted Agent call
-Host -> Store : Atomically admit Subagent and parent-call link
-Store --> Host : Fixed Subagent Session and execution
-Host -> Subagent : Start once after commit
-Subagent -> Store : Append own messages and tool results
-Subagent -->> Parent : Permitted high-level progress
-alt Subagent completes
-  Subagent -> Store : Commit final message and terminal
-  Store --> Subagent : Committed
-  Subagent --> Host : Final summary
-  Host -> Store : Commit parent Agent tool result
-  Store --> Host : Committed
-  Host --> Parent : Return summary
-else Parent requests stop
-  Parent -> Host : Stop original Subagent execution
-  Host -> Subagent : Propagate cancellation
-  Subagent -> Store : Persist actual outcome when known
-  Subagent --> Host : Actual outcome or unresolved state
-  Host --> Parent : No fabricated success / no replay
-end
-note over Parent,Store
-  Independent histories; parent retains summary only.
-  An unresolved Subagent keeps its execution occupancy.
-end note
+participant "Session\n持久化职责" as Store
+participant "Subagent 执行" as Subagent
+Parent -> Host ++ : 调用已保存且获准的诊断委派
+activate Parent
+Host -> Store ++ : 原子保存子会话、首任务、执行和父子关系（待实现）
+return 已提交的子会话和固定执行
+Host -> Subagent ++ : 启动本次子执行（提交后，待实现）
+Subagent -> Store ++ : 保存本次完整消息、调用、结果和压缩（接线待实现）
+return 已提交的独立历史
+Subagent -> Store ++ : 保存最终结果与真实终态（待实现）
+return 已提交的结果及终态
+return 最后诊断文本
+Host -> Store ++ : 保存父 Agent 工具摘要
+return 已提交的父摘要
+return 返回最后诊断文本
+deactivate Parent
 @enduml
 
 @startuml unified_tool_commit
-' Source evidence: Java main 769e86592285f4a25b0febaf551eddea6bc7212c
-' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/
-' runtimeapi/event/RuntimeExecutionCoordinator.java:start
-' runtimeapi/event/RuntimeEventProjector.java:project,persistToolResults
-' session/AgentSessionFactory.java:create
-' tool/agent/SubagentExecutionService.java:runChild
+' 源码基线：Java main 769e86592285f4a25b0febaf551eddea6bc7212c，历史通用工具专题。
 ' modules/agent-core/src/main/java/com/campusclaw/agent/tool/ToolExecutionPipeline.java:execute
-' Observed behavior: Runtime persists; direct Subagent/Cron factory calls do not share its appender.
-' Design reason: one durable host lifecycle and per-result commit; no statistics delivery pipeline.
+' modules/coding-agent-cli/src/main/java/com/campusclaw/codingagent/runtimeapi/event/RuntimeEventProjector.java:projectSafely
+' 已观察行为：监听异常可被隔离，结果记录并非通用等待提交协议。
+' 设计原因：独立通用工具目标，保留其正常提交顺序；不作为 Subagent 留档前置。
 skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam defaultFontSize 14
 skinparam shadowing false
-skinparam classAttributeIconSize 0
 skinparam ArrowColor #425B70
-skinparam classBackgroundColor #F1F5F9
-skinparam classBorderColor #8496A4
 skinparam sequenceParticipantBackgroundColor #F1F5F9
 skinparam sequenceParticipantBorderColor #8496A4
 skinparam sequenceMessageAlign left
 skinparam maxMessageSize 175
-skinparam noteBackgroundColor #FFFBEF
-hide empty members
 hide footbox
 autonumber
-title One Business Tool Call - Target / Pending implementation
+title 通用工具结果提交
 participant "Model" as Model
 participant "ToolPipeline" as Pipeline
 participant "Host" as Host
 participant "Mate" as Mate
-participant "Session" as Session
-Model -> Pipeline : Tool call
-Pipeline -> Pipeline : Resolve trusted target and validate arguments
-Pipeline -> Session : Commit call identity before confirmation or execution
-Session --> Pipeline : Committed call
-alt Invalid arguments
-  Pipeline -> Session : Commit real error with safe public projection
-  Session --> Pipeline : Committed
-  Pipeline --> Model : isError=true; field errors and trusted definition
-else Valid arguments
-  Pipeline -> Host : Check permission / obtain required confirmation
-  Host --> Pipeline : Decision for same prepared snapshot
-  alt Allowed
-    Pipeline -> Mate : Execute prepared business call
-    Mate --> Pipeline : Result or business failure
-    Pipeline -> Pipeline : Apply after hooks; fix final outcome
-  else Denied
-    Pipeline -> Pipeline : Fix denied error; no business request
-  end
-  Pipeline -> Session : Commit outcome and optional Skill count atomically
-  Session --> Pipeline : Committed outcome
-  Pipeline --> Model : Return final result
-end
-note over Pipeline,Session
-  Commit failure stops further advancement and requires reconciliation.
-  Never replay the business call to repair missing history.
-end note
+participant "Session\n持久化职责" as Session
+Model -> Pipeline ++ : 提交工具调用
+activate Model
+Pipeline -> Pipeline ++ : 解析可信目标并校验参数
+return 同次准备快照
+Pipeline -> Session ++ : 保存调用身份（独立通用目标，待实现）
+return 已提交的调用
+Pipeline -> Host ++ : 校验权限并取得必要确认
+return 同次准备快照的许可
+Pipeline -> Mate ++ : 执行已准备的业务调用
+return 业务结果
+Pipeline -> Pipeline ++ : 处理后置规则并形成最终结果
+return 最终结果
+Pipeline -> Session ++ : 原子保存结果和适用统计（独立目标，待实现）
+return 已提交的最终结果
+return 返回最终结果
+deactivate Model
 @enduml

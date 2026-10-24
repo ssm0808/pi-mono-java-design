@@ -2,9 +2,9 @@
 
 | 属性 | 值 |
 |---|---|
-| 文档版本 | 3.5.2 |
+| 文档版本 | 3.6.0 |
 | 状态 | 目标设计；Skill、CallTool、Agent 代理、确认前可信准备与模型参数恢复反馈已在 PR #323 开发提交 ae6645ca 实现；SearchTools、发现与校验的一致性接线及前端可恢复展示待实现，其余状态见源码证据 |
-| 更新日期 | 2026-10-22 |
+| 更新日期 | 2026-10-23 |
 | CampusClaw Read 专项核验基线 | `553dcd5e2ff682f9684810a043b442b37a02e54a`（本地固定提交，仅核验文本读取边界） |
 | CampusClaw 注册与发现核验基线 | `fb842b1ac6cb4818f6b146f79dd184a5cd88bf12` |
 | 设计仓分析基线 | `e641fefdc9b58adb0054d6e548d313d01a69b94d` |
@@ -376,9 +376,7 @@ SearchTools 与 CallTool 复用可信解析职责，保证已披露定义与本�
 
 ## 5. `Agent`
 
-每个 Runtime 或 Cron Session 根据 `.campusclaw/agents/*.json` 的直接绑定生成
-`agentName.enum`；值区分大小写并稳定排序。没有直接绑定时省略空 `enum`，任何调用都在
-执行阶段返回 unavailable。
+具备委派能力的 Runtime、Cron 或 Subagent 根据当前 Agent 自身及 `.campusclaw/agents/*.json` 的直接绑定生成 `agentName.enum`；值区分大小写并稳定排序，自身默认可调用、无需绑定，能力待实现。剩余深度、可信目标及 Host 工厂控制 `Agent` 的实际披露，唯一规则见[主设计 §10.1](README.md#subagent-depth)；上限配置不扩充显式禁用的工具清单。
 
 ```json
 {
@@ -387,7 +385,7 @@ SearchTools 与 CallTool 复用可信解析职责，保证已披露定义与本�
     "agentName": {
       "type": "string",
       "enum": ["researcher", "reviewer"],
-      "description": "Exact name of one directly bound subagent."
+      "description": "Exact name of the current agent or one directly bound subagent."
     },
     "task": {"type": "string", "description": "Complete task for the subagent."}
   },
@@ -403,12 +401,9 @@ description 与 Schema 中的 subagent 措辞待实现，当前实现仍写作 c
 装配接口、工具 pipeline、hook、错误与取消语义，但消息、工作区、SYSTEM、Skill、工具
 实例、缓存和 Execution 上下文隔离。运行位置是实现部署细节，不属于工具契约。
 
-执行前依次校验精确直接绑定、自绑定、enabled、固定版本、最大深度、祖先路径循环、
-目标运行目录完整性和模型可用性。首版最大深度为 1，`subagent` profile 因而不暴露
-`Agent`。版本不匹配直接失败，不触发隐式目录重建。
+执行前按可信快照解析自身或直接绑定目标，校验参数、enabled、适用的固定版本、委派深度、祖先路径、目标运行目录和模型可用性，再进入权限判断与必要确认。最大深度默认 1、配置校验、整树快照及达限时的 `AGENT_DEPTH_LIMIT_EXCEEDED` 均由[主设计 §10.1](README.md#subagent-depth)维护；达限返回真实 `isError=true`，不确认、不创建子会话。版本不匹配直接失败，不触发隐式目录重建。自身委派计层数，不等于允许非自身的跨 Agent 祖先回指或 Session 关系环。
 
-Subagent 有可用 default model 时优先使用；否则继承父 Execution 的 model 和 thinking，且
-仍须通过 Subagent `bindingModels` 与当前凭据可用性校验。父侧只接收目标、工具开始/结束和
+每级 Subagent 的模型按该 Agent 自身当前 Mate 绑定与默认模型的[统一规则](../../02-服务与接口/03-Model/README.md#model-source)决定，不自动回退父模型；thinking、调用时模式和安全约束逐层继承，模型仍须通过自身允许列表及运行条件校验。父侧只接收目标、工具开始/结束和
 完成等高层进度，不接收 Subagent 推理、消息历史或完整事件流。父取消传播到 Subagent；成功
 结果只返回最后一条非空 Assistant 文本。
 
@@ -429,7 +424,7 @@ Subagent 有可用 default model 时优先使用；否则继承父 Execution 的
 | `Skill` | ✓ | ✓ | ✓ |
 | `SearchTools` | ✓ | ✓ | ✓ |
 | `CallTool` | ✓ | ✓ | ✓ |
-| `Agent` | ✓ | ✓ |  |
+| `Agent` | ✓ | ✓ | 按剩余深度过滤 |
 | `ExitPlanMode` | ✓ |  |  |
 | `TodoUpdate` | ✓ |  |  |
 | `AskUserQuestion` | ✓ |  |  |
@@ -451,6 +446,7 @@ Subagent 有可用 default model 时优先使用；否则继承父 Execution 的
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| 3.6.0 | 2026-10-23 | Agent 可用于具备剩余委派额度的 Subagent，深度和默认工具过滤统一引用主设计。 |
 | 3.5.2 | 2026-10-22 | 受管目录改称智能体本地目录。 |
 | 3.5.1 | 2026-10-22 | 受管目录 refresh 已删除，版本不匹配改述为不触发隐式目录重建。 |
 | 3.5.0 | 2026-10-14 | `Agent` 工具描述、Schema 文案与 profile 键改用 subagent（待实现），命名规则见主设计 §4.2。 |
